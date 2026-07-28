@@ -17,18 +17,18 @@ components.
 - **AC:** `components.securitySchemes.bearerAuth`; reusable `SuccessEnvelope`, `ErrorEnvelope`,
   `Pagination`; error codes match [`../phases-3-6-plan.md`](../phases-3-6-plan.md) §3.2.
 - **Evidence:** `backend/openapi.yaml` → `components`.
-- **Status:** ☐
+- **Status:** ☑ (redocly lint: valid)
 
 #### P3-02 · Auth endpoints · Owner: Devashish · Tag: DEMO(login)/MVP · Deps: P3-01
 - **AC:** `POST /auth/login` request/response exactly as spec §3.4 (returns `accessToken` + `user{role,companyId}`);
   `register/verify/refresh/logout/password` present and tagged MVP.
 - **Evidence:** `backend/openapi.yaml` → `paths./auth/*`.
-- **Status:** ☐
+- **Status:** ☑ (login DEMO; register/verify/refresh/logout MVP; password-lifecycle Later per §3.4)
 
 #### P3-03 · User(self) endpoints · Owner: Devashish · Tag: DEMO · Deps: P3-01
 - **AC:** `GET /me`, `PATCH /me` (incl. `distanceKm`), `GET /me/bookings`, `GET/PATCH notifications` defined.
 - **Evidence:** `backend/openapi.yaml`.
-- **Status:** ☐
+- **Status:** ☑
 
 #### P3-04 · Companies + Company-Users endpoints · Owner: Devashish · Tag: MVP · Deps: P3-01
 - **AC:** companies CRUD + status; `GET /companies` public active-subset for registration dropdown; company

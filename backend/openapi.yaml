@@ -1,0 +1,660 @@
+openapi: 3.0.3
+info:
+  title: Parking POC API
+  version: 0.1.0
+  description: >
+    Office parking-slot booking platform. Contract-first source of truth (frozen at M0 — changes via
+    reviewed PR). Conventions, envelope, and error codes per docs/phases-3-6-plan.md §3.1–3.2.
+    Maturity of each operation is marked with `x-maturity` (DEMO | MVP | Later).
+
+servers:
+  - url: /api/v1
+    description: Base path (path-based versioning)
+
+# Default: every operation requires a bearer access token. Public endpoints override with `security: []`.
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Authentication & session lifecycle
+  - name: User
+    description: Current-user (self) profile, bookings, notifications
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Auth  (P3-02)
+  # ---------------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Log in (issue access + refresh)
+      description: >
+        Validates credentials and returns a short-lived access JWT. A refresh token is set as an
+        HttpOnly, Secure, SameSite cookie (rotation is [MVP]). Errors: 401 on bad credentials,
+        403 if the user's status is not ACTIVE.
+      x-maturity: DEMO
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+            example: { email: aditi@assent.example, password: "ChangeMe#12345" }
+      responses:
+        '200':
+          description: Authenticated. Refresh token set via Set-Cookie.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
+            Set-Cookie:
+              description: HttpOnly refresh-token cookie (e.g. `refreshToken=…; HttpOnly; Secure; SameSite=Strict`)
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/LoginResponseData' }
+              example:
+                success: true
+                data:
+                  accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  tokenType: Bearer
+                  expiresIn: 900
+                  user: { id: "usr_123", fullName: "Aditi Rao", role: USER, companyId: "cmp_1", companyName: Assent }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: Register a new company user (status PENDING)
+      description: >
+        Creates a user under an active company with status PENDING (awaits Company-Admin approval).
+        Validations — unique email, valid contact number, valid PIN, distanceKm 0–200, password strength,
+        company must be active, one company per user.
+      x-maturity: MVP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Registration accepted; verification email dispatched.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      operationId: verifyEmail
+      summary: Confirm an email-verification token
+      x-maturity: MVP
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refresh
+      summary: Rotate refresh token, issue a new access token
+      description: Uses the HttpOnly refresh cookie; rotates it and returns a fresh access token.
+      x-maturity: MVP
+      security: []
+      responses:
+        '200':
+          description: New access token issued; refresh cookie rotated.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
+            Set-Cookie:
+              description: Rotated HttpOnly refresh-token cookie
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AccessTokenData' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke the current refresh token
+      x-maturity: MVP
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Request a password-reset email
+      x-maturity: Later
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Reset password using a reset token
+      x-maturity: Later
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, format: password }
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Change password (authenticated)
+      x-maturity: Later
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, format: password }
+                newPassword: { type: string, format: password }
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------------------
+  # User (self)  (P3-03)
+  # ---------------------------------------------------------------------------
+  /me:
+    get:
+      tags: [User]
+      operationId: getMe
+      summary: Get the current user's profile
+      x-maturity: DEMO
+      responses:
+        '200':
+          description: Current profile
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [User]
+      operationId: updateMe
+      summary: Update the current user's profile (incl. distanceKm)
+      description: Partial update. `distanceKm` is the manually-entered home→office distance (0–200 km).
+      x-maturity: DEMO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200':
+          description: Updated profile
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/bookings:
+    get:
+      tags: [User]
+      operationId: getMyBookings
+      summary: List the current user's bookings (paged)
+      x-maturity: DEMO
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/OrderParam'
+        - name: status
+          in: query
+          required: false
+          description: Optional filter by booking status
+          schema: { $ref: '#/components/schemas/BookingStatus' }
+      responses:
+        '200':
+          description: Paged list of the user's bookings
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Booking' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/notifications:
+    get:
+      tags: [User]
+      operationId: getMyNotifications
+      summary: List the current user's in-app notifications (paged)
+      x-maturity: MVP
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paged list of notifications
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Notification' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications/{id}/read:
+    patch:
+      tags: [User]
+      operationId: markNotificationRead
+      summary: Mark a notification as read
+      x-maturity: MVP
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Notification marked read
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# =============================================================================
+# Reusable components  (P3-01)
+# =============================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Access token from `POST /auth/login`, sent as `Authorization: Bearer <token>`."
+
+  headers:
+    CorrelationId:
+      description: Request/response correlation id (echoed into AuditLog).
+      schema: { type: string }
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number.
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSizeParam:
+      name: pageSize
+      in: query
+      required: false
+      description: Items per page (max 100).
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      description: Field to sort by.
+      schema: { type: string }
+    OrderParam:
+      name: order
+      in: query
+      required: false
+      description: Sort direction.
+      schema: { type: string, enum: [asc, desc], default: desc }
+
+  schemas:
+    # --- Envelope & pagination (reusable) ---
+    SuccessEnvelope:
+      type: object
+      description: Standard success envelope. `data` is the resource/list; `meta` present only on list endpoints.
+      required: [success, data]
+      properties:
+        success: { type: boolean, enum: [true] }
+        data: { type: object }
+        meta: { $ref: '#/components/schemas/Pagination' }
+
+    ErrorEnvelope:
+      type: object
+      description: Standard error envelope.
+      required: [success, error]
+      properties:
+        success: { type: boolean, enum: [false] }
+        error: { $ref: '#/components/schemas/ErrorObject' }
+
+    ErrorObject:
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        details:
+          type: array
+          items: { $ref: '#/components/schemas/ErrorDetail' }
+
+    ErrorDetail:
+      type: object
+      required: [field, message]
+      properties:
+        field: { type: string }
+        message: { type: string }
+
+    ErrorCode:
+      type: string
+      description: Canonical error codes (docs/phases-3-6-plan.md §3.2).
+      enum:
+        - VALIDATION_ERROR   # 400
+        - UNAUTHENTICATED    # 401
+        - FORBIDDEN          # 403
+        - NOT_FOUND          # 404
+        - CONFLICT           # 409
+        - WINDOW_CLOSED      # 422
+        - RATE_LIMITED       # 429
+        - INTERNAL           # 500
+
+    Pagination:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+
+    # --- Enums (from prisma/schema.prisma) ---
+    RoleName:
+      type: string
+      enum: [SUPER_ADMIN, COMPANY_ADMIN, USER]
+    UserStatus:
+      type: string
+      enum: [PENDING, ACTIVE, REJECTED, INACTIVE]
+    BookingType:
+      type: string
+      enum: [PRIMARY, COMMON_POOL]
+    BookingStatus:
+      type: string
+      enum: [DRAFT, SUBMITTED, CANCELLED, ALLOCATED, WAITLISTED, REJECTED, RELEASED, EXPIRED]
+    VehicleType:
+      type: string
+      enum: [CAR, BIKE, EV_CAR, EV_BIKE, OTHER]
+    NotificationChannel:
+      type: string
+      enum: [EMAIL, IN_APP, SMS, PUSH]
+    NotificationStatus:
+      type: string
+      enum: [PENDING, SENT, FAILED, READ]
+
+    # --- Auth ---
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 1 }
+
+    AuthUser:
+      type: object
+      required: [id, fullName, role, companyId, companyName]
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        role: { $ref: '#/components/schemas/RoleName' }
+        companyId: { type: string }
+        companyName: { type: string }
+
+    AccessTokenData:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, enum: [Bearer] }
+        expiresIn: { type: integer, description: Access-token lifetime in seconds. }
+
+    LoginResponseData:
+      allOf:
+        - $ref: '#/components/schemas/AccessTokenData'
+        - type: object
+          required: [user]
+          properties:
+            user: { $ref: '#/components/schemas/AuthUser' }
+
+    RegisterRequest:
+      type: object
+      required: [fullName, companyId, email, contactNumber, address, pinCode, password, confirmPassword]
+      properties:
+        fullName: { type: string }
+        companyId: { type: string, description: Must reference an ACTIVE company. }
+        email: { type: string, format: email }
+        contactNumber: { type: string }
+        address: { type: string }
+        pinCode: { type: string }
+        distanceKm:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 200
+          description: Manually-entered home→office distance in km (D6). Optional at registration.
+        password: { type: string, format: password }
+        confirmPassword: { type: string, format: password }
+
+    # --- User (self) ---
+    UserProfile:
+      type: object
+      required: [id, fullName, email, contactNumber, address, pinCode, status, emailVerified, companyId, companyName, role]
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        contactNumber: { type: string }
+        address: { type: string }
+        pinCode: { type: string }
+        distanceKm: { type: number, nullable: true, minimum: 0, maximum: 200 }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        emailVerified: { type: boolean }
+        companyId: { type: string }
+        companyName: { type: string }
+        role: { $ref: '#/components/schemas/RoleName' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    UpdateProfileRequest:
+      type: object
+      description: Partial update; all fields optional.
+      properties:
+        fullName: { type: string }
+        contactNumber: { type: string }
+        address: { type: string }
+        pinCode: { type: string }
+        distanceKm: { type: number, nullable: true, minimum: 0, maximum: 200 }
+
+    Booking:
+      type: object
+      required: [id, bookingDate, bookingType, status, carpoolMemberCount, createdAt]
+      properties:
+        id: { type: string }
+        bookingDate: { type: string, format: date }
+        bookingType: { $ref: '#/components/schemas/BookingType' }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        travelDistanceKm: { type: number, nullable: true }
+        vehicleType:
+          $ref: '#/components/schemas/VehicleType'
+        vehicleNumber: { type: string, nullable: true }
+        carpoolMemberCount: { type: integer, minimum: 0 }
+        specialRequirement: { type: string, nullable: true }
+        allocationScore: { type: number, nullable: true }
+        allocatedSlotNumber:
+          type: string
+          nullable: true
+          description: Slot number if ALLOCATED, else null.
+        submittedAt: { type: string, nullable: true, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      required: [id, channel, status, subject, body, createdAt]
+      properties:
+        id: { type: string }
+        channel: { $ref: '#/components/schemas/NotificationChannel' }
+        status: { $ref: '#/components/schemas/NotificationStatus' }
+        subject: { type: string }
+        body: { type: string }
+        metadata: { type: object, nullable: true, additionalProperties: true }
+        sentAt: { type: string, nullable: true, format: date-time }
+        readAt: { type: string, nullable: true, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+  responses:
+    MessageOk:
+      description: Success with a simple acknowledgement message.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SuccessEnvelope'
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message: { type: string }
+          example: { success: true, data: { message: OK } }
+    ValidationError:
+      description: 400 — request validation failed.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            success: false
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed
+              details: [ { field: distanceKm, message: must be between 0 and 200 } ]
+    Unauthorized:
+      description: 401 — missing/invalid/expired access token or bad credentials.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: UNAUTHENTICATED, message: Invalid credentials } }
+    Forbidden:
+      description: 403 — role or tenant-scope violation (or inactive account).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: FORBIDDEN, message: Account is not active } }
+    NotFound:
+      description: 404 — resource absent or not visible to the tenant.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: NOT_FOUND, message: Resource not found } }
+    Conflict:
+      description: 409 — duplicate resource.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: CONFLICT, message: Email already registered } }
+    RateLimited:
+      description: 429 — too many requests.
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: RATE_LIMITED, message: Too many requests } }
