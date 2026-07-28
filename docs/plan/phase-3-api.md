@@ -46,13 +46,13 @@ components.
 - **AC:** `POST /bookings` body/response as spec §3.4 (`carpoolPeople` incl. driver, `carpoolMembers[]`);
   `GET /bookings/:id` returns status + slot + breakdown; edit/cancel/release present.
 - **Evidence:** `backend/openapi.yaml` → `paths./bookings*`.
-- **Status:** ☐
+- **Status:** ☑ (POST/GET DEMO; PATCH/cancel/release MVP; common-pool Later. Added `WindowClosed` 422 response. redocly lint: 0 errors)
 
 #### P3-07 · Allocation endpoints · Owner: Prithviraj · Tag: DEMO · Deps: P3-01
 - **AC:** `POST /allocation/primary/run`, `GET /allocation/runs/:id`, `GET …/breakdown` (per-user
   distance/carpool/final scores + rank + outcome) as spec; override + common-pool present (tagged).
 - **Evidence:** `backend/openapi.yaml` → `paths./allocation*`.
-- **Status:** ☐
+- **Status:** ☑ (primary run + run summary + breakdown DEMO; override MVP; common-pool run Later. redocly lint: 0 errors)
 
 #### P3-08 · Config & Dashboard endpoints · Owner: Devashish · Tag: DEMO · Deps: P3-01
 - **AC:** `GET/PATCH /config` (timings/weights, D8); `GET /dashboard/{super-admin|company-admin|user}`.
