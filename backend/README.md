@@ -1,0 +1,30 @@
+# backend — Parking POC API
+
+Express + TypeScript + Prisma. Contract: [`openapi.yaml`](openapi.yaml). Schema: [`../prisma/schema.prisma`](../prisma/schema.prisma).
+
+## Setup
+```bash
+cd backend
+npm install
+cp .env.example .env          # set DATABASE_URL (container password) + secrets
+npm run prisma:generate       # generate Prisma client
+npm run db:migrate            # create schema (prisma migrate dev)  — or: db/create-schema.js
+psql "$DATABASE_URL" -f ../prisma/partial-unique.sql   # F7 partial-unique index
+npm run db:seed               # roles, Redbricks+SA, Assent+CA, users, slots, quota, config, templates
+npm run dev                   # http://localhost:4000
+```
+
+## What exists so far (P4-01…P4-04)
+- **Scaffold** — `src/app.ts`, `src/server.ts`, layered layout (`config/ lib/ middleware/ modules/`). `GET /health` → 200.
+- **Prisma wiring** — `src/lib/prisma.ts` singleton; `package.json > prisma` points at the root schema + `tsx` seed.
+- **Cross-cutting middleware** — response/error envelope (§3.2), `AppError` codes, `X-Correlation-Id`,
+  zod `validate()`, central error handler, pino logger with **PII masking** (F12).
+- **Config module (D8)** — `GET /api/v1/config`, `PATCH /api/v1/config` with time-order + range validation;
+  cached `SystemConfiguration` accessor (`src/config/systemConfig.ts`) that scheduler/allocation will read.
+
+> Auth (P4-05) and RBAC/tenant scoping (P4-06) are not wired yet — `/config` routes carry a `TODO(P4-06)`
+> to add `requireRole('SUPER_ADMIN')`. Until then treat the API as unprotected (local dev only).
+
+## Scripts
+`dev` (tsx watch) · `build` / `start` · `typecheck` · `prisma:generate` · `db:migrate` · `db:deploy` ·
+`db:seed` · `db:reset`.

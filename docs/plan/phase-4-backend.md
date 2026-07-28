@@ -14,7 +14,7 @@
 `backend/` with `package.json`, `tsconfig.json`, Express `app.ts`/`server.ts`, folder layout per spec §4.2.
 - **AC:** `npm run dev` boots on `:4000`; `GET /health` returns 200; folder structure matches §4.2.
 - **Evidence:** `backend/src/app.ts`, `backend/src/server.ts`, `backend/package.json`.
-- **Status:** ☐
+- **Status:** ☑ (`GET /health` → 200 verified; tsc clean)
 
 #### P4-02 · Config module + SystemConfiguration accessor · Owner: Devashish · Tag: DEMO · Deps: P4-01,P4-03
 Env loader + a **cached** `SystemConfiguration` accessor (invalidates on `PATCH /config`); `GET/PATCH /config`
@@ -22,19 +22,19 @@ with time-order + range validation (D8).
 - **AC:** timings/weights read from DB not code; `PATCH /config` rejects out-of-order times
   (`primaryCutoff < primaryResultsBy ≤ commonPoolClose < commonPoolResultsBy`); change is audited.
 - **Evidence:** `backend/src/config/*`, `backend/src/modules/config/*`.
-- **Status:** ☐
+- **Status:** ☑ (GET/PATCH /config live-tested: valid persists + cache invalidates; time-order, range & unknown-key all → 400. ⚠ requireRole guard pending P4-06)
 
 #### P4-03 · Prisma lib + migrate + seed wiring · Owner: Devashish · Tag: DEMO · Deps: P4-01
 Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `prisma/seed.ts`; F7 partial-unique SQL applied.
 - **AC:** fresh DB → `migrate` + `seed` succeed; seeded Super Admin/Company Admin/users/slots/quota/config present.
 - **Evidence:** `backend/src/lib/prisma.ts`; `prisma/seed.ts`; `prisma/partial-unique.sql`.
-- **Status:** ☐
+- **Status:** ☑ (migrate init + partial-unique + seed verified on fresh parking_poc: 23 tables, 5 users/2 cos/12 slots/13 config)
 
 #### P4-04 · Cross-cutting middleware · Owner: Devashish · Tag: DEMO · Deps: P4-01
 Response helpers, central error handler → envelope (§3.2), correlation-id, zod `validate()`, logger with **PII masking**.
 - **AC:** all responses use the envelope; errors map to the code/status table; logs mask email/contact/address; every response has `X-Correlation-Id`.
 - **Evidence:** `backend/src/middleware/*`, `backend/src/lib/{response,errors,logger}.ts`.
-- **Status:** ☐
+- **Status:** ☑ (envelope + error codes + X-Correlation-Id + zod validate + PII-masked logger; 404 envelope verified)
 
 #### P4-05 · Auth: login + JWT · Owner: Devashish · Tag: DEMO · Deps: P4-03,P4-04
 Seeded-user login → short-lived access JWT (refresh-cookie rotation is MVP). Argon2id verify.

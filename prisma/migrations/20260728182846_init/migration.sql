@@ -1,12 +1,3 @@
--- ==============================================================================
--- Parking POC — PostgreSQL schema DDL
--- GENERATED from prisma/schema.prisma (the frozen contract). DO NOT hand-edit.
--- Regenerate: npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > db/schema.sql
--- ==============================================================================
-
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('PENDING', 'ACTIVE', 'REJECTED', 'INACTIVE');
 
@@ -600,4 +591,3 @@ ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorUserId_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
