@@ -34,13 +34,13 @@ components.
 - **AC:** companies CRUD + status; `GET /companies` public active-subset for registration dropdown; company
   users list/approval/status/admin-assign.
 - **Evidence:** `backend/openapi.yaml`.
-- **Status:** ☐
+- **Status:** ☑ (public active-subset split into dedicated `GET /companies/active`; `GET /companies` is SA-only management list)
 
 #### P3-05 · Slots, Quota & Blocking endpoints · Owner: Devashish · Tag: DEMO(quota)/MVP · Deps: P3-01
 - **AC:** slots CRUD; `POST/GET /companies/:id/quota` (effective-dated); blocking endpoints authorized
   **SA any / CA own / USER forbidden** (confirmed).
 - **Evidence:** `backend/openapi.yaml`.
-- **Status:** ☐
+- **Status:** ☑ (authorization captured via `x-required-roles` + tenant note in each op's description)
 
 #### P3-06 · Booking endpoints · Owner: Prithviraj · Tag: DEMO · Deps: P3-01
 - **AC:** `POST /bookings` body/response as spec §3.4 (`carpoolPeople` incl. driver, `carpoolMembers[]`);
@@ -57,18 +57,18 @@ components.
 #### P3-08 · Config & Dashboard endpoints · Owner: Devashish · Tag: DEMO · Deps: P3-01
 - **AC:** `GET/PATCH /config` (timings/weights, D8); `GET /dashboard/{super-admin|company-admin|user}`.
 - **Evidence:** `backend/openapi.yaml`.
-- **Status:** ☐
+- **Status:** ☑ (`PATCH /config` documents time-ordering + range validation; 3 role dashboards defined)
 
 #### P3-09 · Reports endpoints (stub) · Owner: Devashish · Tag: Later · Deps: P3-01
 - **AC:** `GET /reports/:type` + `/export` declared and marked Later.
 - **Evidence:** `backend/openapi.yaml`.
-- **Status:** ⊘
+- **Status:** ☑ (stub declared: `ReportType` enum + filters + CSV export, all `x-maturity: Later`)
 
 #### P3-10 · Freeze contract + generate client & mocks · Owner: Devashish · Tag: DEMO · Deps: P3-02..P3-08
 - **AC:** `openapi.yaml` passes an OpenAPI linter; a typed FE client + MSW handlers are generated from it;
   contract tagged "frozen — changes via reviewed PR".
 - **Evidence:** `backend/openapi.yaml`; `frontend/src/api/*` (generated); `frontend/src/mocks/*`.
-- **Status:** ☐
+- **Status:** ☑ (redocly valid; `types.ts`+`client.ts`+38 MSW handlers generated & tsc-clean; `x-contract-status: frozen`)
 
 ## Phase Definition of Done
 `backend/openapi.yaml` validates and covers every endpoint; FE client + MSW mocks generate from it; both
