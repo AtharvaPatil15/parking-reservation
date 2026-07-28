@@ -20,6 +20,10 @@ tags:
     description: Authentication & session lifecycle
   - name: User
     description: Current-user (self) profile, bookings, notifications
+  - name: Bookings
+    description: Parking booking requests — create, status, edit, cancel, release (P3-06)
+  - name: Allocation
+    description: Primary/common-pool allocation runs and score breakdowns (P3-07)
 
 paths:
   # ---------------------------------------------------------------------------
@@ -354,6 +358,364 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # ---------------------------------------------------------------------------
+  # Bookings  (P3-06)  — Role: USER (own). Tenant-scoped by companyId.
+  # ---------------------------------------------------------------------------
+  /bookings:
+    post:
+      tags: [Bookings]
+      operationId: createBooking
+      summary: Submit a parking request for the next bookable weekday
+      description: >
+        Role: USER. Creates a PRIMARY booking for a bookable weekday (Mon–Fri, D7). `travelDistanceKm` is
+        snapshotted from the user's profile at submission (F6); `carpoolPeople` includes the driver as person 1
+        (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company
+        employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or
+        a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
+      x-maturity: DEMO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+            example:
+              bookingDate: "2026-07-31"
+              vehicleType: CAR
+              vehicleNumber: MH12AB1234
+              carpoolPeople: 3
+              specialRequirement: null
+              carpoolMembers:
+                - { name: Rahul Mehta, employeeEmail: rahul@assent.example }
+                - { name: Neighbour, employeeEmail: null }
+      responses:
+        '201':
+          description: Booking submitted.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingCreatedData' }
+              example:
+                success: true
+                data:
+                  id: bkg_123
+                  status: SUBMITTED
+                  bookingType: PRIMARY
+                  bookingDate: "2026-07-31"
+                  travelDistanceKm: 12.4
+                  carpoolPeople: 3
+                  submittedAt: "2026-07-30T11:20:00Z"
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WindowClosed' }
+
+  /bookings/common-pool:
+    post:
+      tags: [Bookings]
+      operationId: createCommonPoolBooking
+      summary: Submit a common-pool request (after primary results)
+      description: >
+        Role: USER. Same body as POST /bookings but recorded as a COMMON_POOL request. Valid only while the
+        common-pool window is open (`booking.primaryResultsBy` → `booking.commonPoolClose`, D8).
+      x-maturity: Later
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+      responses:
+        '201':
+          description: Common-pool request submitted.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingCreatedData' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WindowClosed' }
+
+  /bookings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/BookingIdParam'
+    get:
+      tags: [Bookings]
+      operationId: getBooking
+      summary: Get a booking's status, allocated slot, and score breakdown
+      description: "Role: USER (own) / COMPANY_ADMIN (own company) / SUPER_ADMIN. Returns 404 if not visible to the tenant."
+      x-maturity: DEMO
+      responses:
+        '200':
+          description: Booking detail incl. allocated slot and per-factor score breakdown (once allocation has run).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Bookings]
+      operationId: updateBooking
+      summary: Edit a booking before the primary cutoff
+      description: "Role: USER (own). Partial edit; allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED)."
+      x-maturity: MVP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateBookingRequest' }
+      responses:
+        '200':
+          description: Booking updated.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/WindowClosed' }
+
+  /bookings/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/BookingIdParam'
+    post:
+      tags: [Bookings]
+      operationId: cancelBooking
+      summary: Cancel a booking before the primary cutoff
+      description: "Role: USER (own). Allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED)."
+      x-maturity: MVP
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelBookingRequest' }
+      responses:
+        '200':
+          description: Booking cancelled.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/WindowClosed' }
+
+  /bookings/{id}/release:
+    parameters:
+      - $ref: '#/components/parameters/BookingIdParam'
+    post:
+      tags: [Bookings]
+      operationId: releaseBooking
+      summary: Release an allocated slot
+      description: >
+        Role: USER (own) or COMPANY_ADMIN (own users). Releasing an allocated slot after primary allocation
+        triggers reallocation to the highest-scoring own-company waitlisted user first, else the slot moves to
+        the common pool (F3). Audited + notified.
+      x-maturity: MVP
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseBookingRequest' }
+      responses:
+        '200':
+          description: Slot released (reallocation handled server-side, F3).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ---------------------------------------------------------------------------
+  # Allocation  (P3-07)  — Role: SUPER_ADMIN.
+  # ---------------------------------------------------------------------------
+  /allocation/primary/run:
+    post:
+      tags: [Allocation]
+      operationId: runPrimaryAllocation
+      summary: Run (or re-run) primary allocation for a date
+      description: >
+        Role: SUPER_ADMIN. Idempotent per (runType=PRIMARY, bookingDate) — a COMPLETED run returns the cached
+        result. Ranks SUBMITTED PRIMARY bookings by FinalScore (decisions §3) within each company's available
+        quota, assigns concrete slots transactionally, and waitlists the rest.
+      x-maturity: DEMO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrimaryRunRequest' }
+            example: { bookingDate: "2026-07-31" }
+      responses:
+        '200':
+          description: Allocation run accepted or already complete (idempotent). Returns the run summary.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AllocationRunSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /allocation/common-pool/run:
+    post:
+      tags: [Allocation]
+      operationId: runCommonPoolAllocation
+      summary: Run common-pool allocation for a date
+      description: "Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate)."
+      x-maturity: Later
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrimaryRunRequest' }
+      responses:
+        '200':
+          description: Common-pool allocation run summary.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AllocationRunSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /allocation/override:
+    post:
+      tags: [Allocation]
+      operationId: overrideAllocation
+      summary: Manually override a single allocation
+      description: "Role: SUPER_ADMIN. Assigns a specific slot to a booking, bypassing the scored ranking. Audited."
+      x-maturity: MVP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AllocationOverrideRequest' }
+      responses:
+        '200':
+          description: Override applied; returns the affected booking.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /allocation/runs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [Allocation]
+      operationId: getAllocationRun
+      summary: Get an allocation run's status and summary counts
+      description: "Role: SUPER_ADMIN."
+      x-maturity: DEMO
+      responses:
+        '200':
+          description: Run status + allocated/waitlisted summary.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AllocationRunSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /allocation/runs/{id}/breakdown:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [Allocation]
+      operationId: getAllocationBreakdown
+      summary: Per-user ranked score breakdown for a run
+      description: "Role: SUPER_ADMIN. Explains every outcome with per-factor scores + rank (decisions §3)."
+      x-maturity: DEMO
+      responses:
+        '200':
+          description: Ranked results with distance/carpool/final scores and outcome.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AllocationBreakdown' }
+              example:
+                success: true
+                data:
+                  runId: run_123
+                  bookingDate: "2026-07-31"
+                  status: COMPLETED
+                  weights: { distanceWeight: 0.60, carpoolWeight: 0.40 }
+                  results:
+                    - { rank: 1, bookingId: bkg_9, userId: usr_3, user: Sara Khan, distanceKm: 38.1, people: 3, distanceScore: 95.25, carpoolScore: 66.67, finalScore: 84.1, outcome: ALLOCATED, slotNumber: B1-01 }
+                    - { rank: 2, bookingId: bkg_5, userId: usr_1, user: Aditi Rao, distanceKm: 12.4, people: 3, distanceScore: 31.0, carpoolScore: 66.67, finalScore: 45.27, outcome: WAITLISTED, slotNumber: null }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 # =============================================================================
 # Reusable components  (P3-01)
 # =============================================================================
@@ -395,6 +757,18 @@ components:
       required: false
       description: Sort direction.
       schema: { type: string, enum: [asc, desc], default: desc }
+    BookingIdParam:
+      name: id
+      in: path
+      required: true
+      description: Booking request id.
+      schema: { type: string }
+    RunIdParam:
+      name: id
+      in: path
+      required: true
+      description: Allocation run id.
+      schema: { type: string }
 
   schemas:
     # --- Envelope & pagination (reusable) ---
@@ -595,6 +969,188 @@ components:
         readAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
 
+    # --- Allocation enums (from prisma/schema.prisma) ---
+    AllocationRunType:
+      type: string
+      enum: [PRIMARY, COMMON_POOL]
+    AllocationRunStatus:
+      type: string
+      enum: [PENDING, RUNNING, COMPLETED, FAILED]
+    AllocationOutcome:
+      type: string
+      description: Per-request result of an allocation run (maps to BookingStatus ALLOCATED/WAITLISTED).
+      enum: [ALLOCATED, WAITLISTED]
+
+    # --- Bookings (P3-06) ---
+    CarpoolMemberInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        employeeEmail:
+          type: string
+          format: email
+          nullable: true
+          description: Same-company employee email; only validated same-company employees are scored (F4).
+        contactNumber: { type: string, nullable: true }
+        pickupLocation: { type: string, nullable: true }
+
+    CarpoolMember:
+      type: object
+      required: [name, sameCompany, isScored]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        employeeEmail: { type: string, format: email, nullable: true }
+        sameCompany: { type: boolean }
+        isScored: { type: boolean, description: True only for validated same-company employees (F4). }
+
+    CreateBookingRequest:
+      type: object
+      required: [bookingDate, carpoolPeople]
+      properties:
+        bookingDate: { type: string, format: date, description: "Target bookable weekday (Mon–Fri, D7)." }
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        vehicleNumber: { type: string, nullable: true }
+        carpoolPeople:
+          type: integer
+          minimum: 1
+          description: >
+            Total people incl. the driver (person 1, D3). Server enforces the current carpool.maxPeople cap
+            (default 4, D8) — no fixed maximum is baked into the contract so a config change needs no re-spec.
+        specialRequirement: { type: string, nullable: true }
+        carpoolMembers:
+          type: array
+          description: Optional carpool members; only same-company employees are scored (F4).
+          items: { $ref: '#/components/schemas/CarpoolMemberInput' }
+
+    UpdateBookingRequest:
+      type: object
+      description: Partial edit before the primary cutoff. All fields optional.
+      properties:
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        vehicleNumber: { type: string, nullable: true }
+        carpoolPeople: { type: integer, minimum: 1 }
+        specialRequirement: { type: string, nullable: true }
+        carpoolMembers:
+          type: array
+          items: { $ref: '#/components/schemas/CarpoolMemberInput' }
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        reason: { type: string, nullable: true }
+
+    ReleaseBookingRequest:
+      type: object
+      properties:
+        reason: { type: string, nullable: true }
+
+    BookingCreatedData:
+      type: object
+      required: [id, status, bookingType, bookingDate, carpoolPeople]
+      properties:
+        id: { type: string }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        bookingType: { $ref: '#/components/schemas/BookingType' }
+        bookingDate: { type: string, format: date }
+        travelDistanceKm:
+          type: number
+          nullable: true
+          description: Snapshotted from the user's profile at submission (F6).
+        carpoolPeople: { type: integer }
+        submittedAt: { type: string, format: date-time, nullable: true }
+
+    ScoreBreakdown:
+      type: object
+      description: Per-factor allocation scoring (decisions §3). Present once an allocation run has scored the booking.
+      required: [people, distanceScore, carpoolScore, distanceWeight, carpoolWeight, finalScore]
+      properties:
+        distanceKm: { type: number, nullable: true, description: Snapshotted travel distance used for scoring. }
+        people: { type: integer, description: "1 (driver) + scored same-company carpool members (F4)." }
+        distanceScore: { type: number, description: "(min(distanceKm, maxDistanceKm)/maxDistanceKm)*100." }
+        carpoolScore: { type: number, description: "((min(people, maxPeople)-1)/(maxPeople-1))*100." }
+        distanceWeight: { type: number }
+        carpoolWeight: { type: number }
+        finalScore: { type: number, description: "distanceWeight*distanceScore + carpoolWeight*carpoolScore." }
+
+    BookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          properties:
+            carpoolMembers:
+              type: array
+              items: { $ref: '#/components/schemas/CarpoolMember' }
+            scoreBreakdown:
+              allOf: [ { $ref: '#/components/schemas/ScoreBreakdown' } ]
+              description: Per-factor scores; present only after an allocation run has scored this booking (absent/null before).
+
+    # --- Allocation (P3-07) ---
+    PrimaryRunRequest:
+      type: object
+      required: [bookingDate]
+      properties:
+        bookingDate: { type: string, format: date }
+
+    AllocationOverrideRequest:
+      type: object
+      required: [bookingId, slotId]
+      properties:
+        bookingId: { type: string }
+        slotId: { type: string }
+        reason: { type: string, nullable: true }
+
+    AllocationResultRow:
+      type: object
+      required: [rank, outcome, people, distanceScore, carpoolScore, finalScore]
+      properties:
+        rank: { type: integer, minimum: 1 }
+        bookingId: { type: string }
+        userId: { type: string }
+        user: { type: string, description: User full name (display). }
+        distanceKm: { type: number, nullable: true }
+        people: { type: integer }
+        distanceScore: { type: number }
+        carpoolScore: { type: number }
+        finalScore: { type: number }
+        outcome: { $ref: '#/components/schemas/AllocationOutcome' }
+        slotNumber: { type: string, nullable: true, description: "Assigned slot number if ALLOCATED; null otherwise." }
+
+    AllocationRunSummary:
+      type: object
+      required: [id, runType, bookingDate, status]
+      properties:
+        id: { type: string }
+        runType: { $ref: '#/components/schemas/AllocationRunType' }
+        bookingDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/AllocationRunStatus' }
+        idempotencyKey: { type: string }
+        attemptCount: { type: integer }
+        totalRequests: { type: integer, description: SUBMITTED requests considered for the run. }
+        allocatedCount: { type: integer }
+        waitlistedCount: { type: integer }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        error: { type: string, nullable: true }
+
+    AllocationBreakdown:
+      type: object
+      required: [runId, bookingDate, status, results]
+      properties:
+        runId: { type: string }
+        bookingDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/AllocationRunStatus' }
+        weights:
+          type: object
+          description: Weights applied for this run (decisions §3).
+          properties:
+            distanceWeight: { type: number }
+            carpoolWeight: { type: number }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/AllocationResultRow' }
+
   responses:
     MessageOk:
       description: Success with a simple acknowledgement message.
@@ -658,3 +1214,10 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
           example: { success: false, error: { code: RATE_LIMITED, message: Too many requests } }
+    WindowClosed:
+      description: 422 — action attempted outside its allowed time window (e.g. after `booking.primaryCutoff`, or a non-bookable date).
+      headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { success: false, error: { code: WINDOW_CLOSED, message: The booking window is closed for this date } }
