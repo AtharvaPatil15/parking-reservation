@@ -1,0 +1,579 @@
+// Parking POC — PostgreSQL schema (Prisma DSL)
+// Design decisions: see docs/decisions.md. Quota-based slot model (D2), scoring as written (D3),
+// slot-attribute matching deferred (D5). Timezone for all scheduling: Asia/Kolkata.
+//
+// NOTE (F7 — soft delete + uniqueness): fields marked `@unique` on soft-deletable models
+// (e.g. User.email) should be converted to PARTIAL unique indexes `WHERE deleted_at IS NULL`
+// via a raw-SQL migration so a soft-deleted record does not block re-use of the value.
+// Prisma's DSL cannot express partial uniques; the `@unique` here is the pre-migration form.
+//
+// NOTE ("by" fields): createdById / triggeredById / overrideById / assignedById / updatedById are
+// stored as plain user-id scalars (soft references), not FK relations, to avoid a large fan of
+// back-relation arrays on User. Referential intent is documented, enforced in the service layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  INACTIVE
+}
+
+enum CompanyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SlotType {
+  STANDARD
+  ACCESSIBLE
+  EV_CHARGING
+  VISITOR
+  RESERVED
+}
+
+enum SlotStatus {
+  AVAILABLE
+  ALLOCATED_TO_COMPANY
+  BLOCKED
+  BOOKED
+  COMMON_POOL
+  UNDER_MAINTENANCE
+  INACTIVE
+}
+
+enum BlockReason {
+  RESERVED_VISITOR
+  RESERVED_LEADERSHIP
+  MAINTENANCE
+  COMPANY_EVENT
+  EMERGENCY
+  OTHER
+}
+
+enum BookingType {
+  PRIMARY
+  COMMON_POOL
+}
+
+enum BookingStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+  ALLOCATED
+  WAITLISTED
+  REJECTED
+  RELEASED
+  EXPIRED
+}
+
+enum VehicleType {
+  CAR
+  BIKE
+  EV_CAR
+  EV_BIKE
+  OTHER
+}
+
+enum AllocationRunType {
+  PRIMARY
+  COMMON_POOL
+}
+
+enum AllocationRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum CommonPoolSlotStatus {
+  AVAILABLE
+  ALLOCATED
+  EXPIRED
+}
+
+enum HolidayType {
+  COMPANY
+  BUILDING
+  SPECIAL_PARKING_DAY
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum ConfigValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+  TIME
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy
+// ---------------------------------------------------------------------------
+
+model Company {
+  id        String        @id @default(cuid())
+  name      String
+  code      String        @unique // short tenant code, e.g. "ASSENT"
+  status    CompanyStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  deletedAt DateTime?
+
+  users                   User[]
+  admins                  CompanyAdmin[]
+  slotAllocations         CompanySlotAllocation[]
+  slotBlocks              SlotBlock[]
+  bookingRequests         BookingRequest[]
+  commonPoolContributions CommonPoolSlot[]
+  holidays                Holiday[]
+  workingDayConfigs       WorkingDayConfiguration[]
+
+  @@index([status])
+}
+
+model User {
+  id            String     @id @default(cuid())
+  fullName      String
+  email         String     @unique // see F7 note (partial unique in migration)
+  contactNumber String
+  address       String
+  pinCode       String
+  passwordHash  String
+  status        UserStatus @default(PENDING)
+  emailVerified Boolean    @default(false)
+
+  // Manually-entered home→office distance in km (D6 — no geolocation). Range-validated in the service layer.
+  distanceKm Decimal? @db.Decimal(8, 3)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  roles             UserRole[]
+  companyAdminRoles CompanyAdmin[]
+  bookingRequests   BookingRequest[]
+  notifications     Notification[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Role {
+  id          String     @id @default(cuid())
+  name        String     @unique // SUPER_ADMIN | COMPANY_ADMIN | USER
+  description String?
+  userRoles   UserRole[]
+}
+
+model UserRole {
+  id     String @id @default(cuid())
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+}
+
+model CompanyAdmin {
+  id           String   @id @default(cuid())
+  companyId    String
+  userId       String
+  assignedById String? // super-admin user id (soft ref)
+  company      Company  @relation(fields: [companyId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Physical inventory & quota (quota model — D2)
+// ---------------------------------------------------------------------------
+
+model OfficeLocation {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  timezone  String   @default("Asia/Kolkata")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parkingAreas ParkingArea[]
+  holidays     Holiday[]
+}
+
+model ParkingArea {
+  id               String         @id @default(cuid())
+  name             String
+  floor            String?
+  officeLocationId String
+  office           OfficeLocation @relation(fields: [officeLocationId], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  slots ParkingSlot[]
+
+  @@index([officeLocationId])
+}
+
+model ParkingSlot {
+  id            String      @id @default(cuid())
+  slotNumber    String
+  parkingAreaId String
+  slotType      SlotType    @default(STANDARD)
+  status        SlotStatus  @default(AVAILABLE)
+  hasEvCharging Boolean     @default(false) // stored; unused by MVP allocation (D5)
+  isAccessible  Boolean     @default(false) // stored; unused by MVP allocation (D5)
+  parkingArea   ParkingArea @relation(fields: [parkingAreaId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+
+  allocations     ParkingAllocation[]
+  commonPoolSlots CommonPoolSlot[]
+
+  @@unique([parkingAreaId, slotNumber])
+  @@index([status])
+}
+
+// Effective-dated company quota. Increase/decrease = new row with a new effectiveFrom.
+model CompanySlotAllocation {
+  id            String    @id @default(cuid())
+  companyId     String
+  slotCount     Int
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date
+  createdById   String? // super-admin user id (soft ref)
+  company       Company   @relation(fields: [companyId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([companyId, effectiveFrom])
+}
+
+// Company Admin blocks a COUNT of the company's quota for a date range, with a reason.
+model SlotBlock {
+  id           String      @id @default(cuid())
+  companyId    String
+  blockedCount Int
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  reason       BlockReason
+  reasonText   String?
+  createdById  String? // company-admin user id (soft ref)
+  company      Company     @relation(fields: [companyId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([companyId, startDate, endDate])
+}
+
+// ---------------------------------------------------------------------------
+// Bookings
+// ---------------------------------------------------------------------------
+
+model BookingRequest {
+  id          String        @id @default(cuid())
+  bookingDate DateTime      @db.Date
+  userId      String
+  companyId   String
+  bookingType BookingType   @default(PRIMARY)
+  status      BookingStatus @default(DRAFT)
+
+  // Snapshotted PII/context at submission time (F6)
+  userAddress        String
+  pinCode            String
+  travelDistanceKm   Decimal?     @db.Decimal(8, 3)
+  vehicleNumber      String?
+  vehicleType        VehicleType?
+  carpoolMemberCount Int          @default(0)
+  specialRequirement String?
+
+  allocationScore    Decimal?  @db.Decimal(10, 4)
+  submittedAt        DateTime?
+  allocationTime     DateTime?
+  cancellationTime   DateTime?
+  cancellationReason String?
+
+  user           User                      @relation(fields: [userId], references: [id])
+  company        Company                   @relation(fields: [companyId], references: [id])
+  carpoolMembers BookingCarpoolMember[]
+  allocation     ParkingAllocation?
+  scoreBreakdown AllocationScoreBreakdown?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One request per user per date PER TYPE — allows one PRIMARY + one COMMON_POOL request per date (F8, refined)
+  @@unique([userId, bookingDate, bookingType])
+  @@index([companyId, bookingDate])
+  @@index([status])
+  @@index([bookingDate])
+}
+
+model BookingCarpoolMember {
+  id               String         @id @default(cuid())
+  bookingRequestId String
+  bookingDate      DateTime       @db.Date // denormalized to enforce cross-booking uniqueness per date
+  name             String
+  employeeEmail    String?
+  employeeUserId   String? // resolved same-company employee (soft ref)
+  contactNumber    String?
+  pickupLocation   String?
+  sameCompany      Boolean        @default(false)
+  isScored         Boolean        @default(false) // only validated same-company employees are scored (F4)
+  booking          BookingRequest @relation(fields: [bookingRequestId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+
+  // Same employee cannot appear in two carpool requests for the same date (F4/F8).
+  // NULL employeeEmail rows are allowed to repeat (Postgres treats NULLs as distinct).
+  @@unique([bookingDate, employeeEmail])
+  @@index([bookingRequestId])
+}
+
+// ---------------------------------------------------------------------------
+// Allocation
+// ---------------------------------------------------------------------------
+
+model AllocationRun {
+  id             String              @id @default(cuid())
+  runType        AllocationRunType
+  bookingDate    DateTime            @db.Date
+  status         AllocationRunStatus @default(PENDING)
+  idempotencyKey String              @unique
+  attemptCount   Int                 @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  error          String?
+  triggeredById  String? // user id if manually triggered (soft ref)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  allocations     ParkingAllocation[]
+  scoreBreakdowns AllocationScoreBreakdown[]
+
+  // One run per (type, date) — supports idempotent + safe re-run (F9)
+  @@unique([runType, bookingDate])
+}
+
+model ParkingAllocation {
+  id               String      @id @default(cuid())
+  bookingRequestId String      @unique
+  slotId           String
+  bookingDate      DateTime    @db.Date
+  companyId        String
+  allocationType   BookingType
+  allocationRunId  String?
+  isManualOverride Boolean     @default(false)
+  overrideById     String? // super-admin user id (soft ref)
+  allocatedAt      DateTime    @default(now())
+
+  bookingRequest BookingRequest @relation(fields: [bookingRequestId], references: [id])
+  slot           ParkingSlot    @relation(fields: [slotId], references: [id])
+  run            AllocationRun? @relation(fields: [allocationRunId], references: [id])
+
+  // A slot can be assigned to only one user for a given date (F8)
+  @@unique([slotId, bookingDate])
+  @@index([companyId, bookingDate])
+  @@index([allocationRunId])
+}
+
+model AllocationScoreBreakdown {
+  id               String   @id @default(cuid())
+  bookingRequestId String   @unique
+  allocationRunId  String
+  distanceScore    Decimal  @db.Decimal(10, 4)
+  carpoolScore     Decimal  @db.Decimal(10, 4)
+  distanceWeight   Decimal  @db.Decimal(5, 4)
+  carpoolWeight    Decimal  @db.Decimal(5, 4)
+  finalScore       Decimal  @db.Decimal(10, 4)
+  travellerCount   Int
+  tieBreakerData   Json? // captured tie-breaker signals (carpool count, distance, submit time, 30d allocations, random)
+  computedAt       DateTime @default(now())
+
+  bookingRequest BookingRequest @relation(fields: [bookingRequestId], references: [id])
+  run            AllocationRun  @relation(fields: [allocationRunId], references: [id])
+
+  @@index([allocationRunId])
+}
+
+// Per-date common-pool inventory derived at 20:00 from unused company quota (quota − blocked − booked).
+model CommonPoolSlot {
+  id              String               @id @default(cuid())
+  bookingDate     DateTime             @db.Date
+  slotId          String
+  sourceCompanyId String
+  status          CommonPoolSlotStatus @default(AVAILABLE)
+  slot            ParkingSlot          @relation(fields: [slotId], references: [id])
+  sourceCompany   Company              @relation(fields: [sourceCompanyId], references: [id])
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([slotId, bookingDate])
+  @@index([bookingDate, status])
+}
+
+// ---------------------------------------------------------------------------
+// Calendar configuration
+// ---------------------------------------------------------------------------
+
+model Holiday {
+  id               String          @id @default(cuid())
+  name             String
+  date             DateTime        @db.Date
+  type             HolidayType
+  isParkingEnabled Boolean         @default(false) // true for SPECIAL_PARKING_DAY that opens booking
+  companyId        String? // null = building-wide
+  officeLocationId String?
+  company          Company?        @relation(fields: [companyId], references: [id])
+  officeLocation   OfficeLocation? @relation(fields: [officeLocationId], references: [id])
+  createdAt        DateTime        @default(now())
+
+  @@index([date])
+  @@index([companyId, date])
+}
+
+model WorkingDayConfiguration {
+  id           String    @id @default(cuid())
+  dayOfWeek    DayOfWeek
+  isWorkingDay Boolean   @default(true)
+  companyId    String? // null = global/building default
+  company      Company?  @relation(fields: [companyId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([companyId, dayOfWeek])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model NotificationTemplate {
+  id          String              @id @default(cuid())
+  code        String              @unique // e.g. REGISTRATION_APPROVED, PRIMARY_SLOT_ALLOCATED
+  channel     NotificationChannel
+  subject     String
+  body        String // supports {{placeholders}}
+  description String?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  notifications Notification[]
+}
+
+model Notification {
+  id         String              @id @default(cuid())
+  userId     String
+  templateId String?
+  channel    NotificationChannel
+  status     NotificationStatus  @default(PENDING)
+  subject    String
+  body       String
+  metadata   Json?
+  sentAt     DateTime?
+  readAt     DateTime?
+  createdAt  DateTime            @default(now())
+
+  user     User                  @relation(fields: [userId], references: [id])
+  template NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([userId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting: audit, config, tokens
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String?
+  actionType    String // e.g. SLOT_BLOCKED, ALLOCATION_OVERRIDE
+  entityType    String
+  entityId      String?
+  oldValue      Json?
+  newValue      Json?
+  ipAddress     String?
+  correlationId String?
+  createdAt     DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+}
+
+model SystemConfiguration {
+  id          String          @id @default(cuid())
+  key         String          @unique // e.g. allocation.distanceWeight, booking.primaryCutoff
+  value       String
+  valueType   ConfigValueType @default(STRING)
+  description String?
+  updatedById String? // user id (soft ref)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model RefreshToken {
+  id                  String    @id @default(cuid())
+  userId              String
+  tokenHash           String    @unique
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  replacedByTokenHash String? // set on rotation (F10)
+  createdByIp         String?
+  createdAt           DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
