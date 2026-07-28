@@ -1,6 +1,6 @@
 # Phase 3 — API Contract (`backend/openapi.yaml`)
 
-**Goal:** produce and **freeze** the OpenAPI 3.1 contract so all three tracks build in parallel against a
+**Goal:** produce and **freeze** the OpenAPI 3.0.3 contract so all three tracks build in parallel against a
 stable shape. Full spec: [`../phases-3-6-plan.md`](../phases-3-6-plan.md#phase-3--api-design).
 
 **Owners:** Devashish (lead author) + Prithviraj (booking/allocation shapes).
@@ -68,7 +68,7 @@ components.
 - **AC:** `openapi.yaml` passes an OpenAPI linter; a typed FE client + MSW handlers are generated from it;
   contract tagged "frozen — changes via reviewed PR".
 - **Evidence:** `backend/openapi.yaml`; `frontend/src/api/*` (generated); `frontend/src/mocks/*`.
-- **Status:** ☑ (redocly valid; `types.ts`+`client.ts`+38 MSW handlers generated & tsc-clean; `x-contract-status: frozen`)
+- **Status:** ☑ (redocly valid; `types.ts`+`client.ts`+**49** MSW handlers generated from the full 49-op contract & tsc-clean; `x-contract-status: frozen`)
 
 ## Phase Definition of Done
 `backend/openapi.yaml` validates and covers every endpoint; FE client + MSW mocks generate from it; both

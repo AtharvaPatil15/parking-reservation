@@ -1563,7 +1563,9 @@ components:
       required: [success, data]
       properties:
         success: { type: boolean, enum: [true] }
-        data: { type: object }
+        # No `type` here: each endpoint overrides `data` (object or array) via allOf.
+        data:
+          description: Resource or list payload; concrete shape defined per endpoint.
         meta: { $ref: '#/components/schemas/Pagination' }
 
     ErrorEnvelope:

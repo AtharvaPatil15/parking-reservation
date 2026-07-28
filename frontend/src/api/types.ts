@@ -221,6 +221,225 @@ export interface paths {
         patch: operations["markNotificationRead"];
         trace?: never;
     };
+    "/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a parking request for the next bookable weekday
+         * @description Role: USER. Creates a PRIMARY booking for a bookable weekday (Mon–Fri, D7). `travelDistanceKm` is snapshotted from the user's profile at submission (F6); `carpoolPeople` includes the driver as person 1 (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
+         */
+        post: operations["createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/common-pool": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a common-pool request (after primary results)
+         * @description Role: USER. Same body as POST /bookings but recorded as a COMMON_POOL request. Valid only while the common-pool window is open (`booking.primaryResultsBy` → `booking.commonPoolClose`, D8).
+         */
+        post: operations["createCommonPoolBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a booking's status, allocated slot, and score breakdown
+         * @description Role: USER (own) / COMPANY_ADMIN (own company) / SUPER_ADMIN. Returns 404 if not visible to the tenant.
+         */
+        get: operations["getBooking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a booking before the primary cutoff
+         * @description Role: USER (own). Partial edit; allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED).
+         */
+        patch: operations["updateBooking"];
+        trace?: never;
+    };
+    "/bookings/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a booking before the primary cutoff
+         * @description Role: USER (own). Allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED).
+         */
+        post: operations["cancelBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release an allocated slot
+         * @description Role: USER (own) or COMPANY_ADMIN (own users). Releasing an allocated slot after primary allocation triggers reallocation to the highest-scoring own-company waitlisted user first, else the slot moves to the common pool (F3). Audited + notified.
+         */
+        post: operations["releaseBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/primary/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run (or re-run) primary allocation for a date
+         * @description Role: SUPER_ADMIN. Idempotent per (runType=PRIMARY, bookingDate) — a COMPLETED run returns the cached result. Ranks SUBMITTED PRIMARY bookings by FinalScore (decisions §3) within each company's available quota, assigns concrete slots transactionally, and waitlists the rest.
+         */
+        post: operations["runPrimaryAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/common-pool/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run common-pool allocation for a date
+         * @description Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate).
+         */
+        post: operations["runCommonPoolAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually override a single allocation
+         * @description Role: SUPER_ADMIN. Assigns a specific slot to a booking, bypassing the scored ranking. Audited.
+         */
+        post: operations["overrideAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Allocation run id. */
+                id: components["parameters"]["RunIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get an allocation run's status and summary counts
+         * @description Role: SUPER_ADMIN.
+         */
+        get: operations["getAllocationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/runs/{id}/breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Allocation run id. */
+                id: components["parameters"]["RunIdParam"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Per-user ranked score breakdown for a run
+         * @description Role: SUPER_ADMIN. Explains every outcome with per-factor scores + rank (decisions §3).
+         */
+        get: operations["getAllocationBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/companies": {
         parameters: {
             query?: never;
@@ -603,7 +822,8 @@ export interface components {
         SuccessEnvelope: {
             /** @enum {boolean} */
             success: true;
-            data: Record<string, never>;
+            /** @description Resource or list payload; concrete shape defined per endpoint. */
+            data: unknown;
             meta?: components["schemas"]["Pagination"];
         };
         /** @description Standard error envelope. */
@@ -905,6 +1125,148 @@ export interface components {
         };
         /** @enum {string} */
         ReportType: "daily-allocation" | "company-utilization" | "user-booking-history" | "requests-vs-allocations" | "common-pool-utilization" | "blocked-slot-history" | "released-slot-history" | "frequent-winners" | "frequent-waitlisted" | "carpool-participation" | "allocation-score-breakdown";
+        /** @enum {string} */
+        AllocationRunType: "PRIMARY" | "COMMON_POOL";
+        /** @enum {string} */
+        AllocationRunStatus: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+        /**
+         * @description Per-request result of an allocation run (maps to BookingStatus ALLOCATED/WAITLISTED).
+         * @enum {string}
+         */
+        AllocationOutcome: "ALLOCATED" | "WAITLISTED";
+        CarpoolMemberInput: {
+            name: string;
+            /**
+             * Format: email
+             * @description Same-company employee email; only validated same-company employees are scored (F4).
+             */
+            employeeEmail?: string | null;
+            contactNumber?: string | null;
+            pickupLocation?: string | null;
+        };
+        CarpoolMember: {
+            id?: string;
+            name: string;
+            /** Format: email */
+            employeeEmail?: string | null;
+            sameCompany: boolean;
+            /** @description True only for validated same-company employees (F4). */
+            isScored: boolean;
+        };
+        CreateBookingRequest: {
+            /**
+             * Format: date
+             * @description Target bookable weekday (Mon–Fri, D7).
+             */
+            bookingDate: string;
+            vehicleType?: components["schemas"]["VehicleType"];
+            vehicleNumber?: string | null;
+            /** @description Total people incl. the driver (person 1, D3). Server enforces the current carpool.maxPeople cap (default 4, D8) — no fixed maximum is baked into the contract so a config change needs no re-spec. */
+            carpoolPeople: number;
+            specialRequirement?: string | null;
+            /** @description Optional carpool members; only same-company employees are scored (F4). */
+            carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
+        };
+        /** @description Partial edit before the primary cutoff. All fields optional. */
+        UpdateBookingRequest: {
+            vehicleType?: components["schemas"]["VehicleType"];
+            vehicleNumber?: string | null;
+            carpoolPeople?: number;
+            specialRequirement?: string | null;
+            carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
+        };
+        CancelBookingRequest: {
+            reason?: string | null;
+        };
+        ReleaseBookingRequest: {
+            reason?: string | null;
+        };
+        BookingCreatedData: {
+            id: string;
+            status: components["schemas"]["BookingStatus"];
+            bookingType: components["schemas"]["BookingType"];
+            /** Format: date */
+            bookingDate: string;
+            /** @description Snapshotted from the user's profile at submission (F6). */
+            travelDistanceKm?: number | null;
+            carpoolPeople: number;
+            /** Format: date-time */
+            submittedAt?: string | null;
+        };
+        /** @description Per-factor allocation scoring (decisions §3). Present once an allocation run has scored the booking. */
+        ScoreBreakdown: {
+            /** @description Snapshotted travel distance used for scoring. */
+            distanceKm?: number | null;
+            /** @description 1 (driver) + scored same-company carpool members (F4). */
+            people: number;
+            /** @description (min(distanceKm, maxDistanceKm)/maxDistanceKm)*100. */
+            distanceScore: number;
+            /** @description ((min(people, maxPeople)-1)/(maxPeople-1))*100. */
+            carpoolScore: number;
+            distanceWeight: number;
+            carpoolWeight: number;
+            /** @description distanceWeight*distanceScore + carpoolWeight*carpoolScore. */
+            finalScore: number;
+        };
+        BookingDetail: components["schemas"]["Booking"] & {
+            carpoolMembers?: components["schemas"]["CarpoolMember"][];
+            /** @description Per-factor scores; present only after an allocation run has scored this booking (absent/null before). */
+            scoreBreakdown?: components["schemas"]["ScoreBreakdown"];
+        };
+        PrimaryRunRequest: {
+            /** Format: date */
+            bookingDate: string;
+        };
+        AllocationOverrideRequest: {
+            bookingId: string;
+            slotId: string;
+            reason?: string | null;
+        };
+        AllocationResultRow: {
+            rank: number;
+            bookingId?: string;
+            userId?: string;
+            /** @description User full name (display). */
+            user?: string;
+            distanceKm?: number | null;
+            people: number;
+            distanceScore: number;
+            carpoolScore: number;
+            finalScore: number;
+            outcome: components["schemas"]["AllocationOutcome"];
+            /** @description Assigned slot number if ALLOCATED; null otherwise. */
+            slotNumber?: string | null;
+        };
+        AllocationRunSummary: {
+            id: string;
+            runType: components["schemas"]["AllocationRunType"];
+            /** Format: date */
+            bookingDate: string;
+            status: components["schemas"]["AllocationRunStatus"];
+            idempotencyKey?: string;
+            attemptCount?: number;
+            /** @description SUBMITTED requests considered for the run. */
+            totalRequests?: number;
+            allocatedCount?: number;
+            waitlistedCount?: number;
+            /** Format: date-time */
+            startedAt?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            error?: string | null;
+        };
+        AllocationBreakdown: {
+            runId: string;
+            /** Format: date */
+            bookingDate: string;
+            status: components["schemas"]["AllocationRunStatus"];
+            /** @description Weights applied for this run (decisions §3). */
+            weights?: {
+                distanceWeight?: number;
+                carpoolWeight?: number;
+            };
+            results: components["schemas"]["AllocationResultRow"][];
+        };
     };
     responses: {
         /** @description Success with a simple acknowledgement message. */
@@ -1049,6 +1411,25 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
+        /** @description 422 — action attempted outside its allowed time window (e.g. after `booking.primaryCutoff`, or a non-bookable date). */
+        WindowClosed: {
+            headers: {
+                "X-Correlation-Id": components["headers"]["CorrelationId"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "success": false,
+                 *       "error": {
+                 *         "code": "WINDOW_CLOSED",
+                 *         "message": "The booking window is closed for this date"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
     };
     parameters: {
         /** @description 1-based page number. */
@@ -1059,6 +1440,10 @@ export interface components {
         SortParam: string;
         /** @description Sort direction. */
         OrderParam: "asc" | "desc";
+        /** @description Booking request id. */
+        BookingIdParam: string;
+        /** @description Allocation run id. */
+        RunIdParam: string;
     };
     requestBodies: never;
     headers: {
@@ -1419,6 +1804,430 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bookingDate": "2026-07-31",
+                 *       "vehicleType": "CAR",
+                 *       "vehicleNumber": "MH12AB1234",
+                 *       "carpoolPeople": 3,
+                 *       "specialRequirement": null,
+                 *       "carpoolMembers": [
+                 *         {
+                 *           "name": "Rahul Mehta",
+                 *           "employeeEmail": "rahul@assent.example"
+                 *         },
+                 *         {
+                 *           "name": "Neighbour",
+                 *           "employeeEmail": null
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Booking submitted. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "data": {
+                     *         "id": "bkg_123",
+                     *         "status": "SUBMITTED",
+                     *         "bookingType": "PRIMARY",
+                     *         "bookingDate": "2026-07-31",
+                     *         "travelDistanceKm": 12.4,
+                     *         "carpoolPeople": 3,
+                     *         "submittedAt": "2026-07-30T11:20:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingCreatedData"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["WindowClosed"];
+        };
+    };
+    createCommonPoolBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Common-pool request submitted. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingCreatedData"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["WindowClosed"];
+        };
+    };
+    getBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Booking detail incl. allocated slot and per-factor score breakdown (once allocation has run). */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Booking updated. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["WindowClosed"];
+        };
+    };
+    cancelBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Booking cancelled. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["WindowClosed"];
+        };
+    };
+    releaseBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReleaseBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Slot released (reallocation handled server-side, F3). */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    runPrimaryAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bookingDate": "2026-07-31"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PrimaryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Allocation run accepted or already complete (idempotent). Returns the run summary. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRunSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runCommonPoolAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrimaryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Common-pool allocation run summary. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRunSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    overrideAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocationOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description Override applied; returns the affected booking. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAllocationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Allocation run id. */
+                id: components["parameters"]["RunIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run status + allocated/waitlisted summary. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRunSummary"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getAllocationBreakdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Allocation run id. */
+                id: components["parameters"]["RunIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ranked results with distance/carpool/final scores and outcome. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "data": {
+                     *         "runId": "run_123",
+                     *         "bookingDate": "2026-07-31",
+                     *         "status": "COMPLETED",
+                     *         "weights": {
+                     *           "distanceWeight": 0.6,
+                     *           "carpoolWeight": 0.4
+                     *         },
+                     *         "results": [
+                     *           {
+                     *             "rank": 1,
+                     *             "bookingId": "bkg_9",
+                     *             "userId": "usr_3",
+                     *             "user": "Sara Khan",
+                     *             "distanceKm": 38.1,
+                     *             "people": 3,
+                     *             "distanceScore": 95.25,
+                     *             "carpoolScore": 66.67,
+                     *             "finalScore": 84.1,
+                     *             "outcome": "ALLOCATED",
+                     *             "slotNumber": "B1-01"
+                     *           },
+                     *           {
+                     *             "rank": 2,
+                     *             "bookingId": "bkg_5",
+                     *             "userId": "usr_1",
+                     *             "user": "Aditi Rao",
+                     *             "distanceKm": 12.4,
+                     *             "people": 3,
+                     *             "distanceScore": 31,
+                     *             "carpoolScore": 66.67,
+                     *             "finalScore": 45.27,
+                     *             "outcome": "WAITLISTED",
+                     *             "slotNumber": null
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationBreakdown"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
