@@ -2,6 +2,7 @@ openapi: 3.0.3
 info:
   title: Parking POC API
   version: 0.1.0
+  x-contract-status: frozen  # M0-frozen — changes only via reviewed PR
   description: >
     Office parking-slot booking platform. Contract-first source of truth (frozen at M0 — changes via
     reviewed PR). Conventions, envelope, and error codes per docs/phases-3-6-plan.md §3.1–3.2.
@@ -24,6 +25,20 @@ tags:
     description: Parking booking requests — create, status, edit, cancel, release (P3-06)
   - name: Allocation
     description: Primary/common-pool allocation runs and score breakdowns (P3-07)
+  - name: Companies
+    description: Company management (Super Admin) + public active list
+  - name: Company Users
+    description: Company user management — approval, status, admin assignment
+  - name: Slots & Quota
+    description: Physical parking slots + effective-dated company quota
+  - name: Blocking
+    description: Company quota blocking (Super Admin any company, Company Admin own)
+  - name: Config
+    description: System configuration — booking/allocation timings and weights (D8)
+  - name: Dashboards
+    description: Pre-aggregated counts per role
+  - name: Reports
+    description: Reporting + CSV export (Later)
 
 paths:
   # ---------------------------------------------------------------------------
@@ -373,6 +388,7 @@ paths:
         employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or
         a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
       x-maturity: DEMO
+      x-required-roles: [USER]
       requestBody:
         required: true
         content:
@@ -424,6 +440,7 @@ paths:
         Role: USER. Same body as POST /bookings but recorded as a COMMON_POOL request. Valid only while the
         common-pool window is open (`booking.primaryResultsBy` → `booking.commonPoolClose`, D8).
       x-maturity: Later
+      x-required-roles: [USER]
       requestBody:
         required: true
         content:
@@ -455,6 +472,7 @@ paths:
       summary: Get a booking's status, allocated slot, and score breakdown
       description: "Role: USER (own) / COMPANY_ADMIN (own company) / SUPER_ADMIN. Returns 404 if not visible to the tenant."
       x-maturity: DEMO
+      x-required-roles: [USER, COMPANY_ADMIN, SUPER_ADMIN]
       responses:
         '200':
           description: Booking detail incl. allocated slot and per-factor score breakdown (once allocation has run).
@@ -476,6 +494,7 @@ paths:
       summary: Edit a booking before the primary cutoff
       description: "Role: USER (own). Partial edit; allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED)."
       x-maturity: MVP
+      x-required-roles: [USER]
       requestBody:
         required: true
         content:
@@ -508,6 +527,7 @@ paths:
       summary: Cancel a booking before the primary cutoff
       description: "Role: USER (own). Allowed only while `now < booking.primaryCutoff` (else 422 WINDOW_CLOSED)."
       x-maturity: MVP
+      x-required-roles: [USER]
       requestBody:
         required: false
         content:
@@ -542,6 +562,7 @@ paths:
         triggers reallocation to the highest-scoring own-company waitlisted user first, else the slot moves to
         the common pool (F3). Audited + notified.
       x-maturity: MVP
+      x-required-roles: [USER, COMPANY_ADMIN]
       requestBody:
         required: false
         content:
@@ -577,6 +598,7 @@ paths:
         result. Ranks SUBMITTED PRIMARY bookings by FinalScore (decisions §3) within each company's available
         quota, assigns concrete slots transactionally, and waitlists the rest.
       x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
       requestBody:
         required: true
         content:
@@ -606,6 +628,7 @@ paths:
       summary: Run common-pool allocation for a date
       description: "Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate)."
       x-maturity: Later
+      x-required-roles: [SUPER_ADMIN]
       requestBody:
         required: true
         content:
@@ -633,6 +656,7 @@ paths:
       summary: Manually override a single allocation
       description: "Role: SUPER_ADMIN. Assigns a specific slot to a booking, bypassing the scored ranking. Audited."
       x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
       requestBody:
         required: true
         content:
@@ -665,6 +689,7 @@ paths:
       summary: Get an allocation run's status and summary counts
       description: "Role: SUPER_ADMIN."
       x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
       responses:
         '200':
           description: Run status + allocated/waitlisted summary.
@@ -690,6 +715,7 @@ paths:
       summary: Per-user ranked score breakdown for a run
       description: "Role: SUPER_ADMIN. Explains every outcome with per-factor scores + rank (decisions §3)."
       x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
       responses:
         '200':
           description: Ranked results with distance/carpool/final scores and outcome.
@@ -715,6 +741,765 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # Companies + Company-Users  (P3-04)
+  # ---------------------------------------------------------------------------
+  /companies:
+    get:
+      tags: [Companies]
+      operationId: listCompanies
+      summary: List companies (management)
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/CompanyStatus' }
+      responses:
+        '200':
+          description: Paged list of companies
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Company' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Companies]
+      operationId: createCompany
+      summary: Create a company
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCompanyRequest' }
+      responses:
+        '201':
+          description: Company created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /companies/active:
+    get:
+      tags: [Companies]
+      operationId: listActiveCompanies
+      summary: Public list of active companies (registration dropdown)
+      description: Public id+name subset of ACTIVE companies for the registration form.
+      x-maturity: MVP
+      security: []
+      responses:
+        '200':
+          description: Active companies (id + name)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CompanySummary' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /companies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Companies]
+      operationId: getCompany
+      summary: Get a company
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Company
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Companies]
+      operationId: updateCompany
+      summary: Update a company
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCompanyRequest' }
+      responses:
+        '200':
+          description: Updated company
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Companies]
+      operationId: setCompanyStatus
+      summary: Activate or deactivate a company
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCompanyStatusRequest' }
+      responses:
+        '200':
+          description: Updated company
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/users:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Company Users]
+      operationId: listCompanyUsers
+      summary: List users in a company
+      description: Super Admin for any company; Company Admin restricted to their own company (tenant-scoped).
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/UserStatus' }
+      responses:
+        '200':
+          description: Paged list of company users
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserProfile' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{id}/approval:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Company Users]
+      operationId: setUserApproval
+      summary: Approve or reject a pending user
+      description: Company Admin (own company). APPROVE → ACTIVE, REJECT → REJECTED.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalRequest' }
+      responses:
+        '200':
+          description: Updated user
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Company Users]
+      operationId: setUserStatus
+      summary: Activate or deactivate a user
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserStatusRequest' }
+      responses:
+        '200':
+          description: Updated user
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserProfile' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/admins:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Company Users]
+      operationId: assignCompanyAdmin
+      summary: Assign a user as Company Admin
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignAdminRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # Slots, Quota & Blocking  (P3-05)
+  # ---------------------------------------------------------------------------
+  /slots:
+    get:
+      tags: [Slots & Quota]
+      operationId: listSlots
+      summary: List parking slots
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/SlotStatus' }
+        - name: parkingAreaId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paged list of slots
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ParkingSlot' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Slots & Quota]
+      operationId: createSlot
+      summary: Create a parking slot
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSlotRequest' }
+      responses:
+        '201':
+          description: Slot created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParkingSlot' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /slots/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Slots & Quota]
+      operationId: updateSlot
+      summary: Update a parking slot (type/status/attributes)
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSlotRequest' }
+      responses:
+        '200':
+          description: Updated slot
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParkingSlot' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/quota:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Slots & Quota]
+      operationId: getCompanyQuota
+      summary: Get a company's quota rows (current + future)
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Effective-dated quota rows
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CompanyQuota' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Slots & Quota]
+      operationId: setCompanyQuota
+      summary: Set a company's slot quota (effective-dated)
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateQuotaRequest' }
+      responses:
+        '201':
+          description: Quota row created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CompanyQuota' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/blocks:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Blocking]
+      operationId: listBlocks
+      summary: List a company's quota blocks
+      description: Super Admin any company; Company Admin own company only; USER forbidden.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paged list of blocks
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SlotBlock' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Blocking]
+      operationId: createBlock
+      summary: Block a count of the company's quota (with reason)
+      description: Super Admin any company; Company Admin own company only; USER forbidden.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBlockRequest' }
+      responses:
+        '201':
+          description: Block created
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SlotBlock' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /blocks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Blocking]
+      operationId: deleteBlock
+      summary: Remove a quota block (unblock)
+      description: Super Admin any company; Company Admin own company only; USER forbidden.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------------
+  # Config & Dashboards  (P3-08)
+  # ---------------------------------------------------------------------------
+  /config:
+    get:
+      tags: [Config]
+      operationId: getConfig
+      summary: Get all system configuration (timings, weights, etc.)
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: All configuration entries
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ConfigEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [Config]
+      operationId: updateConfig
+      summary: Update configuration values (timings/weights — D8)
+      description: >
+        Partial map of key→value (string values). Validates time ordering
+        (primaryCutoff < primaryResultsBy ≤ commonPoolClose < commonPoolResultsBy) and numeric ranges;
+        on success the scheduler reschedules. Every change is audited.
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateConfigRequest' }
+            example: { "booking.primaryCutoff": "18:30", "allocation.distanceWeight": "0.6" }
+      responses:
+        '200':
+          description: Updated configuration (full set)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ConfigEntry' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /dashboard/super-admin:
+    get:
+      tags: [Dashboards]
+      operationId: getSuperAdminDashboard
+      summary: Super Admin dashboard counts
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: Business date for daily figures (defaults to today, IST).
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Super Admin dashboard
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SuperAdminDashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /dashboard/company-admin:
+    get:
+      tags: [Dashboards]
+      operationId: getCompanyAdminDashboard
+      summary: Company Admin dashboard counts (own company)
+      x-maturity: DEMO
+      x-required-roles: [COMPANY_ADMIN]
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Company Admin dashboard
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CompanyAdminDashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /dashboard/user:
+    get:
+      tags: [Dashboards]
+      operationId: getUserDashboard
+      summary: User dashboard (upcoming booking, status, cutoff countdown)
+      x-maturity: DEMO
+      x-required-roles: [USER]
+      responses:
+        '200':
+          description: User dashboard
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserDashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # Reports  (P3-09 — Later)
+  # ---------------------------------------------------------------------------
+  /reports/{type}:
+    parameters:
+      - name: type
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/ReportType' }
+    get:
+      tags: [Reports]
+      operationId: getReport
+      summary: Get a report (Later)
+      x-maturity: Later
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: dateFrom, in: query, required: false, schema: { type: string, format: date } }
+        - { name: dateTo, in: query, required: false, schema: { type: string, format: date } }
+        - { name: companyId, in: query, required: false, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string } }
+        - { name: slotId, in: query, required: false, schema: { type: string } }
+        - name: bookingType
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/BookingType' }
+        - name: bookingStatus
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/BookingStatus' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Report rows (shape depends on report type)
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object, additionalProperties: true }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/{type}/export:
+    parameters:
+      - name: type
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/ReportType' }
+    get:
+      tags: [Reports]
+      operationId: exportReport
+      summary: Export a report as CSV (Later; async for large sets)
+      x-maturity: Later
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
 # =============================================================================
 # Reusable components  (P3-01)
@@ -968,6 +1753,215 @@ components:
         sentAt: { type: string, nullable: true, format: date-time }
         readAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
+
+    # --- Enums (P3-04, P3-05) ---
+    CompanyStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    SlotType:
+      type: string
+      enum: [STANDARD, ACCESSIBLE, EV_CHARGING, VISITOR, RESERVED]
+    SlotStatus:
+      type: string
+      enum: [AVAILABLE, ALLOCATED_TO_COMPANY, BLOCKED, BOOKED, COMMON_POOL, UNDER_MAINTENANCE, INACTIVE]
+    BlockReason:
+      type: string
+      enum: [RESERVED_VISITOR, RESERVED_LEADERSHIP, MAINTENANCE, COMPANY_EVENT, EMERGENCY, OTHER]
+    ApprovalDecision:
+      type: string
+      enum: [APPROVE, REJECT]
+
+    # --- Companies (P3-04) ---
+    Company:
+      type: object
+      required: [id, name, code, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code: { type: string }
+        status: { $ref: '#/components/schemas/CompanyStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CompanySummary:
+      type: object
+      description: Public subset for the registration dropdown.
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    CreateCompanyRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string }
+        code:
+          type: string
+          description: Short unique tenant code (e.g. ASSENT).
+    UpdateCompanyRequest:
+      type: object
+      properties:
+        name: { type: string }
+    UpdateCompanyStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/CompanyStatus' }
+
+    # --- Company Users (P3-04) ---
+    ApprovalRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision: { $ref: '#/components/schemas/ApprovalDecision' }
+    UpdateUserStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/UserStatus' }
+    AssignAdminRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+
+    # --- Slots & Quota (P3-05) ---
+    ParkingSlot:
+      type: object
+      required: [id, slotNumber, parkingAreaId, slotType, status, hasEvCharging, isAccessible, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        slotNumber: { type: string }
+        parkingAreaId: { type: string }
+        slotType: { $ref: '#/components/schemas/SlotType' }
+        status: { $ref: '#/components/schemas/SlotStatus' }
+        hasEvCharging: { type: boolean }
+        isAccessible: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateSlotRequest:
+      type: object
+      required: [slotNumber, parkingAreaId]
+      properties:
+        slotNumber: { type: string }
+        parkingAreaId: { type: string }
+        slotType: { $ref: '#/components/schemas/SlotType' }
+        hasEvCharging: { type: boolean, default: false }
+        isAccessible: { type: boolean, default: false }
+    UpdateSlotRequest:
+      type: object
+      properties:
+        slotNumber: { type: string }
+        slotType: { $ref: '#/components/schemas/SlotType' }
+        status: { $ref: '#/components/schemas/SlotStatus' }
+        hasEvCharging: { type: boolean }
+        isAccessible: { type: boolean }
+    CompanyQuota:
+      type: object
+      description: Effective-dated company slot quota (CompanySlotAllocation).
+      required: [id, companyId, slotCount, effectiveFrom, createdAt]
+      properties:
+        id: { type: string }
+        companyId: { type: string }
+        slotCount: { type: integer, minimum: 0 }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, nullable: true, format: date }
+        createdAt: { type: string, format: date-time }
+    CreateQuotaRequest:
+      type: object
+      required: [slotCount, effectiveFrom]
+      properties:
+        slotCount: { type: integer, minimum: 0 }
+        effectiveFrom: { type: string, format: date }
+        effectiveTo: { type: string, nullable: true, format: date }
+
+    # --- Blocking (P3-05) ---
+    SlotBlock:
+      type: object
+      required: [id, companyId, blockedCount, startDate, endDate, reason, createdAt]
+      properties:
+        id: { type: string }
+        companyId: { type: string }
+        blockedCount: { type: integer, minimum: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { $ref: '#/components/schemas/BlockReason' }
+        reasonText: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    CreateBlockRequest:
+      type: object
+      required: [blockedCount, startDate, endDate, reason]
+      properties:
+        blockedCount: { type: integer, minimum: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        reason: { $ref: '#/components/schemas/BlockReason' }
+        reasonText: { type: string, nullable: true }
+
+    # --- Config & Dashboards (P3-08) ---
+    ConfigValueType:
+      type: string
+      enum: [STRING, NUMBER, BOOLEAN, JSON, TIME]
+    ConfigEntry:
+      type: object
+      required: [key, value, valueType]
+      properties:
+        key: { type: string }
+        value: { type: string }
+        valueType: { $ref: '#/components/schemas/ConfigValueType' }
+        description: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time }
+    UpdateConfigRequest:
+      type: object
+      description: Partial map of config key → new value (all values as strings).
+      minProperties: 1
+      additionalProperties: { type: string }
+    SuperAdminDashboard:
+      type: object
+      properties:
+        totalParkingSlots: { type: integer }
+        totalActiveCompanies: { type: integer }
+        blockedSlots: { type: integer }
+        availableSlots: { type: integer }
+        primaryBookings: { type: integer }
+        commonPoolBookings: { type: integer }
+        waitlistCount: { type: integer }
+        dailyUtilizationPct: { type: number }
+    CompanyAdminDashboard:
+      type: object
+      properties:
+        totalCompanySlots: { type: integer, description: Current effective quota. }
+        availableCompanySlots: { type: integer }
+        blockedSlots: { type: integer }
+        bookedSlots: { type: integer }
+        commonPoolSlots: { type: integer }
+        totalBookingRequests: { type: integer }
+        allocatedUsers: { type: integer }
+        waitlistedUsers: { type: integer }
+        dailyUtilizationPct: { type: number }
+    UserDashboard:
+      type: object
+      properties:
+        upcomingBooking:
+          allOf: [ { $ref: '#/components/schemas/Booking' } ]
+          description: Absent when the user has no upcoming booking.
+        cutoffCountdownSeconds: { type: integer, nullable: true }
+        previousBookingsCount: { type: integer }
+
+    # --- Reports (P3-09 — Later) ---
+    ReportType:
+      type: string
+      enum:
+        - daily-allocation
+        - company-utilization
+        - user-booking-history
+        - requests-vs-allocations
+        - common-pool-utilization
+        - blocked-slot-history
+        - released-slot-history
+        - frequent-winners
+        - frequent-waitlisted
+        - carpool-participation
+        - allocation-score-breakdown
 
     # --- Allocation enums (from prisma/schema.prisma) ---
     AllocationRunType:

@@ -1,0 +1,21 @@
+{
+  "name": "parking-poc-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Parking POC frontend — API codegen bootstrap (Vite scaffold added in P5-01).",
+  "scripts": {
+    "gen:types": "openapi-typescript ../backend/openapi.yaml -o src/api/types.ts",
+    "gen:mocks": "msw-auto-mock ../backend/openapi.yaml -o src/mocks --base-url /api/v1",
+    "gen:api": "npm run gen:types && npm run gen:mocks"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.4"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.3.0",
+    "msw": "^2.6.8",
+    "msw-auto-mock": "^0.26.0",
+    "openapi-typescript": "^7.5.0"
+  }
+}
