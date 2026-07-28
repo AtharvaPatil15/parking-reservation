@@ -22,7 +22,7 @@ with time-order + range validation (D8).
 - **AC:** timings/weights read from DB not code; `PATCH /config` rejects out-of-order times
   (`primaryCutoff < primaryResultsBy ≤ commonPoolClose < commonPoolResultsBy`); change is audited.
 - **Evidence:** `backend/src/config/*`, `backend/src/modules/config/*`.
-- **Status:** ☑ (GET/PATCH /config live-tested: valid persists + cache invalidates; time-order, range & unknown-key all → 400. ⚠ requireRole guard pending P4-06)
+- **Status:** ◐ (GET/PATCH /config live-tested: valid persists + cache invalidates; time-order, range & unknown-key all → 400. ⚠ **audit deferred to P4-10** — `updatedById` is set but no `AuditLog` write yet, and it's null until auth (P4-05). ⚠ `requireRole` guard pending P4-06)
 
 #### P4-03 · Prisma lib + migrate + seed wiring · Owner: Devashish · Tag: DEMO · Deps: P4-01
 Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `prisma/seed.ts`; F7 partial-unique SQL applied.
