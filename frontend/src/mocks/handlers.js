@@ -132,6 +132,124 @@ export const handlers = [
 
     return HttpResponse.json(...resultArray[next() % resultArray.length]);
   }),
+  http.post(`${baseURL}/bookings`, async () => {
+    const resultArray = [
+      [await getCreateBooking201Response(), { status: 201 }],
+      [await getCreateBooking400Response(), { status: 400 }],
+      [await getCreateBooking401Response(), { status: 401 }],
+      [await getCreateBooking403Response(), { status: 403 }],
+      [await getCreateBooking409Response(), { status: 409 }],
+      [await getCreateBooking422Response(), { status: 422 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/bookings/common-pool`, async () => {
+    const resultArray = [
+      [await getCreateCommonPoolBooking201Response(), { status: 201 }],
+      [await getCreateCommonPoolBooking400Response(), { status: 400 }],
+      [await getCreateCommonPoolBooking401Response(), { status: 401 }],
+      [await getCreateCommonPoolBooking409Response(), { status: 409 }],
+      [await getCreateCommonPoolBooking422Response(), { status: 422 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.get(`${baseURL}/bookings/:id`, async () => {
+    const resultArray = [
+      [await getGetBooking200Response(), { status: 200 }],
+      [await getGetBooking401Response(), { status: 401 }],
+      [await getGetBooking403Response(), { status: 403 }],
+      [await getGetBooking404Response(), { status: 404 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.patch(`${baseURL}/bookings/:id`, async () => {
+    const resultArray = [
+      [await getUpdateBooking200Response(), { status: 200 }],
+      [await getUpdateBooking400Response(), { status: 400 }],
+      [await getUpdateBooking401Response(), { status: 401 }],
+      [await getUpdateBooking403Response(), { status: 403 }],
+      [await getUpdateBooking404Response(), { status: 404 }],
+      [await getUpdateBooking422Response(), { status: 422 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/bookings/:id/cancel`, async () => {
+    const resultArray = [
+      [await getCancelBooking200Response(), { status: 200 }],
+      [await getCancelBooking401Response(), { status: 401 }],
+      [await getCancelBooking403Response(), { status: 403 }],
+      [await getCancelBooking404Response(), { status: 404 }],
+      [await getCancelBooking422Response(), { status: 422 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/bookings/:id/release`, async () => {
+    const resultArray = [
+      [await getReleaseBooking200Response(), { status: 200 }],
+      [await getReleaseBooking401Response(), { status: 401 }],
+      [await getReleaseBooking403Response(), { status: 403 }],
+      [await getReleaseBooking404Response(), { status: 404 }],
+      [await getReleaseBooking409Response(), { status: 409 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/allocation/primary/run`, async () => {
+    const resultArray = [
+      [await getRunPrimaryAllocation200Response(), { status: 200 }],
+      [await getRunPrimaryAllocation400Response(), { status: 400 }],
+      [await getRunPrimaryAllocation401Response(), { status: 401 }],
+      [await getRunPrimaryAllocation403Response(), { status: 403 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/allocation/common-pool/run`, async () => {
+    const resultArray = [
+      [await getRunCommonPoolAllocation200Response(), { status: 200 }],
+      [await getRunCommonPoolAllocation401Response(), { status: 401 }],
+      [await getRunCommonPoolAllocation403Response(), { status: 403 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.post(`${baseURL}/allocation/override`, async () => {
+    const resultArray = [
+      [await getOverrideAllocation200Response(), { status: 200 }],
+      [await getOverrideAllocation400Response(), { status: 400 }],
+      [await getOverrideAllocation401Response(), { status: 401 }],
+      [await getOverrideAllocation403Response(), { status: 403 }],
+      [await getOverrideAllocation404Response(), { status: 404 }],
+      [await getOverrideAllocation409Response(), { status: 409 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.get(`${baseURL}/allocation/runs/:id`, async () => {
+    const resultArray = [
+      [await getGetAllocationRun200Response(), { status: 200 }],
+      [await getGetAllocationRun401Response(), { status: 401 }],
+      [await getGetAllocationRun403Response(), { status: 403 }],
+      [await getGetAllocationRun404Response(), { status: 404 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
+  http.get(`${baseURL}/allocation/runs/:id/breakdown`, async () => {
+    const resultArray = [
+      [await getGetAllocationBreakdown200Response(), { status: 200 }],
+      [await getGetAllocationBreakdown401Response(), { status: 401 }],
+      [await getGetAllocationBreakdown403Response(), { status: 403 }],
+      [await getGetAllocationBreakdown404Response(), { status: 404 }],
+    ];
+
+    return HttpResponse.json(...resultArray[next() % resultArray.length]);
+  }),
   http.get(`${baseURL}/companies`, async () => {
     const resultArray = [
       [await getListCompanies200Response(), { status: 200 }],
@@ -1208,6 +1326,1608 @@ export function getMarkNotificationRead401Response() {
 }
 
 export function getMarkNotificationRead404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateBooking201Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      bookingDate: faker.date.past(),
+      travelDistanceKm: faker.number.int(),
+      carpoolPeople: faker.number.int(),
+      submittedAt: faker.date.past(),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getCreateBooking400Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateBooking403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateBooking409Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateBooking422Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateCommonPoolBooking201Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      bookingDate: faker.date.past(),
+      travelDistanceKm: faker.number.int(),
+      carpoolPeople: faker.number.int(),
+      submittedAt: faker.date.past(),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getCreateCommonPoolBooking400Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateCommonPoolBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateCommonPoolBooking409Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCreateCommonPoolBooking422Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetBooking200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      travelDistanceKm: faker.number.int(),
+      vehicleType: faker.helpers.arrayElement([
+        "CAR",
+        "BIKE",
+        "EV_CAR",
+        "EV_BIKE",
+        "OTHER",
+      ]),
+      vehicleNumber: faker.lorem.words(),
+      carpoolMemberCount: faker.number.int(),
+      specialRequirement: faker.lorem.words(),
+      allocationScore: faker.number.int(),
+      allocatedSlotNumber: faker.lorem.words(),
+      submittedAt: faker.date.past(),
+      createdAt: faker.date.past(),
+      carpoolMembers: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        id: faker.lorem.words(),
+        name: faker.person.fullName(),
+        employeeEmail: faker.internet.email(),
+        sameCompany: faker.datatype.boolean(),
+        isScored: faker.datatype.boolean(),
+      })),
+      scoreBreakdown: {
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+        finalScore: faker.number.int(),
+      },
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getGetBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetBooking403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetBooking404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getUpdateBooking200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      travelDistanceKm: faker.number.int(),
+      vehicleType: faker.helpers.arrayElement([
+        "CAR",
+        "BIKE",
+        "EV_CAR",
+        "EV_BIKE",
+        "OTHER",
+      ]),
+      vehicleNumber: faker.lorem.words(),
+      carpoolMemberCount: faker.number.int(),
+      specialRequirement: faker.lorem.words(),
+      allocationScore: faker.number.int(),
+      allocatedSlotNumber: faker.lorem.words(),
+      submittedAt: faker.date.past(),
+      createdAt: faker.date.past(),
+      carpoolMembers: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        id: faker.lorem.words(),
+        name: faker.person.fullName(),
+        employeeEmail: faker.internet.email(),
+        sameCompany: faker.datatype.boolean(),
+        isScored: faker.datatype.boolean(),
+      })),
+      scoreBreakdown: {
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+        finalScore: faker.number.int(),
+      },
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getUpdateBooking400Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getUpdateBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getUpdateBooking403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getUpdateBooking404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getUpdateBooking422Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCancelBooking200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      travelDistanceKm: faker.number.int(),
+      vehicleType: faker.helpers.arrayElement([
+        "CAR",
+        "BIKE",
+        "EV_CAR",
+        "EV_BIKE",
+        "OTHER",
+      ]),
+      vehicleNumber: faker.lorem.words(),
+      carpoolMemberCount: faker.number.int(),
+      specialRequirement: faker.lorem.words(),
+      allocationScore: faker.number.int(),
+      allocatedSlotNumber: faker.lorem.words(),
+      submittedAt: faker.date.past(),
+      createdAt: faker.date.past(),
+      carpoolMembers: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        id: faker.lorem.words(),
+        name: faker.person.fullName(),
+        employeeEmail: faker.internet.email(),
+        sameCompany: faker.datatype.boolean(),
+        isScored: faker.datatype.boolean(),
+      })),
+      scoreBreakdown: {
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+        finalScore: faker.number.int(),
+      },
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getCancelBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCancelBooking403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCancelBooking404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getCancelBooking422Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getReleaseBooking200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      travelDistanceKm: faker.number.int(),
+      vehicleType: faker.helpers.arrayElement([
+        "CAR",
+        "BIKE",
+        "EV_CAR",
+        "EV_BIKE",
+        "OTHER",
+      ]),
+      vehicleNumber: faker.lorem.words(),
+      carpoolMemberCount: faker.number.int(),
+      specialRequirement: faker.lorem.words(),
+      allocationScore: faker.number.int(),
+      allocatedSlotNumber: faker.lorem.words(),
+      submittedAt: faker.date.past(),
+      createdAt: faker.date.past(),
+      carpoolMembers: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        id: faker.lorem.words(),
+        name: faker.person.fullName(),
+        employeeEmail: faker.internet.email(),
+        sameCompany: faker.datatype.boolean(),
+        isScored: faker.datatype.boolean(),
+      })),
+      scoreBreakdown: {
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+        finalScore: faker.number.int(),
+      },
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getReleaseBooking401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getReleaseBooking403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getReleaseBooking404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getReleaseBooking409Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getRunPrimaryAllocation200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      runType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      bookingDate: faker.date.past(),
+      status: faker.helpers.arrayElement([
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+      ]),
+      idempotencyKey: faker.lorem.words(),
+      attemptCount: faker.number.int(),
+      totalRequests: faker.number.int(),
+      allocatedCount: faker.number.int(),
+      waitlistedCount: faker.number.int(),
+      startedAt: faker.date.past(),
+      completedAt: faker.date.past(),
+      error: faker.lorem.words(),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getRunPrimaryAllocation400Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getRunPrimaryAllocation401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getRunPrimaryAllocation403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getRunCommonPoolAllocation200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      runType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      bookingDate: faker.date.past(),
+      status: faker.helpers.arrayElement([
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+      ]),
+      idempotencyKey: faker.lorem.words(),
+      attemptCount: faker.number.int(),
+      totalRequests: faker.number.int(),
+      allocatedCount: faker.number.int(),
+      waitlistedCount: faker.number.int(),
+      startedAt: faker.date.past(),
+      completedAt: faker.date.past(),
+      error: faker.lorem.words(),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getRunCommonPoolAllocation401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getRunCommonPoolAllocation403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getOverrideAllocation200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      bookingType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      status: faker.helpers.arrayElement([
+        "DRAFT",
+        "SUBMITTED",
+        "CANCELLED",
+        "ALLOCATED",
+        "WAITLISTED",
+        "REJECTED",
+        "RELEASED",
+        "EXPIRED",
+      ]),
+      travelDistanceKm: faker.number.int(),
+      vehicleType: faker.helpers.arrayElement([
+        "CAR",
+        "BIKE",
+        "EV_CAR",
+        "EV_BIKE",
+        "OTHER",
+      ]),
+      vehicleNumber: faker.lorem.words(),
+      carpoolMemberCount: faker.number.int(),
+      specialRequirement: faker.lorem.words(),
+      allocationScore: faker.number.int(),
+      allocatedSlotNumber: faker.lorem.words(),
+      submittedAt: faker.date.past(),
+      createdAt: faker.date.past(),
+      carpoolMembers: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        id: faker.lorem.words(),
+        name: faker.person.fullName(),
+        employeeEmail: faker.internet.email(),
+        sameCompany: faker.datatype.boolean(),
+        isScored: faker.datatype.boolean(),
+      })),
+      scoreBreakdown: {
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+        finalScore: faker.number.int(),
+      },
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getOverrideAllocation400Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getOverrideAllocation401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getOverrideAllocation403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getOverrideAllocation404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getOverrideAllocation409Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationRun200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      id: faker.lorem.words(),
+      runType: faker.helpers.arrayElement(["PRIMARY", "COMMON_POOL"]),
+      bookingDate: faker.date.past(),
+      status: faker.helpers.arrayElement([
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+      ]),
+      idempotencyKey: faker.lorem.words(),
+      attemptCount: faker.number.int(),
+      totalRequests: faker.number.int(),
+      allocatedCount: faker.number.int(),
+      waitlistedCount: faker.number.int(),
+      startedAt: faker.date.past(),
+      completedAt: faker.date.past(),
+      error: faker.lorem.words(),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getGetAllocationRun401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationRun403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationRun404Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationBreakdown200Response() {
+  return {
+    success: faker.helpers.arrayElement([true]),
+    data: {
+      runId: faker.lorem.words(),
+      bookingDate: faker.date.past(),
+      status: faker.helpers.arrayElement([
+        "PENDING",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+      ]),
+      weights: {
+        distanceWeight: faker.number.int(),
+        carpoolWeight: faker.number.int(),
+      },
+      results: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        rank: faker.number.int({ min: 1 }),
+        bookingId: faker.lorem.words(),
+        userId: faker.lorem.words(),
+        user: faker.lorem.words(),
+        distanceKm: faker.number.int(),
+        people: faker.number.int(),
+        distanceScore: faker.number.int(),
+        carpoolScore: faker.number.int(),
+        finalScore: faker.number.int(),
+        outcome: faker.helpers.arrayElement(["ALLOCATED", "WAITLISTED"]),
+        slotNumber: faker.lorem.words(),
+      })),
+    },
+    meta: {
+      page: faker.number.int({ min: 1 }),
+      pageSize: faker.number.int({ min: 1 }),
+      total: faker.number.int(),
+    },
+  };
+}
+
+export function getGetAllocationBreakdown401Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationBreakdown403Response() {
+  return {
+    success: faker.helpers.arrayElement([false]),
+    error: {
+      code: faker.helpers.arrayElement([
+        "VALIDATION_ERROR",
+        "UNAUTHENTICATED",
+        "FORBIDDEN",
+        "NOT_FOUND",
+        "CONFLICT",
+        "WINDOW_CLOSED",
+        "RATE_LIMITED",
+        "INTERNAL",
+      ]),
+      message: faker.lorem.words(),
+      details: [
+        ...new Array(
+          faker.number.int({ min: 1, max: MAX_ARRAY_LENGTH }),
+        ).keys(),
+      ].map((_) => ({
+        field: faker.lorem.words(),
+        message: faker.lorem.words(),
+      })),
+    },
+  };
+}
+
+export function getGetAllocationBreakdown404Response() {
   return {
     success: faker.helpers.arrayElement([false]),
     error: {

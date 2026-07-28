@@ -193,7 +193,7 @@ counts for each role's home screen. **[DEMO]** (minimal counts).
 `GET /reports/:type` (+ filters) · `GET /reports/:type/export` (CSV, async). **[Later]**
 
 ## 3.5 Deliverable
-`backend/openapi.yaml` (OpenAPI 3.1) covering every endpoint above, with schemas for all request/response
+`backend/openapi.yaml` (OpenAPI 3.0.3 — chosen for broad codegen/IDE tooling support) covering every endpoint above, with schemas for all request/response
 bodies. It drives (a) backend request validation, (b) the frontend MSW mock server, and (c) a generated typed
 API client for the frontend.
 
