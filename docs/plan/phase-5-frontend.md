@@ -26,7 +26,7 @@ Button, Input, Select, Card, Table, Badge, Modal, Toast + the four **state views
 Public `/login`,`/register`; role-guarded shells `/admin/*`,`/company/*`,`/app/*`.
 - **AC:** `<RequireRole>` redirects wrong-role users; unauthenticated → `/login`; token held in memory.
 - **Evidence:** `frontend/src/app/router.tsx`, `frontend/src/lib/guards.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (react-router-dom v6 declarative; in-memory AuthProvider/useAuth; RequireAuth/RequireRole guards; /login,/register public + /admin,/company,/app role-guarded shells; temp dev sign-in; guard + integration tests; build/lint/test green)
 
 #### P5-04 · API layer (typed client + React Query) + MSW · Owner: Atharva · Tag: DEMO · Deps: P3-10,P5-01
 Generated client from `openapi.yaml`; React Query hooks; MSW handlers for offline dev; auth interceptor.
