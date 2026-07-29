@@ -8,6 +8,8 @@ type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type ConfigEntry = components['schemas']['ConfigEntry'];
 type RoleName = components['schemas']['RoleName'];
+type UserProfile = components['schemas']['UserProfile'];
+type UserDashboard = components['schemas']['UserDashboard'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
@@ -88,6 +90,27 @@ const hero = [
         { rank: 3, bookingId: 'b3', userId: 'u3', user: 'Lee Chen', distanceKm: 8.7, people: 1, distanceScore: 43.5, carpoolScore: 0, finalScore: 26.1, outcome: 'WAITLISTED', slotNumber: null },
       ],
     }),
+  ),
+  http.get(`${baseURL}/me`, () =>
+    ok<UserProfile>({
+      id: 'mock-user',
+      fullName: 'Mock User',
+      email: 'user@acme.test',
+      contactNumber: '555-0100',
+      address: '1 Main St',
+      pinCode: '560001',
+      distanceKm: 8.5,
+      status: 'ACTIVE',
+      emailVerified: true,
+      companyId: 'mock-co',
+      companyName: 'Mock Co',
+      role: 'USER',
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    }),
+  ),
+  http.get(`${baseURL}/dashboard/user`, () =>
+    ok<UserDashboard>({ cutoffCountdownSeconds: 3600, previousBookingsCount: 2 }),
   ),
   http.get(`${baseURL}/config`, () => ok(configSeed)),
   http.patch(`${baseURL}/config`, async ({ request }) => {
