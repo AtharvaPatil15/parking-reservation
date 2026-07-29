@@ -132,8 +132,8 @@ Jobs read times from `SystemConfiguration`; reschedule on change; retryable + id
 Supertest + throwaway Postgres.
 - **AC:** hero path (login→book→run→breakdown) passes; concurrency test proves no double-assignment; tenant-
   isolation negative test (Company A can't read Company B) passes.
-- **Evidence:** `backend/tests/*.integration.test.ts`.
-- **Status:** ☐
+- **Evidence:** `backend/tests/hero.integration.test.ts` + `backend/tests/integration/*` (Supertest + throwaway `parking_poc_test`).
+- **Status:** ☑ (branch `prithviraj/P4-19-integration-tests`; 5 integration tests pass. Throwaway test DB provisioned by a Vitest globalSetup — DROP+CREATE `parking_poc_test` then additive `db push` + seed (never the dev DB); unit suite kept DB-free via a separate config. Covers: hero path (login→book→run→status→breakdown, scores verified), quota-limited waitlisting, two concurrent runs never double-assign a slot + a direct `(slotId,bookingDate)` unique-backstop assertion, and tenant isolation (cross-tenant read→404, SA→200).)
 
 ## Phase Definition of Done
 DEMO tasks ☑: login, config, booking create/status, allocation run + breakdown, dashboards, and the hero
