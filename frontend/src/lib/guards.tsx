@@ -5,6 +5,11 @@ import { roleHome, type Role } from './roles';
 /**
  * Gate for authenticated-only areas. Unauthenticated → /login, preserving the
  * attempted path in router state so the login page can return the user there.
+ *
+ * Deliberately provided as a role-agnostic primitive for later tasks (P5-04+) that
+ * need "any signed-in user" access without a role check — e.g. shared account or
+ * profile views. Not currently wired into `AppRouter`, which uses `RequireRole` for
+ * all of its guarded routes.
  */
 export function RequireAuth() {
   const { isAuthenticated } = useAuth();
