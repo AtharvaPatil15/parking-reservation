@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, unwrap } from './http';
+import { ApiError, unwrap, unwrapPage } from './http';
 
 const res = (status: number) => ({ status }) as Response;
 
@@ -35,5 +35,31 @@ describe('unwrap', () => {
         }),
       ),
     ).rejects.toMatchObject({ code: 'CONFLICT', status: 409 });
+  });
+});
+
+describe('unwrapPage', () => {
+  it('returns items + meta on success', async () => {
+    const out = await unwrapPage<{ id: string }>(
+      Promise.resolve({
+        data: { success: true, data: [{ id: 'a' }], meta: { page: 1, pageSize: 10, total: 1 } },
+        response: res(200),
+      }),
+    );
+    expect(out.items).toHaveLength(1);
+    expect(out.meta.total).toBe(1);
+  });
+
+  it('defaults meta when absent', async () => {
+    const out = await unwrapPage(Promise.resolve({ data: { success: true, data: [] }, response: res(200) }));
+    expect(out.meta).toEqual({ page: 1, pageSize: 0, total: 0 });
+  });
+
+  it('throws ApiError on error', async () => {
+    await expect(
+      unwrapPage(
+        Promise.resolve({ error: { success: false, error: { code: 'X', message: 'y' } }, response: res(500) }),
+      ),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 });

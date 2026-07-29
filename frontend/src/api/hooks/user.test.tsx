@@ -2,7 +2,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
-import { useMe, useUserDashboard } from './user';
+import { useMe, useMyBookings, useUserDashboard } from './user';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -21,5 +21,12 @@ describe('user hooks (against MSW)', () => {
     const { result } = renderHook(() => useUserDashboard(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.cutoffCountdownSeconds).toBe(3600);
+  });
+
+  it('useMyBookings returns items + meta', async () => {
+    const { result } = renderHook(() => useMyBookings(1, 10), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.items.length).toBeGreaterThan(0);
+    expect(result.current.data?.meta.total).toBe(3);
   });
 });

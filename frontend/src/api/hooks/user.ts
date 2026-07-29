@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
-import { unwrap } from '../http';
+import { unwrap, unwrapPage } from '../http';
 import { queryKeys } from '../queryKeys';
 import type { components } from '../types';
 
 type UserProfile = components['schemas']['UserProfile'];
 type UserDashboard = components['schemas']['UserDashboard'];
+type Booking = components['schemas']['Booking'];
 
 /** GET /me — the signed-in user's profile (incl. distanceKm). */
 export function useMe() {
@@ -17,5 +18,14 @@ export function useUserDashboard() {
   return useQuery({
     queryKey: queryKeys.userDashboard,
     queryFn: () => unwrap<UserDashboard>(api.GET('/dashboard/user', {})),
+  });
+}
+
+/** GET /me/bookings — paged history for the current user. */
+export function useMyBookings(page = 1, pageSize = 10) {
+  return useQuery({
+    queryKey: queryKeys.myBookings(page, pageSize),
+    queryFn: () => unwrapPage<Booking>(api.GET('/me/bookings', { params: { query: { page, pageSize } } })),
+    placeholderData: (prev) => prev,
   });
 }

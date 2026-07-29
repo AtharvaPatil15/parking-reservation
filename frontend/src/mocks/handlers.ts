@@ -11,6 +11,7 @@ type ConfigEntry = components['schemas']['ConfigEntry'];
 type RoleName = components['schemas']['RoleName'];
 type UserProfile = components['schemas']['UserProfile'];
 type UserDashboard = components['schemas']['UserDashboard'];
+type Booking = components['schemas']['Booking'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
@@ -153,8 +154,58 @@ const hero = [
     }),
   ),
   http.get(`${baseURL}/dashboard/user`, () =>
-    ok<UserDashboard>({ cutoffCountdownSeconds: 3600, previousBookingsCount: 2 }),
+    ok<UserDashboard>({
+      upcomingBooking: {
+        id: 'mock-booking-1',
+        bookingDate: '2026-08-03',
+        bookingType: 'PRIMARY',
+        status: 'ALLOCATED',
+        carpoolMemberCount: 2,
+        allocatedSlotNumber: 'A-12',
+        createdAt: '2026-07-29T08:00:00.000Z',
+      },
+      cutoffCountdownSeconds: 3600,
+      previousBookingsCount: 2,
+    }),
   ),
+  http.get(`${baseURL}/me/bookings`, ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get('page') ?? '1');
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10');
+    const all: Booking[] = [
+      {
+        id: 'bk-1',
+        bookingDate: '2026-08-03',
+        bookingType: 'PRIMARY',
+        status: 'ALLOCATED',
+        carpoolMemberCount: 2,
+        allocatedSlotNumber: 'A-12',
+        createdAt: '2026-07-29T08:00:00.000Z',
+      },
+      {
+        id: 'bk-2',
+        bookingDate: '2026-07-28',
+        bookingType: 'PRIMARY',
+        status: 'WAITLISTED',
+        carpoolMemberCount: 1,
+        createdAt: '2026-07-25T08:00:00.000Z',
+      },
+      {
+        id: 'bk-3',
+        bookingDate: '2026-07-21',
+        bookingType: 'COMMON_POOL',
+        status: 'RELEASED',
+        carpoolMemberCount: 1,
+        createdAt: '2026-07-18T08:00:00.000Z',
+      },
+    ];
+    const start = (page - 1) * pageSize;
+    return HttpResponse.json({
+      success: true,
+      data: all.slice(start, start + pageSize),
+      meta: { page, pageSize, total: all.length },
+    });
+  }),
   http.get(`${baseURL}/config`, () => ok(configSeed)),
   http.patch(`${baseURL}/config`, async ({ request }) => {
     const patch = (await request.json().catch(() => ({}))) as Record<string, string>;
