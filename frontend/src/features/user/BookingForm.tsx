@@ -68,9 +68,7 @@ export function BookingForm() {
       vehicleNumber: values.vehicleNumber || undefined,
       carpoolPeople: Number(values.carpoolPeople),
       specialRequirement: values.specialRequirement || undefined,
-      carpoolMembers: values.carpoolMembers
-        ?.filter((m) => m.name.trim())
-        .map((m) => ({ name: m.name, employeeEmail: m.employeeEmail || undefined })),
+      carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail || undefined })),
     });
   });
 
@@ -83,9 +81,12 @@ export function BookingForm() {
         </p>
       </div>
 
-      {secondsLeft != null && (
-        <p role="status" className={windowClosed ? 'text-sm text-danger' : 'text-sm text-text-muted'}>
-          {windowClosed ? 'Booking window closed for this date.' : `Cutoff in ${formatCountdown(secondsLeft)}`}
+      {secondsLeft != null && !windowClosed && (
+        <p className="text-sm text-text-muted">Cutoff in {formatCountdown(secondsLeft)}</p>
+      )}
+      {windowClosed && (
+        <p role="alert" className="text-sm text-danger">
+          Booking window closed for this date.
         </p>
       )}
 
