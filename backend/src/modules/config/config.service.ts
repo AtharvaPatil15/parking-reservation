@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { ValidationError, type ErrorDetail } from '../../lib/errors';
 import { invalidateConfig } from '../../config/systemConfig';
+import { buildAuditData } from '../../lib/audit';
 
 /**
  * Config service (P4-02). Reads/updates SystemConfiguration with D8 validation:
@@ -98,14 +99,23 @@ export async function updateConfig(input: Record<string, string>, actorUserId?: 
 
   if (details.length) throw new ValidationError('Configuration validation failed', details);
 
-  await prisma.$transaction(
-    keys.map((k) =>
+  const oldValue = Object.fromEntries(keys.map((k) => [k, byKey.get(k)!.value]));
+  await prisma.$transaction([
+    ...keys.map((k) =>
       prisma.systemConfiguration.update({
         where: { key: k },
         data: { value: input[k], updatedById: actorUserId },
       }),
     ),
-  );
+    prisma.auditLog.create({
+      data: buildAuditData({
+        actionType: 'CONFIG_UPDATED',
+        entityType: 'SystemConfiguration',
+        oldValue,
+        newValue: input,
+      }),
+    }),
+  ]);
   invalidateConfig();
   return getAll();
 }

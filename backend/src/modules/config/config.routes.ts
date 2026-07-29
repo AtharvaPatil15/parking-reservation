@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../../middleware/validate';
+import { authenticate } from '../../middleware/authenticate';
+import { requireRole } from '../../middleware/rbac';
 import { getConfig, updateConfig } from './config.controller';
 
 /** PATCH body: a non-empty map of config key → string value (contract §3.4). */
@@ -10,8 +12,8 @@ const updateConfigSchema = z
 
 const router = Router();
 
-// TODO(P4-06): protect both routes with requireRole('SUPER_ADMIN') once auth (P4-05) + RBAC (P4-06) land.
-router.get('/', getConfig);
-router.patch('/', validate(updateConfigSchema), updateConfig);
+// SUPER_ADMIN only (P4-06 — closes finding #1: config is no longer unauthenticated).
+router.get('/', authenticate, requireRole('SUPER_ADMIN'), getConfig);
+router.patch('/', authenticate, requireRole('SUPER_ADMIN'), validate(updateConfigSchema), updateConfig);
 
 export default router;

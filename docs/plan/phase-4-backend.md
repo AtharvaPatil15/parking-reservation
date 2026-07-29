@@ -22,7 +22,7 @@ with time-order + range validation (D8).
 - **AC:** timings/weights read from DB not code; `PATCH /config` rejects out-of-order times
   (`primaryCutoff < primaryResultsBy ≤ commonPoolClose < commonPoolResultsBy`); change is audited.
 - **Evidence:** `backend/src/config/*`, `backend/src/modules/config/*`.
-- **Status:** ◐ (GET/PATCH /config live-tested: valid persists + cache invalidates; time-order, range & unknown-key all → 400. ⚠ **audit deferred to P4-10** — `updatedById` is set but no `AuditLog` write yet, and it's null until auth (P4-05). ⚠ `requireRole` guard pending P4-06)
+- **Status:** ☑ (GET/PATCH /config live-tested; time-order, range & unknown-key all → 400. Guarded by `requireRole('SUPER_ADMIN')` — no-auth→401, CA→403 (**finding #1 closed**). Audit now wired (P4-10): each change writes a `CONFIG_UPDATED` AuditLog row with old/new maps.)
 
 #### P4-03 · Prisma lib + migrate + seed wiring · Owner: Devashish · Tag: DEMO · Deps: P4-01
 Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `prisma/seed.ts`; F7 partial-unique SQL applied.
@@ -40,37 +40,37 @@ Response helpers, central error handler → envelope (§3.2), correlation-id, zo
 Seeded-user login → short-lived access JWT (refresh-cookie rotation is MVP). Argon2id verify.
 - **AC:** `POST /auth/login` returns `{accessToken,user{role,companyId}}`; bad creds `401`; non-ACTIVE `403`.
 - **Evidence:** `backend/src/modules/auth/*`.
-- **Status:** ☐
+- **Status:** ☑ (login verified: SA & CA get JWT + role/companyId; bad creds → 401. Also added refresh-rotation + logout via `RefreshToken`.)
 
 #### P4-06 · RBAC + tenant-scope middleware · Owner: Devashish · Tag: DEMO · Deps: P4-05
 `requireRole(...)` + `scopeToTenant()` injecting a `companyId` filter.
 - **AC:** wrong role → `403`; a CA/USER cannot read another company's data (`403`/`404`); SA unrestricted.
-- **Evidence:** `backend/src/middleware/{rbac,tenantScope}.ts`.
-- **Status:** ☐
+- **Evidence:** `backend/src/middleware/{rbac,tenantScope}.ts` (+ `authenticate.ts`).
+- **Status:** ☑ (verified: wrong role → 403, no token → 401; CA cross-company block/list → 403, own → ok; SA unrestricted. Resource-level scope enforced in services.)
 
 #### P4-07 · Companies + Company-Users modules · Owner: Devashish · Tag: MVP · Deps: P4-06
 Company CRUD/status; company-user list, approval (`APPROVE|REJECT`), status, admin assignment.
 - **AC:** endpoints match `openapi.yaml`; approval flips `PENDING→ACTIVE|REJECTED`; tenant-scoped.
 - **Evidence:** `backend/src/modules/{companies,users}/*`.
-- **Status:** ☐
+- **Status:** ☑ (CRUD/status + public `/active` + `/:id/users` + approval/status + admin-assign; SA-only & CA-own-tenant verified. Note: registration `POST /auth/register` still MVP/unbuilt — users are seeded.)
 
 #### P4-08 · Slots + Quota + Blocking modules · Owner: Devashish · Tag: DEMO(quota)/MVP · Deps: P4-06
 Slot CRUD; effective-dated `CompanySlotAllocation`; `SlotBlock` (**SA any / CA own / USER forbidden**).
 - **AC:** quota reads resolve the effective row for a date; blocked count subtracts from availability; blocking authz enforced.
 - **Evidence:** `backend/src/modules/slots/*`.
-- **Status:** ☐
+- **Status:** ☑ (slot CRUD + effective-dated quota + blocking with SA-any/CA-own authz verified; `getAvailableQuota` helper = effective quota − overlapping blocks, ready for P4-13.)
 
 #### P4-09 · Dashboards module · Owner: Devashish · Tag: DEMO · Deps: P4-06,P4-08
 Aggregate counts per role.
 - **AC:** the three dashboard endpoints return the counts listed in Phase-1 §1.8; tenant-scoped for CA/USER.
 - **Evidence:** `backend/src/modules/dashboards/*`.
-- **Status:** ☐
+- **Status:** ☑ (SA/CA/User endpoints verified: SA slots/companies/blocked/util, CA quota/available/booked/waitlisted, User prev-count + cutoff countdown; tenant-scoped via req.user; role-guarded 403.)
 
 #### P4-10 · Audit interceptor · Owner: Devashish · Tag: MVP · Deps: P4-04
 Write `AuditLog` on key mutations (approvals, blocks, quota, config, allocation, override, release).
 - **AC:** each listed action writes actor/action/entity/old/new/ip/correlationId.
-- **Evidence:** `backend/src/modules/audit/*`.
-- **Status:** ☐
+- **Evidence:** `backend/src/lib/{audit,requestContext}.ts`, `backend/src/middleware/requestContext.ts`, wired into config/users/companies/slots services.
+- **Status:** ☑ (AsyncLocalStorage carries actor/ip/correlationId; recordAudit wired for CONFIG_UPDATED, USER_APPROVAL/STATUS, COMPANY_CREATED/UPDATED/STATUS/ADMIN_ASSIGNED, QUOTA_SET, SLOT_BLOCKED/UNBLOCKED. Verified rows carry actor+correlationId+old/new. allocation/override/release audits land with P4-13/14.)
 
 ---
 
