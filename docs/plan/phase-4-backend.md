@@ -146,7 +146,7 @@ dropdown) already exists from P4-07.
   Argon2id hash; user created `status=PENDING`, `emailVerified=false`, USER role linked. Returns `201` with the
   `UserProfile` (no token). Public route (no auth); audited.
 - **Evidence:** `backend/src/modules/auth/auth.{routes,controller,service,schema}.ts`.
-- **Status:** ◐ (endpoint built + `tsc` clean; **live-verified 12/12** — register→PENDING→login `403`→CA approve→login `200`, plus duplicate-email `409`, unknown-company `400`, password-mismatch `400`. The register integration test lands on the P4-19 harness once that PR merges.)
+- **Status:** ☑ (endpoint built; `tsc` clean; unit 47/47; **integration 4/4** on the P4-19 harness — register→PENDING→login `403`→CA approve→login `200`, plus duplicate-email `409`, unknown-company `400`, password-mismatch `400`. Evidence adds `backend/tests/register.integration.test.ts`.)
 - **Notes:** **Promoted to [DEMO] scope (30 Jul) — on the critical path.** Email verification
   (`/auth/verify-email`) stays [Later]; the account is usable only after Company-Admin approval.
 
