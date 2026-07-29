@@ -135,7 +135,7 @@ Supertest + throwaway Postgres.
 - **Evidence:** `backend/tests/hero.integration.test.ts` + `backend/tests/integration/*` (Supertest + throwaway `parking_poc_test`).
 - **Status:** ☑ (branch `prithviraj/P4-19-integration-tests`; 5 integration tests pass. Throwaway test DB provisioned by a Vitest globalSetup — DROP+CREATE `parking_poc_test` then additive `db push` + seed (never the dev DB); unit suite kept DB-free via a separate config. Covers: hero path (login→book→run→status→breakdown, scores verified), quota-limited waitlisting, two concurrent runs never double-assign a slot + a direct `(slotId,bookingDate)` unique-backstop assertion, and tenant isolation (cross-tenant read→404, SA→200).)
 
-#### P4-20 · Auth: user registration (`POST /auth/register`) · Owner: Prithviraj · Tag: MVP (pulled forward for the demo) · Deps: P4-05, P4-07
+#### P4-20 · Auth: user registration (`POST /auth/register`) · Owner: Prithviraj · Tag: **DEMO** · Deps: P4-05, P4-07
 Implements the registration endpoint the frontend RegisterPage (P5-15, PR #15) already calls, so sign-up works
 end-to-end instead of only against mocks. Creates a `PENDING` user under an **ACTIVE** company; the Company
 Admin approves later via the existing P4-07 flow. `GET /companies/active` (public id+name list for the company
@@ -147,9 +147,10 @@ dropdown) already exists from P4-07.
   `UserProfile` (no token). Public route (no auth); audited.
 - **Evidence:** `backend/src/modules/auth/auth.{routes,controller,service,schema}.ts`.
 - **Status:** ☐ (Prithviraj — in progress)
-- **Notes:** email verification (`/auth/verify-email`) stays [Later]; the account is usable only after CA
-  approval. Confirm whether this is formally promoted to **[DEMO]** scope for 30 Jul, or remains MVP built early.
+- **Notes:** **Promoted to [DEMO] scope (30 Jul) — on the critical path.** Email verification
+  (`/auth/verify-email`) stays [Later]; the account is usable only after Company-Admin approval.
 
 ## Phase Definition of Done
-DEMO tasks ☑: login, config, booking create/status, allocation run + breakdown, dashboards, and the hero
-integration test all pass on a seeded DB. Scoring unit tests green. MVP/Later tasks may remain ☐/⊘.
+DEMO tasks ☑: login, **registration (P4-20)**, config, booking create/status, allocation run + breakdown,
+dashboards, and the hero integration test all pass on a seeded DB. Scoring unit tests green. MVP/Later tasks
+may remain ☐/⊘.
