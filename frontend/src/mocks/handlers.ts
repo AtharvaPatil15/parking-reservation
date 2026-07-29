@@ -1,18 +1,26 @@
 import { HttpResponse, http } from 'msw';
 import { handlers as generated } from './handlers.generated';
+import type { components } from '../api/types';
+
+type LoginResponseData = components['schemas']['LoginResponseData'];
+type BookingCreatedData = components['schemas']['BookingCreatedData'];
+type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
+type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
+type ConfigEntry = components['schemas']['ConfigEntry'];
+type RoleName = components['schemas']['RoleName'];
 
 const baseURL = '/api/v1';
-const ok = (data: unknown, status = 200) => HttpResponse.json({ success: true, data }, { status });
+const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
 const fail = (status: number, code: string, message: string) =>
   HttpResponse.json({ success: false, error: { code, message } }, { status });
 
-function roleForEmail(email: string): 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'USER' {
+function roleForEmail(email: string): RoleName {
   if (email.startsWith('admin@')) return 'SUPER_ADMIN';
   if (email.startsWith('company@')) return 'COMPANY_ADMIN';
   return 'USER';
 }
 
-const configSeed: { key: string; value: string; valueType: string }[] = [
+const configSeed: ConfigEntry[] = [
   { key: 'primary.window.open', value: '18:00', valueType: 'TIME' },
   { key: 'primary.window.cutoff', value: '21:00', valueType: 'TIME' },
   { key: 'scoring.distanceWeight', value: '0.6', valueType: 'NUMBER' },
@@ -26,7 +34,7 @@ const hero = [
     const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
     if (!body?.email || !body?.password) return fail(401, 'UNAUTHENTICATED', 'Invalid credentials');
     const role = roleForEmail(body.email);
-    return ok({
+    return ok<LoginResponseData>({
       accessToken: 'mock-access-token',
       tokenType: 'Bearer',
       expiresIn: 900,
@@ -42,7 +50,7 @@ const hero = [
   http.post(`${baseURL}/auth/logout`, () => ok({ message: 'Signed out' })),
   http.post(`${baseURL}/bookings`, async ({ request }) => {
     const b = (await request.json().catch(() => ({}))) as { bookingDate?: string; carpoolPeople?: number };
-    return ok(
+    return ok<BookingCreatedData>(
       {
         id: 'mock-booking-1',
         status: 'SUBMITTED',
@@ -56,7 +64,7 @@ const hero = [
     );
   }),
   http.post(`${baseURL}/allocation/primary/run`, () =>
-    ok({
+    ok<AllocationRunSummary>({
       id: 'run-demo',
       runType: 'PRIMARY',
       bookingDate: '2026-08-03',
@@ -69,7 +77,7 @@ const hero = [
     }),
   ),
   http.get(`${baseURL}/allocation/runs/:id/breakdown`, ({ params }) =>
-    ok({
+    ok<AllocationBreakdown>({
       runId: String(params.id),
       bookingDate: '2026-08-03',
       status: 'COMPLETED',
