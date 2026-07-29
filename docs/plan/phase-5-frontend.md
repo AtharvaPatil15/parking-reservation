@@ -51,7 +51,7 @@ shows `distanceKm`.
 #### P5-07 · User — BookingStatus + score breakdown · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** shows status, allocated slot, and the distance/carpool/final **score breakdown**; release button (MVP).
 - **Evidence:** `frontend/src/features/user/BookingStatus.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (BookingStatus at /app/booking/:id — status badge, allocated slot, distance/carpool/final score breakdown, carpool members; MVP release flow (modal → POST release → toast + invalidate); useBooking/useReleaseBooking + MSW; RTL tests incl. 404 + not-scored)
 
 #### P5-08 · User — Dashboard + History · Owner: Atharva · Tag: DEMO(dash)/MVP(history) · Deps: P5-04
 - **AC:** dashboard shows upcoming booking + status + cutoff countdown; history paged (MVP).

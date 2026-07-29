@@ -11,6 +11,7 @@ import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { UserShell } from '../features/user/UserShell';
 import { ComponentGallery } from '../features/dev/ComponentGallery';
 import { BookingForm } from '../features/user/BookingForm';
+import { BookingStatus } from '../features/user/BookingStatus';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
@@ -42,6 +43,7 @@ export function AppRouter() {
           <Route path="/app" element={<UserShell />}>
             <Route index element={<ComponentGallery />} />
             <Route path="book" element={<BookingForm />} />
+            <Route path="booking/:id" element={<BookingStatus />} />
           </Route>
         </Route>
       </Route>
