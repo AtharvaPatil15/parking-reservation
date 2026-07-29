@@ -386,7 +386,12 @@ const hero = [
     return okPage(users.slice(start, start + pageSize), page, pageSize, users.length);
   }),
   http.patch(`${baseURL}/users/:id/approval`, async ({ params, request }) => {
-    const body = (await request.json().catch(() => ({}))) as { decision?: 'APPROVE' | 'REJECT' };
+    const body = (await request.json().catch(() => ({}))) as { decision?: unknown };
+    // `decision` is required by the contract — reject anything but APPROVE/REJECT (don't
+    // silently treat a missing/invalid value as a rejection).
+    if (body.decision !== 'APPROVE' && body.decision !== 'REJECT') {
+      return fail(400, 'VALIDATION_ERROR', 'decision must be APPROVE or REJECT');
+    }
     const id = String(params.id);
     let updated: UserProfile | undefined;
     for (const list of Object.values(companyUserState)) {

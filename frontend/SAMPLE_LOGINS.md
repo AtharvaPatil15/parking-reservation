@@ -27,6 +27,6 @@ So `admin@anything.com`, `company@x.io`, `jane@corp.com` all work — only the p
 - **Deep-link return:** visit a guarded URL (e.g. `/app`) while signed out → you're sent to login, and after signing in you land back on that page.
 
 ## Note
-When the app is later wired to the **live backend** (P5-13), these mock rules no
-longer apply — you'll use real seeded accounts and real passwords instead. This
-file is a local testing aid and is **not committed** to the repo.
+When the app runs against the **live backend** (P5-13, `VITE_USE_MOCKS=false`),
+these mock rules no longer apply — you'll use real seeded accounts and real
+passwords instead. This file documents the MSW (mock) sign-in rules only.

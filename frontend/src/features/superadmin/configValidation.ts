@@ -66,8 +66,9 @@ export function validateConfigValue(key: string, valueType: string, v: string): 
 
 /**
  * Cross-field timing-order check over the merged config (current values overlaid
- * with edits). Returns a message keyed by the first offending timing key, or an
- * empty object when the order holds / any timing value is unparseable (per-field
+ * with edits). When the order is violated, returns the same message keyed on ALL
+ * four timing keys (so every timing field is flagged inline). Returns an empty
+ * object when the order holds, or when any timing value is unparseable (per-field
  * validation surfaces the malformed one).
  */
 export function validateTimingOrder(values: Record<string, string>): Record<string, string> {
