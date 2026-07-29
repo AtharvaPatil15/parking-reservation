@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useTheme } from '../lib/theme';
 
 /**
@@ -152,7 +153,7 @@ const toneClasses: Record<Tone, string> = {
   primary: 'bg-primary-subtle text-primary',
 };
 
-function Badge({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${toneClasses[tone]}`}
