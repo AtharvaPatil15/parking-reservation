@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -47,8 +48,18 @@ const toneAccent: Record<ToastTone, string> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);
+  // Typed as `number` (not `ReturnType<typeof window.setTimeout>`) because that
+  // helper resolves to the last overload of the ambient `setTimeout` — which
+  // is `@types/node`'s `NodeJS.Timeout` — while calling `window.setTimeout`
+  // in the browser actually returns a number.
+  const timers = useRef(new Map<number, number>());
 
   const dismiss = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timers.current.delete(id);
+    }
     setToasts((current) => current.filter((t) => t.id !== id));
   }, []);
 
@@ -59,11 +70,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const duration = options?.duration ?? 4000;
       setToasts((current) => [...current, { id, tone, message }]);
       if (duration > 0) {
-        window.setTimeout(() => dismiss(id), duration);
+        const timer = window.setTimeout(() => dismiss(id), duration);
+        timers.current.set(id, timer);
       }
     },
     [dismiss],
   );
+
+  // Clear any pending auto-dismiss timers on unmount to avoid state updates
+  // firing after the provider is gone.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach((timer) => window.clearTimeout(timer));
+      pending.clear();
+    };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>

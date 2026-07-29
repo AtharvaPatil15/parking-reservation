@@ -9,5 +9,9 @@ export function roleHome(role: Role): string {
       return '/company';
     case 'USER':
       return '/app';
+    default:
+      // A stale/casted/JSON-sourced value that isn't one of the known roles —
+      // treat it as needing re-authentication rather than returning undefined.
+      return '/login';
   }
 }

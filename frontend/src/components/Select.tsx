@@ -16,12 +16,18 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 
 /** Labelled native select — same label/hint/error/a11y contract as Input. */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, options, placeholder, id, className, ...rest },
+  { label, hint, error, options, placeholder, id, className, value, defaultValue, ...rest },
   ref,
 ) {
   const autoId = useId();
   const selectId = id ?? autoId;
   const describedById = error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined;
+  // When a placeholder is set and the caller hasn't opted into controlled
+  // (`value`) or uncontrolled (`defaultValue`) selection, default to the
+  // placeholder's empty value so browsers don't auto-select the first real
+  // option and hide the placeholder.
+  const uncontrolledDefaultValue =
+    placeholder && value === undefined && defaultValue === undefined ? '' : defaultValue;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -41,6 +47,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
           error ? 'border-danger' : 'border-border hover:border-text-muted',
           className,
         )}
+        value={value}
+        defaultValue={uncontrolledDefaultValue}
         {...rest}
       >
         {placeholder && (

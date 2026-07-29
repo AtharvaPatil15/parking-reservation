@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../lib/cn';
 
@@ -24,6 +24,7 @@ const sizeClasses: Record<NonNullable<ModalProps['size']>, string> = {
  */
 export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -60,7 +61,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
+        aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         className={cn(
           'relative w-full rounded-card border border-border bg-surface shadow-pop outline-none',
@@ -69,7 +70,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
       >
         {title && (
           <div className="border-b border-border px-6 py-4">
-            <h2 className="text-base font-semibold tracking-tight text-text">{title}</h2>
+            <h2 id={titleId} className="text-base font-semibold tracking-tight text-text">
+              {title}
+            </h2>
           </div>
         )}
         <div className="px-6 py-5">{children}</div>

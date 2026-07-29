@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { Badge } from './Badge';
 import { Input } from './Input';
+import { Select } from './Select';
 import { Table, type Column } from './Table';
 import { EmptyState } from './States';
 
@@ -17,6 +18,23 @@ describe('Input', () => {
     const input = screen.getByLabelText('Email');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Required')).toBeInTheDocument();
+  });
+});
+
+describe('Select', () => {
+  it('keeps the placeholder selected when only placeholder + options are given', () => {
+    render(
+      <Select
+        label="Lot"
+        placeholder="Choose a lot"
+        options={[
+          { value: 'a', label: 'Lot A' },
+          { value: 'b', label: 'Lot B' },
+        ]}
+      />,
+    );
+    const select = screen.getByLabelText('Lot') as HTMLSelectElement;
+    expect(select.value).toBe('');
   });
 });
 
