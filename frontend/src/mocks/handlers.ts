@@ -18,6 +18,8 @@ type Company = components['schemas']['Company'];
 type ParkingSlot = components['schemas']['ParkingSlot'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
 type SlotBlock = components['schemas']['SlotBlock'];
+type CompanySummary = components['schemas']['CompanySummary'];
+type RegisterRequest = components['schemas']['RegisterRequest'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
@@ -235,6 +237,29 @@ const hero = [
     });
   }),
   http.post(`${baseURL}/auth/logout`, () => ok({ message: 'Signed out' })),
+  http.get(`${baseURL}/companies/active`, () =>
+    ok<CompanySummary[]>(companyState.filter((c) => c.status === 'ACTIVE').map((c) => ({ id: c.id, name: c.name }))),
+  ),
+  http.post(`${baseURL}/auth/register`, async ({ request }) => {
+    const b = (await request.json().catch(() => ({}))) as Partial<RegisterRequest>;
+    if (!b.fullName || !b.companyId || !b.email || !b.password) {
+      return fail(400, 'VALIDATION_ERROR', 'Missing required fields');
+    }
+    if (b.password !== b.confirmPassword) return fail(400, 'VALIDATION_ERROR', 'Passwords do not match');
+    const exists = Object.values(companyUserState).some((list) => list.some((u) => u.email === b.email));
+    if (exists) return fail(409, 'CONFLICT', 'An account with this email already exists');
+    const company = companyState.find((c) => c.id === b.companyId && c.status === 'ACTIVE');
+    if (!company) return fail(400, 'VALIDATION_ERROR', 'Company must be active');
+    // Create as PENDING and add to the company's user list so it shows up in Company-Admin approvals.
+    const user: UserProfile = {
+      ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING'),
+      companyId: company.id, companyName: company.name,
+      contactNumber: b.contactNumber ?? '—', address: b.address ?? '—', pinCode: b.pinCode ?? '—',
+      distanceKm: b.distanceKm ?? null,
+    };
+    companyUserState[company.id] = [...(companyUserState[company.id] ?? []), user];
+    return ok<UserProfile>(user, 201);
+  }),
 
   // --- User bookings ---
   http.post(`${baseURL}/bookings`, async ({ request }) => {

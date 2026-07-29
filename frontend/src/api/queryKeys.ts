@@ -7,6 +7,9 @@ export const queryKeys = {
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number) => ['me', 'bookings', page, pageSize] as const,
 
+  // Auth / registration
+  activeCompanies: ['companies', 'active'] as const,
+
   // Super Admin (P5-11)
   superAdminDashboard: ['dashboard', 'super-admin'] as const,
   companies: (page: number, pageSize: number) => ['companies', page, pageSize] as const,
