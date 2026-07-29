@@ -19,6 +19,9 @@ backend/dist/
 frontend/dist/
 frontend/build/
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Prisma generated client
 **/generated/
 .prisma/

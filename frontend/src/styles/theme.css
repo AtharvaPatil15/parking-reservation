@@ -1,0 +1,52 @@
+/*
+ * Design tokens — the single source of truth for the palette.
+ * Values are space-separated RGB channels so Tailwind's `<alpha-value>` works
+ * (see tailwind.config.ts). Light is the default; [data-theme="dark"] overrides.
+ * Tune the brand here and the whole app follows.
+ */
+:root,
+:root[data-theme='light'] {
+  --canvas: 246 248 250; /* #F6F8FA */
+  --surface: 255 255 255; /* #FFFFFF */
+  --surface-2: 241 244 248; /* #F1F4F8 */
+  --border: 227 232 239; /* #E3E8EF */
+  --text: 17 24 39; /* #111827 */
+  --text-muted: 91 100 114; /* #5B6472 */
+
+  --primary: 31 94 220; /* #1F5EDC */
+  --primary-hover: 26 79 187; /* #1A4FBB */
+  --primary-subtle: 234 241 254; /* #EAF1FE */
+
+  --accent: 240 100 75; /* #F0644B */
+  --accent-subtle: 253 236 232; /* #FDECE8 */
+
+  --success: 21 138 91; /* #158A5B */
+  --success-subtle: 230 244 238; /* #E6F4EE */
+  --warning: 180 121 26; /* #B4791A */
+  --warning-subtle: 251 240 220; /* #FBF0DC */
+  --danger: 209 69 59; /* #D1453B */
+  --danger-subtle: 251 233 232; /* #FBE9E8 */
+}
+
+:root[data-theme='dark'] {
+  --canvas: 11 17 30; /* #0B111E */
+  --surface: 18 26 42; /* #121A2A */
+  --surface-2: 26 36 54; /* #1A2436 */
+  --border: 38 51 74; /* #26334A */
+  --text: 230 234 242; /* #E6EAF2 */
+  --text-muted: 154 165 184; /* #9AA5B8 */
+
+  --primary: 91 141 239; /* #5B8DEF */
+  --primary-hover: 122 162 242; /* #7AA2F2 */
+  --primary-subtle: 24 35 59; /* #18233B */
+
+  --accent: 255 122 99; /* #FF7A63 */
+  --accent-subtle: 42 26 22; /* #2A1A16 */
+
+  --success: 63 180 134; /* #3FB486 */
+  --success-subtle: 18 37 30; /* #12251E */
+  --warning: 224 169 61; /* #E0A93D */
+  --warning-subtle: 42 33 19; /* #2A2113 */
+  --danger: 239 107 98; /* #EF6B62 */
+  --danger-subtle: 42 22 21; /* #2A1615 */
+}
