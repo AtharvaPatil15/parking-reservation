@@ -34,10 +34,11 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
   const [slotCount, setSlotCount] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(nextBookableWeekday());
   const error = setQuota.error instanceof ApiError ? setQuota.error.message : null;
+  const count = Number(slotCount);
+  const countInvalid = slotCount.trim() !== '' && (!Number.isInteger(count) || count < 0);
 
   function onSubmit() {
-    const count = Number(slotCount);
-    if (!Number.isInteger(count) || count < 0) return;
+    if (slotCount.trim() === '' || countInvalid) return;
     setQuota.mutate(
       { slotCount: count, effectiveFrom },
       { onSuccess: () => { toast('Quota updated.', { tone: 'success' }); setSlotCount(''); } },
@@ -64,12 +65,19 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-28">
-            <Input label="Slots" type="number" min={0} value={slotCount} onChange={(e) => setSlotCount(e.target.value)} />
+            <Input
+              label="Slots"
+              type="number"
+              min={0}
+              value={slotCount}
+              onChange={(e) => setSlotCount(e.target.value)}
+              error={countInvalid ? 'Whole number ≥ 0' : undefined}
+            />
           </div>
           <div className="w-44">
             <Input label="Effective from" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
           </div>
-          <Button onClick={onSubmit} loading={setQuota.isPending} disabled={slotCount.trim() === ''}>
+          <Button onClick={onSubmit} loading={setQuota.isPending} disabled={slotCount.trim() === '' || countInvalid}>
             Set quota
           </Button>
         </div>

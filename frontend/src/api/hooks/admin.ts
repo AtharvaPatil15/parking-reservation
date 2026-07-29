@@ -34,7 +34,12 @@ export function useCreateCompany() {
   return useMutation({
     mutationFn: (body: { name: string; code: string }) =>
       unwrap<Company>(api.POST('/companies', { body })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies'] }),
+    // Only the paged company lists (`['companies', page, pageSize]`) — not the
+    // company-scoped quota/users/blocks queries that share the 'companies' prefix.
+    onSuccess: () =>
+      qc.invalidateQueries({
+        predicate: (q) => q.queryKey[0] === 'companies' && typeof q.queryKey[1] === 'number',
+      }),
   });
 }
 

@@ -35,10 +35,13 @@ export function Blocks() {
   const [reason, setReason] = useState<BlockReason>('MAINTENANCE');
   const [reasonText, setReasonText] = useState('');
   const createError = create.error instanceof ApiError ? create.error.message : null;
+  const count = Number(blockedCount);
+  const countInvalid = blockedCount.trim() !== '' && (!Number.isInteger(count) || count < 1);
+  const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);
+  const canSubmit = blockedCount.trim() !== '' && !countInvalid && !rangeInvalid;
 
   function onCreate() {
-    const count = Number(blockedCount);
-    if (!Number.isInteger(count) || count < 1) return;
+    if (!canSubmit) return;
     create.mutate(
       { blockedCount: count, startDate, endDate, reason, reasonText: reasonText.trim() || null },
       { onSuccess: () => { toast('Block created.', { tone: 'success' }); setBlockedCount(''); setReasonText(''); } },
@@ -74,13 +77,26 @@ export function Blocks() {
       <Card title="Add block">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-24">
-            <Input label="Slots" type="number" min={1} value={blockedCount} onChange={(e) => setBlockedCount(e.target.value)} />
+            <Input
+              label="Slots"
+              type="number"
+              min={1}
+              value={blockedCount}
+              onChange={(e) => setBlockedCount(e.target.value)}
+              error={countInvalid ? 'Whole number ≥ 1' : undefined}
+            />
           </div>
           <div className="w-40">
             <Input label="Start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </div>
           <div className="w-40">
-            <Input label="End" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <Input
+              label="End"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              error={rangeInvalid ? 'End must be on/after start' : undefined}
+            />
           </div>
           <div className="w-48">
             <Select label="Reason" options={REASONS} value={reason} onChange={(e) => setReason(e.target.value as BlockReason)} />
@@ -88,7 +104,7 @@ export function Blocks() {
           <div className="w-48">
             <Input label="Note" value={reasonText} onChange={(e) => setReasonText(e.target.value)} hint="Optional" />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={blockedCount.trim() === ''}>
+          <Button onClick={onCreate} loading={create.isPending} disabled={!canSubmit}>
             Add block
           </Button>
         </div>

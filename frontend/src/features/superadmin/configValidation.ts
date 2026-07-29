@@ -7,7 +7,7 @@
  */
 
 /** The four timing keys, in required ascending order. */
-export const TIMING_KEYS = [
+const TIMING_KEYS = [
   'booking.primaryCutoff',
   'booking.primaryResultsBy',
   'booking.commonPoolClose',
@@ -21,7 +21,7 @@ const TIMING_LABELS: Record<string, string> = {
   'booking.commonPoolResultsBy': 'Common-pool results by',
 };
 
-export function toMinutes(hhmm: string): number | null {
+function toMinutes(hhmm: string): number | null {
   const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
