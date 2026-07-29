@@ -6,4 +6,17 @@ export const queryKeys = {
   me: ['me'] as const,
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number) => ['me', 'bookings', page, pageSize] as const,
+
+  // Super Admin (P5-11)
+  superAdminDashboard: ['dashboard', 'super-admin'] as const,
+  companies: (page: number, pageSize: number) => ['companies', page, pageSize] as const,
+  slots: (page: number, pageSize: number, status: string) => ['slots', page, pageSize, status] as const,
+  companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,
+
+  // Company-scoped (P5-11 drill-in + P5-12 company admin)
+  companyAdminDashboard: ['dashboard', 'company-admin'] as const,
+  companyUsers: (companyId: string, page: number, pageSize: number, status: string) =>
+    ['companies', companyId, 'users', page, pageSize, status] as const,
+  blocks: (companyId: string, page: number, pageSize: number) =>
+    ['companies', companyId, 'blocks', page, pageSize] as const,
 };

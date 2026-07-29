@@ -8,7 +8,14 @@ import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { AdminShell } from '../features/superadmin/AdminShell';
 import { AllocationRun } from '../features/superadmin/AllocationRun';
+import { SuperAdminDashboard } from '../features/superadmin/SuperAdminDashboard';
+import { ConfigTimings } from '../features/superadmin/ConfigTimings';
+import { Companies } from '../features/superadmin/Companies';
+import { Slots } from '../features/superadmin/Slots';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
+import { CompanyDashboard } from '../features/companyadmin/CompanyDashboard';
+import { Approvals } from '../features/companyadmin/Approvals';
+import { Blocks } from '../features/companyadmin/Blocks';
 import { UserShell } from '../features/user/UserShell';
 import { UserDashboard } from '../features/user/UserDashboard';
 import { History } from '../features/user/History';
@@ -32,13 +39,21 @@ export function AppRouter() {
         <Route element={<AppShell />}>
           <Route path="/admin" element={<AdminShell />}>
             <Route index element={<AllocationRun />} />
+            <Route path="dashboard" element={<SuperAdminDashboard />} />
+            <Route path="config" element={<ConfigTimings />} />
+            <Route path="companies" element={<Companies />} />
+            <Route path="slots" element={<Slots />} />
           </Route>
         </Route>
       </Route>
 
       <Route element={<RequireRole role="COMPANY_ADMIN" />}>
         <Route element={<AppShell />}>
-          <Route path="/company/*" element={<CompanyShell />} />
+          <Route path="/company" element={<CompanyShell />}>
+            <Route index element={<CompanyDashboard />} />
+            <Route path="approvals" element={<Approvals />} />
+            <Route path="blocks" element={<Blocks />} />
+          </Route>
         </Route>
       </Route>
 
