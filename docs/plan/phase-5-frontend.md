@@ -20,13 +20,13 @@ Vite + React + TS + Tailwind; theme tokens (color/spacing/radius/shadow), light/
 Button, Input, Select, Card, Table, Badge, Modal, Toast + the four **state views** (loading/empty/error/success).
 - **AC:** components reusable, accessible (labels, focus rings, keyboard), responsive; state views used app-wide.
 - **Evidence:** `frontend/src/components/*`.
-- **Status:** ☐
+- **Status:** ☑ (Button/Input/Select/Card/Badge/Table/Modal/Toast + loading/empty/error/success state views; accessible labels/focus/keyboard; theme-aware; unit tests; AppShell refactored to consume them)
 
 #### P5-03 · Router + role guards + auth context · Owner: Atharva · Tag: DEMO · Deps: P5-01
 Public `/login`,`/register`; role-guarded shells `/admin/*`,`/company/*`,`/app/*`.
 - **AC:** `<RequireRole>` redirects wrong-role users; unauthenticated → `/login`; token held in memory.
 - **Evidence:** `frontend/src/app/router.tsx`, `frontend/src/lib/guards.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (react-router-dom v6 declarative; in-memory AuthProvider/useAuth; RequireAuth/RequireRole guards; /login,/register public + /admin,/company,/app role-guarded shells; temp dev sign-in; guard + integration tests; build/lint/test green)
 
 #### P5-04 · API layer (typed client + React Query) + MSW · Owner: Atharva · Tag: DEMO · Deps: P3-10,P5-01
 Generated client from `openapi.yaml`; React Query hooks; MSW handlers for offline dev; auth interceptor.

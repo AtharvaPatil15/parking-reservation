@@ -1,11 +1,13 @@
 import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { App } from './App';
 
-// Smoke test — proves the RTL + jsdom harness is wired for P5-14.
+// Smoke test — unauthenticated boot lands on the login page.
 describe('App', () => {
-  it('renders the app shell', () => {
+  it('shows the login page when unauthenticated', () => {
     render(<App />);
-    expect(screen.getByText('Parking Reservation')).toBeInTheDocument();
+    // Exact match: /sign in/i alone also matches the "Developer sign-in" card title.
+    expect(screen.getByRole('heading', { name: /^sign in$/i })).toBeInTheDocument();
   });
 
   it('exposes a theme toggle', () => {
