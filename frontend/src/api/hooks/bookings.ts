@@ -14,7 +14,10 @@ export function useCreateBooking() {
   return useMutation({
     mutationFn: (body: CreateBookingRequest) =>
       unwrap<BookingCreatedData>(api.POST('/bookings', { body })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.bookings }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
+      qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+    },
   });
 }
 
@@ -35,7 +38,8 @@ export function useReleaseBooking() {
       unwrap<BookingDetail>(api.POST('/bookings/{id}/release', { params: { path: { id } } })),
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: queryKeys.booking(id) });
-      qc.invalidateQueries({ queryKey: queryKeys.bookings });
+      qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
+      qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
     },
   });
 }

@@ -1,20 +1,13 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components';
 import { useUserDashboard } from '../../api/hooks';
+import { useCountdown } from '../../lib/useCountdown';
 import { formatCountdown } from './bookingSchema';
 import { statusTone } from './statusTone';
 
 export function UserDashboard() {
   const dash = useUserDashboard();
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  useEffect(() => {
-    const initial = dash.data?.cutoffCountdownSeconds;
-    if (initial == null) return;
-    setSecondsLeft(initial);
-    const t = setInterval(() => setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1))), 1000);
-    return () => clearInterval(t);
-  }, [dash.data?.cutoffCountdownSeconds]);
+  const secondsLeft = useCountdown(dash.data?.cutoffCountdownSeconds);
 
   if (dash.isLoading) return <LoadingState label="Loading your dashboard…" />;
   if (dash.isError || !dash.data) return <ErrorState title="Couldn't load your dashboard" />;

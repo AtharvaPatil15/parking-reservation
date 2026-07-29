@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../components';
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
 import { ApiError } from '../../api/http';
+import { useCountdown } from '../../lib/useCountdown';
 import { VEHICLE_OPTIONS, bookingSchema, formatCountdown, nextBookableWeekday, type BookingFormValues } from './bookingSchema';
 
 export function BookingForm() {
@@ -25,14 +25,7 @@ export function BookingForm() {
   const { fields, append, remove } = useFieldArray({ control, name: 'carpoolMembers' });
   const carpoolPeople = Number(watch('carpoolPeople')) || 1;
 
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  useEffect(() => {
-    const initial = dashboard.data?.cutoffCountdownSeconds;
-    if (initial == null) return;
-    setSecondsLeft(initial);
-    const t = setInterval(() => setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1))), 1000);
-    return () => clearInterval(t);
-  }, [dashboard.data?.cutoffCountdownSeconds]);
+  const secondsLeft = useCountdown(dashboard.data?.cutoffCountdownSeconds);
   const windowClosed = secondsLeft != null && secondsLeft <= 0;
 
   if (me.isLoading || dashboard.isLoading) return <LoadingState label="Loading booking form…" />;
