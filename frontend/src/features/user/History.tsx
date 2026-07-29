@@ -9,9 +9,6 @@ type Booking = components['schemas']['Booking'];
 const PAGE_SIZE = 10;
 
 const columns: Column<Booking>[] = [
-  // Booking id doubles as the row's stable identity in this MVP table — surfaced as its
-  // own column since bookingDate alone doesn't distinguish rows across pages.
-  { key: 'id', header: 'Booking', render: (b) => b.id },
   { key: 'date', header: 'Date', render: (b) => b.bookingDate },
   { key: 'type', header: 'Type', render: (b) => b.bookingType },
   { key: 'status', header: 'Status', render: (b) => <Badge tone={statusTone(b.status)}>{b.status}</Badge> },

@@ -26,7 +26,7 @@ function renderHistory() {
 describe('History', () => {
   it('lists the user bookings', async () => {
     renderHistory();
-    expect(await screen.findByText('bk-1')).toBeInTheDocument();
+    expect(await screen.findByText('2026-08-03')).toBeInTheDocument();
     expect(screen.getByText('WAITLISTED')).toBeInTheDocument();
   });
 
@@ -34,13 +34,13 @@ describe('History', () => {
     server.use(
       http.get('*/api/v1/me/bookings', ({ request }) => {
         const page = Number(new URL(request.url).searchParams.get('page') ?? '1');
-        const row = { id: `p${page}`, bookingDate: '2026-08-03', bookingType: 'PRIMARY', status: 'ALLOCATED', carpoolMemberCount: 1, createdAt: '2026-07-29T08:00:00.000Z' };
+        const row = { id: `id-${page}`, bookingDate: page === 1 ? '2030-01-01' : '2030-02-02', bookingType: 'PRIMARY', status: 'ALLOCATED', carpoolMemberCount: 1, createdAt: '2026-07-29T08:00:00.000Z' };
         return HttpResponse.json({ success: true, data: [row], meta: { page, pageSize: 1, total: 2 } });
       }),
     );
     renderHistory();
-    expect(await screen.findByText('p1')).toBeInTheDocument();
+    expect(await screen.findByText('2030-01-01')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /next/i }));
-    await waitFor(() => expect(screen.getByText('p2')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('2030-02-02')).toBeInTheDocument());
   });
 });
