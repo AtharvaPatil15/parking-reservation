@@ -46,24 +46,24 @@ shows `distanceKm`.
 - **AC:** client validation mirrors API (cutoff countdown disables submit; carpool bounds); submits to
   `POST /bookings`; success + error states.
 - **Evidence:** `frontend/src/features/user/BookingForm.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (RHF+zod BookingForm at /app/book — bookable-weekday date, vehicle, carpool 1–4 + member emails (useFieldArray), special requirement; shows distanceKm from /me; live cutoff countdown from /dashboard/user disables submit; POST /bookings with 409/422 mapped errors + success state; useMe/useUserDashboard hooks + MSW; RTL tests)
 
 #### P5-07 · User — BookingStatus + score breakdown · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** shows status, allocated slot, and the distance/carpool/final **score breakdown**; release button (MVP).
 - **Evidence:** `frontend/src/features/user/BookingStatus.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (BookingStatus at /app/booking/:id — status badge, allocated slot, distance/carpool/final score breakdown, carpool members; MVP release flow (modal → POST release → toast + invalidate); useBooking/useReleaseBooking + MSW; RTL tests incl. 404 + not-scored)
 
 #### P5-08 · User — Dashboard + History · Owner: Atharva · Tag: DEMO(dash)/MVP(history) · Deps: P5-04
 - **AC:** dashboard shows upcoming booking + status + cutoff countdown; history paged (MVP).
-- **Evidence:** `frontend/src/features/user/{Dashboard,History}.tsx`.
-- **Status:** ☐
+- **Evidence:** `frontend/src/features/user/{UserDashboard,History}.tsx`.
+- **Status:** ☑ (UserDashboard at /app — upcoming booking + status badge + live cutoff countdown + CTAs/empty state; paged History at /app/history via useMyBookings/unwrapPage; shared statusTone; temporary ComponentGallery removed; RTL tests)
 
 #### P5-09 · Super Admin — AllocationRun + Breakdown table · Owner: Atharva · Tag: DEMO · Deps: P5-04
 The demo centerpiece.
 - **AC:** date picker + **"Run primary allocation"** button; ranked table (rank, user, distance, people,
   distance/carpool/final scores, outcome, slot); loading/empty/error states.
 - **Evidence:** `frontend/src/features/superadmin/AllocationRun.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (Super Admin AllocationRun at /admin — date picker + "Run primary allocation"; ranked breakdown Table (rank/user/distance/people/distance+carpool+final scores/outcome/slot) with rank-1 accent highlight; loading/empty/error states; reuses useRunPrimaryAllocation/useAllocationBreakdown + MSW; RTL tests)
 
 #### P5-10 · Super Admin — ConfigTimings · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** edit all window times + weights with inline validation (ordering, ranges); PATCHes `/config`; success toast.

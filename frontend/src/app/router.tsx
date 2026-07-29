@@ -7,8 +7,13 @@ import { NotFound } from './NotFound';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { AdminShell } from '../features/superadmin/AdminShell';
+import { AllocationRun } from '../features/superadmin/AllocationRun';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { UserShell } from '../features/user/UserShell';
+import { UserDashboard } from '../features/user/UserDashboard';
+import { History } from '../features/user/History';
+import { BookingForm } from '../features/user/BookingForm';
+import { BookingStatus } from '../features/user/BookingStatus';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
@@ -25,7 +30,9 @@ export function AppRouter() {
 
       <Route element={<RequireRole role="SUPER_ADMIN" />}>
         <Route element={<AppShell />}>
-          <Route path="/admin/*" element={<AdminShell />} />
+          <Route path="/admin" element={<AdminShell />}>
+            <Route index element={<AllocationRun />} />
+          </Route>
         </Route>
       </Route>
 
@@ -37,7 +44,12 @@ export function AppRouter() {
 
       <Route element={<RequireRole role="USER" />}>
         <Route element={<AppShell />}>
-          <Route path="/app/*" element={<UserShell />} />
+          <Route path="/app" element={<UserShell />}>
+            <Route index element={<UserDashboard />} />
+            <Route path="book" element={<BookingForm />} />
+            <Route path="booking/:id" element={<BookingStatus />} />
+            <Route path="history" element={<History />} />
+          </Route>
         </Route>
       </Route>
 

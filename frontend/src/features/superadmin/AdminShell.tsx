@@ -1,14 +1,11 @@
-import { Card } from '../../components';
-import { useAuth } from '../../lib/auth';
+import { Outlet } from 'react-router-dom';
 
+/** Super-admin area layout. Keeps the "Super Admin" heading; content routes through the Outlet. */
 export function AdminShell() {
-  const { user } = useAuth();
   return (
-    <Card title="Super Admin">
-      <p className="text-text-muted">
-        Signed in as {user?.fullName}. Allocation run, config timings, and management screens land in
-        P5-09–P5-11.
-      </p>
-    </Card>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Super Admin</h1>
+      <Outlet />
+    </div>
   );
 }
