@@ -12,6 +12,14 @@ function roleForEmail(email: string): 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'USER' {
   return 'USER';
 }
 
+const configSeed: { key: string; value: string; valueType: string }[] = [
+  { key: 'primary.window.open', value: '18:00', valueType: 'TIME' },
+  { key: 'primary.window.cutoff', value: '21:00', valueType: 'TIME' },
+  { key: 'scoring.distanceWeight', value: '0.6', valueType: 'NUMBER' },
+  { key: 'scoring.carpoolWeight', value: '0.4', valueType: 'NUMBER' },
+  { key: 'carpool.maxPeople', value: '4', valueType: 'NUMBER' },
+];
+
 /** Coherent, deterministic handlers for the hero flow (override the generated random ones). */
 const hero = [
   http.post(`${baseURL}/auth/login`, async ({ request }) => {
@@ -73,18 +81,10 @@ const hero = [
       ],
     }),
   ),
-  http.get(`${baseURL}/config`, () =>
-    ok([
-      { key: 'primary.window.open', value: '18:00', valueType: 'TIME' },
-      { key: 'primary.window.cutoff', value: '21:00', valueType: 'TIME' },
-      { key: 'scoring.distanceWeight', value: '0.6', valueType: 'NUMBER' },
-      { key: 'scoring.carpoolWeight', value: '0.4', valueType: 'NUMBER' },
-      { key: 'carpool.maxPeople', value: '4', valueType: 'NUMBER' },
-    ]),
-  ),
+  http.get(`${baseURL}/config`, () => ok(configSeed)),
   http.patch(`${baseURL}/config`, async ({ request }) => {
     const patch = (await request.json().catch(() => ({}))) as Record<string, string>;
-    return ok(Object.entries(patch).map(([key, value]) => ({ key, value, valueType: 'STRING' })));
+    return ok(configSeed.map((e) => (patch[e.key] !== undefined ? { ...e, value: patch[e.key] } : e)));
   }),
 ];
 
