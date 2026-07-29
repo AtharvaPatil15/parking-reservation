@@ -26,3 +26,17 @@ if (!window.matchMedia) {
 server.listen({ onUnhandledRequest: 'bypass' });
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+
+// Reset the API client's module-level singletons between tests — otherwise a token set
+// (or an unauthorized handler registered) by one test can leak into an unrelated test.
+// Imported dynamically, *after* server.listen() above, so this module's own top-level
+// `createClient()` call (in ../api/client) doesn't run — and capture the pre-MSW
+// `globalThis.fetch` — before MSW has patched it. A static import here would resolve
+// before this file's own `server.listen()` statement runs (import resolution always
+// precedes a module's other top-level statements), reintroducing the bug that eager
+// `listen()` above was written to avoid.
+const { setAccessToken, registerUnauthorizedHandler } = await import('../api/client');
+afterEach(() => {
+  setAccessToken(null);
+  registerUnauthorizedHandler(null);
+});
