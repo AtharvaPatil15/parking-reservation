@@ -80,24 +80,24 @@ Write `AuditLog` on key mutations (approvals, blocks, quota, config, allocation,
 Pure `score({distanceKm, people, weights, caps})` per decisions §3. **Written first, no DB.**
 - **AC:** `distanceScore=(min(d,40)/40)*100`; `carpoolScore=((min(p,4)-1)/3)*100`; `final=0.6*d+0.4*c`; unit
   tests cover distance bands (0/10/20/30/40+), people 1–4, weighting, and all 5 tie-breakers.
-- **Evidence:** `backend/src/modules/allocation/score.ts`; `backend/tests/allocation.score.test.ts` (passing).
-- **Status:** ☐
+- **Evidence:** `backend/src/modules/allocation/score.ts`; `backend/tests/allocation.score.test.ts` (37 tests passing).
+- **Status:** ☑ (merged to master, PR #9. Pure `score()` + `distanceScore`/`carpoolScore` + `rankCandidates` covering all 5 tie-breakers; the step-5 random draw is surfaced/replayable for AllocationScoreBreakdown. Vitest wired.)
 
 #### P4-12 · Booking module · Owner: Prithviraj · Tag: DEMO · Deps: P4-06 · (stub P4-08 reads)
 Create/status now; edit/cancel/release MVP. Snapshots `travelDistanceKm`; records carpool members; dedupe.
 - **AC:** `POST /bookings` rejects non-weekday & post-cutoff (`422 WINDOW_CLOSED`), `carpoolPeople` 1–maxPeople,
   duplicate same-type/date (`409`); `GET /bookings/:id` returns status + slot + breakdown; only same-company
   employee members flagged scored (F4).
-- **Evidence:** `backend/src/modules/bookings/*`.
-- **Status:** ☐
+- **Evidence:** `backend/src/modules/bookings/*` (incl. pure `bookings.time.ts` + `tests/bookings.time.test.ts`).
+- **Status:** ☑ (merged to master, PR #11. `POST /bookings` + `GET /bookings/:id`; weekday/cutoff (F1/F2)→422, cap→400, dup→409; distance snapshot (F6); same-company scoring flag (F4). Live login→book→status verified on seeded DB.)
 
 #### P4-13 · Allocation service (transactional) + run endpoint · Owner: Prithviraj · Tag: DEMO · Deps: P4-11,P4-12
 Implements the 10-step run (spec §4.5): idempotent `AllocationRun`, per-company quota-aware assignment,
 tie-breakers, `SELECT … FOR UPDATE`, persist `ParkingAllocation` + `AllocationScoreBreakdown`, waitlist.
 - **AC:** `POST /allocation/primary/run` is idempotent per `(runType,bookingDate)`; never double-assigns a slot
   (unique `(slotId,bookingDate)` backstop); `GET …/breakdown` returns ranked results with per-factor scores.
-- **Evidence:** `backend/src/modules/allocation/service.ts`; `backend/src/modules/allocation/run.ts`.
-- **Status:** ☐
+- **Evidence:** `backend/src/modules/allocation/{allocation.service,allocation.controller,allocation.routes,allocation.schema}.ts` (run state machine folded into `allocation.service.ts`).
+- **Status:** ☑ (branch `prithviraj/P4-13-allocation-run`; full `tsc` typecheck clean. 10-step run, idempotent per (runType,bookingDate), per-company quota-aware assignment, tie-breakers + persisted random draw, `ParkingAllocation` + `AllocationScoreBreakdown`, waitlist. Concurrency safety via **SERIALIZABLE txn + unique `(slotId,bookingDate)` backstop** rather than explicit `SELECT … FOR UPDATE`. Live E2E on seeded DB: 21/21 checks — quota-limited run (block→available 2) gives 2 ALLOCATED / 1 WAITLISTED, per-factor scores match the formula (Sara 57.15 / Rahul 37.2 / Aditi 18.6), ranked breakdown, idempotent re-run. PR pending.)
 
 #### P4-14 · Release → own-company waitlist reallocation · Owner: Prithviraj · Tag: MVP · Deps: P4-13
 On release post-primary, promote the highest-score **same-company** waitlisted user; else (common pool — Later).
