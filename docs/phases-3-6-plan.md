@@ -70,7 +70,7 @@ Legend: **R** = required role. `SA`=SUPER_ADMIN, `CA`=COMPANY_ADMIN, `U`=USER, `
 ### Auth
 | Method & path | R | Purpose | Tag |
 |---|---|---|---|
-| `POST /auth/register` | — | Create a `PENDING` user under an active company | [MVP] |
+| `POST /auth/register` | — | Create a `PENDING` user under an active company | [MVP] → building now (P4-20, Prithviraj) |
 | `POST /auth/verify-email` | — | Confirm email token | [MVP] |
 | `POST /auth/login` | — | Issue access + refresh | **[DEMO]** |
 | `POST /auth/refresh` | — | Rotate refresh, issue new access | [MVP] |

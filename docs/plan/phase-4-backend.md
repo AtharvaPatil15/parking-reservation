@@ -52,7 +52,7 @@ Seeded-user login → short-lived access JWT (refresh-cookie rotation is MVP). A
 Company CRUD/status; company-user list, approval (`APPROVE|REJECT`), status, admin assignment.
 - **AC:** endpoints match `openapi.yaml`; approval flips `PENDING→ACTIVE|REJECTED`; tenant-scoped.
 - **Evidence:** `backend/src/modules/{companies,users}/*`.
-- **Status:** ☑ (CRUD/status + public `/active` + `/:id/users` + approval/status + admin-assign; SA-only & CA-own-tenant verified. Note: registration `POST /auth/register` still MVP/unbuilt — users are seeded.)
+- **Status:** ☑ (CRUD/status + public `/active` + `/:id/users` + approval/status + admin-assign; SA-only & CA-own-tenant verified. Registration `POST /auth/register` is now tracked as **P4-20** (Prithviraj, in progress); seeded users still cover the hero demo.)
 
 #### P4-08 · Slots + Quota + Blocking modules · Owner: Devashish · Tag: DEMO(quota)/MVP · Deps: P4-06
 Slot CRUD; effective-dated `CompanySlotAllocation`; `SlotBlock` (**SA any / CA own / USER forbidden**).
@@ -134,6 +134,21 @@ Supertest + throwaway Postgres.
   isolation negative test (Company A can't read Company B) passes.
 - **Evidence:** `backend/tests/hero.integration.test.ts` + `backend/tests/integration/*` (Supertest + throwaway `parking_poc_test`).
 - **Status:** ☑ (branch `prithviraj/P4-19-integration-tests`; 5 integration tests pass. Throwaway test DB provisioned by a Vitest globalSetup — DROP+CREATE `parking_poc_test` then additive `db push` + seed (never the dev DB); unit suite kept DB-free via a separate config. Covers: hero path (login→book→run→status→breakdown, scores verified), quota-limited waitlisting, two concurrent runs never double-assign a slot + a direct `(slotId,bookingDate)` unique-backstop assertion, and tenant isolation (cross-tenant read→404, SA→200).)
+
+#### P4-20 · Auth: user registration (`POST /auth/register`) · Owner: Prithviraj · Tag: MVP (pulled forward for the demo) · Deps: P4-05, P4-07
+Implements the registration endpoint the frontend RegisterPage (P5-15, PR #15) already calls, so sign-up works
+end-to-end instead of only against mocks. Creates a `PENDING` user under an **ACTIVE** company; the Company
+Admin approves later via the existing P4-07 flow. `GET /companies/active` (public id+name list for the company
+dropdown) already exists from P4-07.
+- **AC:** `POST /auth/register` per openapi `RegisterRequest` — required fields present; valid email / contact /
+  PIN; `distanceKm` optional, range 0–200 (F5/D6); `password` ≥ `password.minLength` (D8) and `confirmPassword`
+  matches; referenced company must exist **and** be ACTIVE (else `400`/`404`); duplicate email → `409 CONFLICT`;
+  Argon2id hash; user created `status=PENDING`, `emailVerified=false`, USER role linked. Returns `201` with the
+  `UserProfile` (no token). Public route (no auth); audited.
+- **Evidence:** `backend/src/modules/auth/auth.{routes,controller,service,schema}.ts`.
+- **Status:** ☐ (Prithviraj — in progress)
+- **Notes:** email verification (`/auth/verify-email`) stays [Later]; the account is usable only after CA
+  approval. Confirm whether this is formally promoted to **[DEMO]** scope for 30 Jul, or remains MVP built early.
 
 ## Phase Definition of Done
 DEMO tasks ☑: login, config, booking create/status, allocation run + breakdown, dashboards, and the hero
