@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components';
 import { useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
-import { formatCountdown } from './bookingSchema';
+import { formatCountdown } from '../../lib/dates';
 import { statusTone } from './statusTone';
 
 export function UserDashboard() {

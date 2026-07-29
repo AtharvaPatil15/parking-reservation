@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { afterAll, afterEach } from 'vitest';
 import { server } from '../mocks/node';
+import { resetMockData } from '../mocks/handlers';
 
 // jsdom doesn't implement matchMedia; stub it so components that read the OS theme
 // preference render in tests.
@@ -25,6 +26,9 @@ if (!window.matchMedia) {
 // pre-MSW fetch at module-load time and every request bypasses the mock server.
 server.listen({ onUnhandledRequest: 'bypass' });
 afterEach(() => server.resetHandlers());
+// Restore mutable mock state (bookings/config/companies/... mutated by stateful
+// handlers) so one test's release/PATCH/approval can't leak into the next.
+afterEach(() => resetMockData());
 afterAll(() => server.close());
 
 // Reset the API client's module-level singletons between tests — otherwise a token set

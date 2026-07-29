@@ -5,7 +5,8 @@ import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../c
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
-import { VEHICLE_OPTIONS, bookingSchema, formatCountdown, nextBookableWeekday, type BookingFormValues } from './bookingSchema';
+import { VEHICLE_OPTIONS, bookingSchema, type BookingFormValues } from './bookingSchema';
+import { formatCountdown, nextBookableWeekday } from '../../lib/dates';
 
 export function BookingForm() {
   const me = useMe();

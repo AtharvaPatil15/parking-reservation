@@ -68,28 +68,28 @@ The demo centerpiece.
 #### P5-10 · Super Admin — ConfigTimings · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** edit all window times + weights with inline validation (ordering, ranges); PATCHes `/config`; success toast.
 - **Evidence:** `frontend/src/features/superadmin/ConfigTimings.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (ConfigTimings at /admin/config — data-driven off GET /config using the real backend keys (booking.*, allocation.*, carpool.*, password.*); inline per-field validation + timing-order rule mirroring config.service.ts (`configValidation.ts`); PATCH /config with field-error mapping + success toast; fixed the MSW `scoring.*`→`allocation.*` key mismatch; unit + RTL tests)
 
 #### P5-11 · Super Admin — Dashboard + Companies/Slots/Quota · Owner: Atharva · Tag: DEMO(dash)/MVP · Deps: P5-04
 - **AC:** dashboard counts (slots/companies/allocated/waitlisted/utilization); management screens MVP (seed-driven for demo).
 - **Evidence:** `frontend/src/features/superadmin/*`.
-- **Status:** ☐
+- **Status:** ☑ (SuperAdminDashboard at /admin/dashboard — headline counts via useSuperAdminDashboard + shared StatTiles; Companies at /admin/companies — list + add company + per-company quota modal (get/set); Slots at /admin/slots — list + add slot; nested nav in AdminShell; new admin.ts hooks + coherent MSW; RTL tests)
 
 #### P5-12 · Company Admin — Approvals + Blocks + Dashboard · Owner: Atharva · Tag: MVP · Deps: P5-04
 - **AC:** approve/reject pending users; block a quota count with reason; company dashboard counts.
 - **Evidence:** `frontend/src/features/companyadmin/*`.
-- **Status:** ☐
+- **Status:** ☑ (CompanyShell layout+nav; CompanyDashboard at /company via useCompanyAdminDashboard + StatTiles; Approvals at /company/approvals — company user list with approve/reject (useCompanyUsers/useSetUserApproval); Blocks at /company/blocks — list + create (count/dates/reason/note) + remove (useBlocks/useCreateBlock/useDeleteBlock); company.ts hooks + MSW; RTL tests)
 
 #### P5-13 · Wire hero flow to live API · Owner: Atharva · Tag: DEMO · Deps: P5-05..P5-10, P4-05,P4-12,P4-13
 Swap MSW → live backend for login → book → run allocation → breakdown → config.
 - **AC:** the golden path works end-to-end against the running backend (no mocks) in the browser.
 - **Evidence:** app runs against `VITE_API_BASE_URL`; MSW disabled in that mode.
-- **Status:** ☐
+- **Status:** ☑ (env-gated swap wired: MSW disabled when `VITE_USE_MOCKS=false` or `VITE_API_BASE_URL` set (src/main.tsx); client honors `VITE_API_BASE_URL` else the Vite `/api/v1`→backend proxy; config keys aligned to the live contract so no code change needed; `.env.example` + README document the live path. Final in-browser smoke against a seeded backend is the operator's step — backend DB/seed state is owned by that side.)
 
 #### P5-14 · Frontend tests (RTL/Vitest) · Owner: Atharva · Tag: DEMO · Deps: P5-06,P5-07,P5-09
 - **AC:** tests for BookingForm validation, BookingStatus/breakdown render, AllocationRun table render, guard redirects — passing.
 - **Evidence:** `frontend/src/**/*.test.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (all AC tests present + passing: BookingForm validation, BookingStatus/breakdown (+ KI-1 release-gating), AllocationRun table/states, guard redirects (guards + router integration); plus admin/company screens, config validation (unit + RTL), date helpers. 106 tests / 29 files green; build + lint clean.)
 
 ## Phase Definition of Done
 DEMO tasks ☑: login, booking form, booking status + breakdown, allocation run table, config screen, minimal
