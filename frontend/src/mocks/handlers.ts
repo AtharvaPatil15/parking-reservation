@@ -4,6 +4,7 @@ import type { components } from '../api/types';
 
 type LoginResponseData = components['schemas']['LoginResponseData'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
+type BookingDetail = components['schemas']['BookingDetail'];
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type ConfigEntry = components['schemas']['ConfigEntry'];
@@ -65,6 +66,48 @@ const hero = [
       201,
     );
   }),
+  http.get(`${baseURL}/bookings/:id`, ({ params }) =>
+    ok<BookingDetail>({
+      id: String(params.id),
+      bookingDate: '2026-08-03',
+      bookingType: 'PRIMARY',
+      status: 'ALLOCATED',
+      travelDistanceKm: 8.5,
+      vehicleType: 'CAR',
+      vehicleNumber: 'KA-01-1234',
+      carpoolMemberCount: 2,
+      specialRequirement: null,
+      allocationScore: 47.2,
+      allocatedSlotNumber: 'A-12',
+      submittedAt: '2026-07-29T09:00:00.000Z',
+      createdAt: '2026-07-29T08:00:00.000Z',
+      carpoolMembers: [
+        { id: 'm1', name: 'Sam Lee', employeeEmail: 'sam@acme.test', sameCompany: true, isScored: true },
+      ],
+      scoreBreakdown: {
+        distanceKm: 8.5, people: 2, distanceScore: 42.5, carpoolScore: 33.3,
+        distanceWeight: 0.6, carpoolWeight: 0.4, finalScore: 38.8,
+      },
+    }),
+  ),
+  http.post(`${baseURL}/bookings/:id/release`, ({ params }) =>
+    ok<BookingDetail>({
+      id: String(params.id),
+      bookingDate: '2026-08-03',
+      bookingType: 'PRIMARY',
+      status: 'RELEASED',
+      travelDistanceKm: 8.5,
+      vehicleType: 'CAR',
+      vehicleNumber: 'KA-01-1234',
+      carpoolMemberCount: 2,
+      specialRequirement: null,
+      allocationScore: 47.2,
+      allocatedSlotNumber: null,
+      submittedAt: '2026-07-29T09:00:00.000Z',
+      createdAt: '2026-07-29T08:00:00.000Z',
+      carpoolMembers: [],
+    }),
+  ),
   http.post(`${baseURL}/allocation/primary/run`, () =>
     ok<AllocationRunSummary>({
       id: 'run-demo',
