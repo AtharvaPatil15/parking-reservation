@@ -17,10 +17,24 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+type UnauthorizedHandler = () => void;
+let onUnauthorized: UnauthorizedHandler | null = null;
+
+/** Register a callback fired when an authenticated request returns 401 (auth endpoints excluded). */
+export function registerUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
+  onUnauthorized = fn;
+}
+
 const authMiddleware: Middleware = {
   async onRequest({ request }) {
     if (accessToken) request.headers.set('Authorization', `Bearer ${accessToken}`);
     return request;
+  },
+  async onResponse({ request, response }) {
+    if (response.status === 401 && !new URL(request.url).pathname.includes('/auth/')) {
+      onUnauthorized?.();
+    }
+    return response;
   },
 };
 

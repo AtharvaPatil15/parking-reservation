@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { registerUnauthorizedHandler, setAccessToken } from '../api/client';
 import type { Role } from './roles';
 
 export interface AuthUser {
@@ -51,6 +52,17 @@ export function AuthProvider({
     }),
     [session, login, logout],
   );
+
+  // Mirror the in-memory token into the API client so requests carry Authorization.
+  useEffect(() => {
+    setAccessToken(session?.accessToken ?? null);
+  }, [session]);
+
+  // A 401 on any authenticated request logs the user out (guards then redirect to /login).
+  useEffect(() => {
+    registerUnauthorizedHandler(logout);
+    return () => registerUnauthorizedHandler(null);
+  }, [logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
