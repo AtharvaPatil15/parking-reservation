@@ -9,7 +9,8 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { AdminShell } from '../features/superadmin/AdminShell';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { UserShell } from '../features/user/UserShell';
-import { ComponentGallery } from '../features/dev/ComponentGallery';
+import { UserDashboard } from '../features/user/UserDashboard';
+import { History } from '../features/user/History';
 import { BookingForm } from '../features/user/BookingForm';
 import { BookingStatus } from '../features/user/BookingStatus';
 
@@ -41,9 +42,10 @@ export function AppRouter() {
       <Route element={<RequireRole role="USER" />}>
         <Route element={<AppShell />}>
           <Route path="/app" element={<UserShell />}>
-            <Route index element={<ComponentGallery />} />
+            <Route index element={<UserDashboard />} />
             <Route path="book" element={<BookingForm />} />
             <Route path="booking/:id" element={<BookingStatus />} />
+            <Route path="history" element={<History />} />
           </Route>
         </Route>
       </Route>

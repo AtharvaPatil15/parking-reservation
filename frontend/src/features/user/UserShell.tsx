@@ -15,6 +15,9 @@ export function UserShell() {
         <NavLink to="/app/book" className={linkClass}>
           Book a slot
         </NavLink>
+        <NavLink to="/app/history" className={linkClass}>
+          History
+        </NavLink>
       </nav>
       <Outlet />
     </div>

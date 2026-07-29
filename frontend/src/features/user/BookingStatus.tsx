@@ -1,26 +1,8 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Badge, Button, Card, ErrorState, LoadingState, Modal, useToast, type BadgeTone } from '../../components';
+import { Badge, Button, Card, ErrorState, LoadingState, Modal, useToast } from '../../components';
 import { useBooking, useReleaseBooking } from '../../api/hooks';
-import type { components } from '../../api/types';
-
-type BookingStatusValue = components['schemas']['BookingStatus'];
-
-function toneFor(status: BookingStatusValue): BadgeTone | undefined {
-  switch (status) {
-    case 'ALLOCATED':
-      return 'success';
-    case 'WAITLISTED':
-      return 'warning';
-    case 'REJECTED':
-    case 'EXPIRED':
-      return 'danger';
-    case 'SUBMITTED':
-      return 'primary';
-    default:
-      return undefined; // DRAFT / CANCELLED / RELEASED → neutral
-  }
-}
+import { statusTone } from './statusTone';
 
 function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
@@ -74,7 +56,7 @@ export function BookingStatus() {
             {b.bookingDate} · {b.bookingType}
           </p>
         </div>
-        <Badge tone={toneFor(b.status)}>{b.status}</Badge>
+        <Badge tone={statusTone(b.status)}>{b.status}</Badge>
       </div>
 
       <Card title="Allocation">

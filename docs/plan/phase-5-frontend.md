@@ -56,7 +56,7 @@ shows `distanceKm`.
 #### P5-08 · User — Dashboard + History · Owner: Atharva · Tag: DEMO(dash)/MVP(history) · Deps: P5-04
 - **AC:** dashboard shows upcoming booking + status + cutoff countdown; history paged (MVP).
 - **Evidence:** `frontend/src/features/user/{Dashboard,History}.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (UserDashboard at /app — upcoming booking + status badge + live cutoff countdown + CTAs/empty state; paged History at /app/history via useMyBookings/unwrapPage; shared statusTone; temporary ComponentGallery removed; RTL tests)
 
 #### P5-09 · Super Admin — AllocationRun + Breakdown table · Owner: Atharva · Tag: DEMO · Deps: P5-04
 The demo centerpiece.
