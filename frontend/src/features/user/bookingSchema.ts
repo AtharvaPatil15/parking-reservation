@@ -14,7 +14,8 @@ export function isBookableWeekday(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  if (Number.isNaN(date.getTime())) return false;
+  // Reject dates JS normalized (e.g. 2026-02-31 → Mar 3): components must round-trip.
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return false;
   const day = date.getDay(); // 0=Sun..6=Sat
   if (day === 0 || day === 6) return false;
   const today = new Date();
@@ -41,20 +42,25 @@ export function formatCountdown(totalSeconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 
-export const bookingSchema = z.object({
-  bookingDate: z.string().min(1, 'Date is required.').refine(isBookableWeekday, 'Pick a weekday (Mon–Fri), today or later.'),
-  vehicleType: z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE', 'OTHER']).optional().or(z.literal('')),
-  vehicleNumber: z.string().optional(),
-  carpoolPeople: z.coerce.number({ invalid_type_error: 'Enter a number.' }).int('Whole number.').min(1, 'At least 1 person.').max(4, 'Up to 4 people.'),
-  specialRequirement: z.string().optional(),
-  carpoolMembers: z
-    .array(
-      z.object({
-        name: z.string().min(1, 'Name is required.'),
-        employeeEmail: z.string().email('Enter a valid email.').optional().or(z.literal('')),
-      }),
-    )
-    .optional(),
-});
+export const bookingSchema = z
+  .object({
+    bookingDate: z.string().min(1, 'Date is required.').refine(isBookableWeekday, 'Pick a weekday (Mon–Fri), today or later.'),
+    vehicleType: z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE', 'OTHER']).optional().or(z.literal('')),
+    vehicleNumber: z.string().optional(),
+    carpoolPeople: z.coerce.number({ invalid_type_error: 'Enter a number.' }).int('Whole number.').min(1, 'At least 1 person.').max(4, 'Up to 4 people.'),
+    specialRequirement: z.string().optional(),
+    carpoolMembers: z
+      .array(
+        z.object({
+          name: z.string().min(1, 'Name is required.'),
+          employeeEmail: z.string().email('Enter a valid email.').optional().or(z.literal('')),
+        }),
+      )
+      .optional(),
+  })
+  .refine((v) => !v.carpoolMembers || v.carpoolMembers.length <= v.carpoolPeople - 1, {
+    path: ['carpoolMembers'],
+    message: 'Too many carpool members for the number of people.',
+  });
 
 export type BookingFormValues = z.input<typeof bookingSchema>;

@@ -48,7 +48,7 @@ export function BookingForm() {
     ? createBooking.error instanceof ApiError
       ? createBooking.error.status === 409
         ? 'You already have a request for this date.'
-        : createBooking.error.status === 422 || createBooking.error.code === 'WINDOW_CLOSED'
+        : createBooking.error.code === 'WINDOW_CLOSED'
           ? 'The booking window is closed for this date.'
           : createBooking.error.message
       : 'Something went wrong. Please try again.'

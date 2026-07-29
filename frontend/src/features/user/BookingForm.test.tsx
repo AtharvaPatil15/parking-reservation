@@ -90,6 +90,20 @@ describe('BookingForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/booking window is closed/i);
   });
 
+  it('falls back to the server message for a 422 that is not WINDOW_CLOSED', async () => {
+    server.use(
+      http.post('*/api/v1/bookings', () =>
+        HttpResponse.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Distance missing' } }, { status: 422 }),
+      ),
+    );
+    renderForm();
+    const date = await screen.findByLabelText(/^date$/i);
+    await userEvent.clear(date);
+    await userEvent.type(date, '2099-01-05');
+    await userEvent.click(screen.getByRole('button', { name: /submit request/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/distance missing/i);
+  });
+
   it('falls back to the server message for an unmapped error', async () => {
     server.use(
       http.post('*/api/v1/bookings', () =>

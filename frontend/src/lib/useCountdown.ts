@@ -9,7 +9,17 @@ export function useCountdown(initialSeconds: number | null | undefined): number 
       return;
     }
     setSecondsLeft(initialSeconds);
-    const t = setInterval(() => setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1))), 1000);
+    if (initialSeconds <= 0) return;
+    const t = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s == null) return s;
+        if (s <= 1) {
+          clearInterval(t);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
     return () => clearInterval(t);
   }, [initialSeconds]);
   return secondsLeft;
