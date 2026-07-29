@@ -91,7 +91,16 @@ Swap MSW → live backend for login → book → run allocation → breakdown �
 - **Evidence:** `frontend/src/**/*.test.tsx`.
 - **Status:** ☑ (all AC tests present + passing: BookingForm validation, BookingStatus/breakdown (+ KI-1 release-gating), AllocationRun table/states, guard redirects (guards + router integration); plus admin/company screens, config validation (unit + RTL), date helpers. 106 tests / 29 files green; build + lint clean.)
 
+#### P5-15 · Registration page (form + `useRegister` + active-companies dropdown) · Owner: Atharva · Tag: **DEMO** · Deps: P5-04, P4-20
+Registration form (`registerSchema`, `useRegister`, `useActiveCompanies`) → `POST /auth/register` creating a
+PENDING user; linked from the login page. Works against MSW today; **end-to-end (live) depends on backend P4-20**.
+- **AC:** client validation mirrors `RegisterRequest` (email, contact/PIN, `distanceKm` 0–200, password + confirm);
+  on success routes to a pending/login state; `409` (duplicate email) + field errors surfaced.
+- **Evidence:** `frontend/src/features/auth/{RegisterPage.tsx,registerSchema.ts}`, `frontend/src/api/hooks/auth.ts`.
+- **Status:** ☑ (shipped in PR #15; the live sign-up path is gated on backend **P4-20** — until then it only works under mocks).
+
 ## Phase Definition of Done
-DEMO tasks ☑: login, booking form, booking status + breakdown, allocation run table, config screen, minimal
-dashboards — all wired to the live API and covered by the listed RTL tests. Company-Admin screens + history
+DEMO tasks ☑: login, **registration (P5-15, live via P4-20)**, booking form, booking status + breakdown,
+allocation run table, config screen, minimal dashboards — all wired to the live API and covered by the listed
+RTL tests. Company-Admin screens + history
 may remain ☐ (MVP).

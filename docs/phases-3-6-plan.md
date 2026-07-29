@@ -70,7 +70,7 @@ Legend: **R** = required role. `SA`=SUPER_ADMIN, `CA`=COMPANY_ADMIN, `U`=USER, `
 ### Auth
 | Method & path | R | Purpose | Tag |
 |---|---|---|---|
-| `POST /auth/register` | — | Create a `PENDING` user under an active company | [MVP] |
+| `POST /auth/register` | — | Create a `PENDING` user under an active company | **[DEMO]** (P4-20, Prithviraj) |
 | `POST /auth/verify-email` | — | Confirm email token | [MVP] |
 | `POST /auth/login` | — | Issue access + refresh | **[DEMO]** |
 | `POST /auth/refresh` | — | Rotate refresh, issue new access | [MVP] |
@@ -245,7 +245,7 @@ backend/
 ## 4.4 Modules
 | Module | Responsibility | Tag |
 |--------|----------------|-----|
-| **Auth** | login + JWT issue/verify; register/verify/refresh-rotation/logout/password; Argon2id hashing | login **[DEMO]**, rest [MVP] |
+| **Auth** | login + JWT issue/verify; register/verify/refresh-rotation/logout/password; Argon2id hashing | login + register **[DEMO]** (register = P4-20), rest [MVP] |
 | **RBAC + tenant** | `requireRole`, `scopeToTenant` | **[DEMO]** |
 | **Companies** | CRUD + status; active-company list for registration | [MVP] |
 | **Users** (company) | list, approval, activate/deactivate, admin assignment | [MVP] |

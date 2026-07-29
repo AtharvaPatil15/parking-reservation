@@ -4,7 +4,13 @@ import { prisma } from '../../lib/prisma';
 import { signAccessToken } from '../../lib/jwt';
 import { pickPrimaryRole, type Role } from '../../lib/roles';
 import { env } from '../../config/env';
-import { UnauthenticatedError, ForbiddenError } from '../../lib/errors';
+import { UnauthenticatedError, ForbiddenError, ValidationError, ConflictError } from '../../lib/errors';
+import { isUniqueViolation } from '../../lib/prismaErrors';
+import { getNumber } from '../../config/systemConfig';
+import { recordAudit } from '../../lib/audit';
+import type { RegisterInput } from './auth.schema';
+
+const DEFAULT_MIN_PASSWORD_LENGTH = 8;
 
 const hashToken = (raw: string): string => createHash('sha256').update(raw).digest('hex');
 
@@ -66,6 +72,64 @@ export async function login(
       companyName: user.company.name,
     },
   };
+}
+
+/**
+ * Register a new company user (P4-20). Creates a PENDING account under an ACTIVE company; the
+ * Company Admin approves it later (P4-07). Returns the created user (with company + roles) — no
+ * token, since a PENDING user cannot log in until approved. Contract documents 400/409 only, so
+ * company problems surface as 400 (not 404).
+ */
+export async function register(input: RegisterInput) {
+  // Company must exist and be ACTIVE.
+  const company = await prisma.company.findFirst({ where: { id: input.companyId, deletedAt: null } });
+  if (!company || company.status !== 'ACTIVE') {
+    throw new ValidationError('Request validation failed', [
+      { field: 'companyId', message: 'Company not found or not active' },
+    ]);
+  }
+
+  // Password strength — config-driven (D8).
+  const minLength = (await getNumber('password.minLength')) ?? DEFAULT_MIN_PASSWORD_LENGTH;
+  if (input.password.length < minLength) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'password', message: `Password must be at least ${minLength} characters` },
+    ]);
+  }
+
+  // Reject a duplicate (active) email up front for a clean 409; the DB unique is the backstop.
+  const existing = await prisma.user.findFirst({ where: { email: input.email, deletedAt: null } });
+  if (existing) throw new ConflictError('An account with this email already exists');
+
+  const passwordHash = await argon2.hash(input.password);
+  try {
+    const user = await prisma.user.create({
+      data: {
+        fullName: input.fullName,
+        email: input.email,
+        contactNumber: input.contactNumber,
+        address: input.address,
+        pinCode: input.pinCode,
+        passwordHash,
+        status: 'PENDING',
+        emailVerified: false,
+        distanceKm: input.distanceKm ?? null,
+        companyId: company.id,
+        roles: { create: { role: { connect: { name: 'USER' } } } },
+      },
+      include: { company: true, roles: { include: { role: true } } },
+    });
+    await recordAudit({
+      actionType: 'USER_REGISTERED',
+      entityType: 'User',
+      entityId: user.id,
+      newValue: { email: user.email, companyId: user.companyId, status: user.status },
+    });
+    return user;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ConflictError('An account with this email already exists');
+    throw err;
+  }
 }
 
 /** Rotate the refresh token (revoke old, issue new) and mint a fresh access token. */
