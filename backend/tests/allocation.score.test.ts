@@ -10,6 +10,7 @@ import {
   DEFAULT_WEIGHTS,
   DEFAULT_CAPS,
   type RankCandidate,
+  type RankedResult,
 } from '../src/modules/allocation/score';
 
 /**
@@ -163,7 +164,10 @@ const base: Omit<Candidate, 'id'> = {
   allocationsPrev30d: 0,
 };
 
-const ids = (cs: Candidate[]): string[] => cs.map((c) => c.id);
+/** Ids in ranked order, from rankCandidates results. */
+const ids = (results: RankedResult<Candidate>[]): string[] => results.map((r) => r.candidate.id);
+/** Ids from a raw candidate array (for mutation checks). */
+const rawIds = (cs: Candidate[]): string[] => cs.map((c) => c.id);
 
 describe('compareCandidates — primary key', () => {
   it('orders by finalScore descending', () => {
@@ -260,9 +264,76 @@ describe('rankCandidates — (5) secure random draw', () => {
       { ...base, id: 'a', finalScore: 10 },
       { ...base, id: 'b', finalScore: 90 },
     ];
-    const snapshot = ids(cs);
+    const snapshot = rawIds(cs);
     rankCandidates(cs);
-    expect(ids(cs)).toEqual(snapshot);
+    expect(rawIds(cs)).toEqual(snapshot);
+  });
+});
+
+describe('rankCandidates — surfaced draw, rank, and deterministic replay', () => {
+  it('surfaces a fresh draw in [0, 1) for each candidate (default secure rng)', () => {
+    const cs: Candidate[] = [
+      { ...base, id: 'a' },
+      { ...base, id: 'b' },
+    ];
+    for (const r of rankCandidates(cs)) {
+      expect(r.randomDraw).toBeGreaterThanOrEqual(0);
+      expect(r.randomDraw).toBeLessThan(1);
+    }
+  });
+
+  it('returns the exact draw assigned to each candidate', () => {
+    const x: Candidate = { ...base, id: 'x' };
+    const y: Candidate = { ...base, id: 'y' };
+    const z: Candidate = { ...base, id: 'z' };
+    const draws = [0.9, 0.1, 0.5]; // x, y, z in input order
+    let i = 0;
+    const ranked = rankCandidates([x, y, z], () => draws[i++]);
+    const drawFor = (id: string) => ranked.find((r) => r.candidate.id === id)!.randomDraw;
+    expect(drawFor('x')).toBe(0.9);
+    expect(drawFor('y')).toBe(0.1);
+    expect(drawFor('z')).toBe(0.5);
+  });
+
+  it('assigns 1-based ranks in output order', () => {
+    const hi: Candidate = { ...base, id: 'hi', finalScore: 90 };
+    const lo: Candidate = { ...base, id: 'lo', finalScore: 10 };
+    const ranked = rankCandidates([lo, hi]);
+    expect(ranked.map((r) => [r.candidate.id, r.rank])).toEqual([
+      ['hi', 1],
+      ['lo', 2],
+    ]);
+  });
+
+  it('uses a candidate-carried randomDraw instead of calling rng (replay)', () => {
+    const a: Candidate = { ...base, id: 'a', randomDraw: 0.8 };
+    const b: Candidate = { ...base, id: 'b', randomDraw: 0.2 };
+    const throwRng = () => {
+      throw new Error('rng must not be called when randomDraw is set');
+    };
+    const ranked = rankCandidates([a, b], throwRng);
+    expect(ids(ranked)).toEqual(['b', 'a']); // lower draw ranks first
+  });
+
+  it('round-trips: draws captured on run 1 reproduce the identical order on replay', () => {
+    const cs: Candidate[] = [
+      { ...base, id: 'a' },
+      { ...base, id: 'b' },
+      { ...base, id: 'c' },
+    ];
+    const draws = [0.9, 0.1, 0.5]; // a, b, c
+    let i = 0;
+    const firstRun = rankCandidates(cs, () => draws[i++]);
+    const order1 = ids(firstRun); // ['b', 'c', 'a']
+
+    // Persist each candidate's draw, then replay from the ORIGINAL input order with an rng
+    // that must never be consulted.
+    const drawById = new Map(firstRun.map((r) => [r.candidate.id, r.randomDraw]));
+    const persisted: Candidate[] = cs.map((c) => ({ ...c, randomDraw: drawById.get(c.id)! }));
+    const throwRng = () => {
+      throw new Error('rng must not be called on replay');
+    };
+    expect(ids(rankCandidates(persisted, throwRng))).toEqual(order1);
   });
 });
 
