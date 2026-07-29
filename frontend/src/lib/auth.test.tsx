@@ -1,5 +1,8 @@
 import { act, render, renderHook } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { api } from '../api/client';
+import { server } from '../mocks/node';
 import { AuthProvider, useAuth, type AuthSession } from './auth';
 
 const session: AuthSession = {
@@ -39,5 +42,19 @@ describe('AuthProvider', () => {
       return null;
     }
     expect(() => render(<Bad />)).toThrow(/AuthProvider/);
+  });
+
+  it('bridges the access token into the API client after login', async () => {
+    let seen: string | null = null;
+    server.use(
+      http.get('/api/v1/config', ({ request }) => {
+        seen = request.headers.get('Authorization');
+        return HttpResponse.json({ success: true, data: [] });
+      }),
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    act(() => result.current.login(session));
+    await api.GET('/config', {});
+    expect(seen).toBe('Bearer tok');
   });
 });

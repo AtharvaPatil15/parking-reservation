@@ -17,6 +17,7 @@
     "gen:api": "npm run gen:types && npm run gen:mocks"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "openapi-fetch": "^0.13.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -47,5 +48,10 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => {
     test: {
       globals: true,
       environment: 'jsdom',
+      // Pin jsdom's origin so it matches the absolute VITE_API_BASE_URL in .env.test —
+      // MSW resolves the app's relative-path handlers (e.g. '/api/v1/config') against
+      // this location, and the client's requests must land on the same origin to match.
+      environmentOptions: { jsdom: { url: 'http://localhost/' } },
       setupFiles: './src/test/setup.ts',
       css: true,
     },
