@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { App } from './App';
@@ -9,19 +10,22 @@ import { ThemeProvider } from '../lib/theme';
 import { ToastProvider } from '../components';
 
 describe('routing + guards (integration)', () => {
-  it('dev sign-in as Super Admin lands on the admin area with a sign-out control', async () => {
+  it('logs in as Super Admin and lands on the admin area with a sign-out control', async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole('button', { name: /sign in as super admin/i }));
+    await userEvent.type(await screen.findByLabelText(/email/i), 'admin@acme.test');
+    await userEvent.type(screen.getByLabelText(/password/i), 'pw');
+    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByRole('heading', { name: /^super admin$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
   });
 
   it('signing out returns to the login page', async () => {
     render(<App />);
-    await userEvent.click(screen.getByRole('button', { name: /sign in as user/i }));
+    await userEvent.type(await screen.findByLabelText(/email/i), 'user@acme.test');
+    await userEvent.type(screen.getByLabelText(/password/i), 'pw');
+    await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByRole('button', { name: /sign out/i })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /sign out/i }));
-    // Exact match: /sign in/i alone also matches the "Developer sign-in" card title.
     expect(await screen.findByRole('heading', { name: /^sign in$/i })).toBeInTheDocument();
   });
 });
@@ -38,15 +42,20 @@ const companyAdmin: AuthUser = {
 };
 
 function renderRouterAt(path: string, user: AuthUser | null) {
+  // A QueryClientProvider is required here (not just for App): the anonymous case renders
+  // LoginPage via RootRedirect, and LoginPage now calls useLogin() (useMutation) since P5-05.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <ThemeProvider>
-      <AuthProvider initialSession={user ? { accessToken: 't', user } : null}>
-        <ToastProvider>
-          <MemoryRouter initialEntries={[path]}>
-            <AppRouter />
-          </MemoryRouter>
-        </ToastProvider>
-      </AuthProvider>
+      <QueryClientProvider client={qc}>
+        <AuthProvider initialSession={user ? { accessToken: 't', user } : null}>
+          <ToastProvider>
+            <MemoryRouter initialEntries={[path]}>
+              <AppRouter />
+            </MemoryRouter>
+          </ToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ThemeProvider>,
   );
 }

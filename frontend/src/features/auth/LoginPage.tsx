@@ -1,27 +1,56 @@
-import { useNavigate } from 'react-router-dom';
-import { Button, Card } from '../../components';
+import { useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Button, Card, Input } from '../../components';
 import { PublicHeader } from '../../app/chrome';
-import { useAuth, type AuthUser } from '../../lib/auth';
-import { roleHome, type Role } from '../../lib/roles';
+import { useAuth } from '../../lib/auth';
+import { roleHome } from '../../lib/roles';
+import { useLogin } from '../../api/hooks';
+import { ApiError } from '../../api/http';
 
-// TEMPORARY dev identities so guards/routing are clickable before the real login
-// form + useLogin arrive in P5-05. The "Developer sign-in" card below is an auth
-// bypass, so it is gated behind `import.meta.env.DEV` and never renders (and is
-// tree-shaken out) in a production build. Delete this block and the card in P5-05.
-const DEV_USERS: Record<Role, AuthUser> = {
-  SUPER_ADMIN: { id: 'dev-super', fullName: 'Dev Super Admin', role: 'SUPER_ADMIN', companyId: null, companyName: 'Platform' },
-  COMPANY_ADMIN: { id: 'dev-company', fullName: 'Dev Company Admin', role: 'COMPANY_ADMIN', companyId: 'dev-co', companyName: 'Acme Co' },
-  USER: { id: 'dev-user', fullName: 'Dev User', role: 'USER', companyId: 'dev-co', companyName: 'Acme Co' },
-};
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const loginMutation = useLogin();
 
-  function devSignIn(role: Role) {
-    login({ accessToken: 'dev-token', user: DEV_USERS[role] });
-    navigate(roleHome(role), { replace: true });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+
+  function validate(): boolean {
+    const next: { email?: string; password?: string } = {};
+    if (!email.trim()) next.email = 'Email is required.';
+    else if (!EMAIL_RE.test(email)) next.email = 'Enter a valid email.';
+    if (!password) next.password = 'Password is required.';
+    setErrors(next);
+    return Object.keys(next).length === 0;
   }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!validate()) return;
+    loginMutation.mutate(
+      { email, password },
+      {
+        onSuccess: (data) => {
+          login({ accessToken: data.accessToken, user: data.user });
+          navigate(from ?? roleHome(data.user.role), { replace: true });
+        },
+      },
+    );
+  }
+
+  const formError = loginMutation.isError
+    ? loginMutation.error instanceof ApiError && loginMutation.error.status === 401
+      ? 'Invalid email or password.'
+      : loginMutation.error instanceof ApiError
+        ? loginMutation.error.message
+        : 'Something went wrong. Please try again.'
+    : null;
 
   return (
     <div className="min-h-screen bg-canvas text-text">
@@ -29,21 +58,45 @@ export function LoginPage() {
       <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-text-muted">The real login form arrives in P5-05.</p>
+          <p className="text-text-muted">Use your work email to access parking reservations.</p>
         </div>
-        {import.meta.env.DEV && (
-          <Card title="Developer sign-in" description="Temporary — pick a role to exercise the routing and guards.">
-            <div className="flex flex-col gap-3">
-              <Button onClick={() => devSignIn('SUPER_ADMIN')}>Sign in as Super Admin</Button>
-              <Button variant="secondary" onClick={() => devSignIn('COMPANY_ADMIN')}>
-                Sign in as Company Admin
-              </Button>
-              <Button variant="secondary" onClick={() => devSignIn('USER')}>
-                Sign in as User
-              </Button>
-            </div>
-          </Card>
-        )}
+        <Card>
+          <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+            {formError && (
+              <p
+                role="alert"
+                className="rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger"
+              >
+                {formError}
+              </p>
+            )}
+            <Input
+              label="Email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              error={errors.email}
+            />
+            <Input
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              error={errors.password}
+            />
+            <Button type="submit" loading={loginMutation.isPending}>
+              Sign in
+            </Button>
+          </form>
+        </Card>
+        <p className="text-sm text-text-muted">
+          New here?{' '}
+          <Link to="/register" className="text-primary hover:underline">
+            Create an account
+          </Link>
+        </p>
       </main>
     </div>
   );

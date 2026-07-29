@@ -38,7 +38,7 @@ Generated client from `openapi.yaml`; React Query hooks; MSW handlers for offlin
 #### P5-05 · Login page · Owner: Atharva · Tag: DEMO · Deps: P5-03,P5-04
 - **AC:** form (email/password) with validation; on success stores token + routes by role; error state on 401.
 - **Evidence:** `frontend/src/features/auth/LoginPage.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (email/password form w/ client validation; useLogin → auth.login → role redirect honoring guard state.from; 401 form-error state; dev sign-in removed; RTL tests incl. validation/success/401/from-redirect)
 
 #### P5-06 · User — BookingForm · Owner: Atharva · Tag: DEMO · Deps: P5-04
 Date (bookable weekdays only), vehicle, **carpool people 1–4**, optional member emails, special requirement;
