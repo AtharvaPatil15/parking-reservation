@@ -13,10 +13,14 @@ async function enableMocks(): Promise<void> {
   await worker.start({ onUnhandledRequest: 'bypass' });
 }
 
-void enableMocks().then(() => {
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
-});
+// Render regardless of whether the mock worker starts — if MSW fails to import or
+// its service worker registration is blocked, the app must still mount.
+void enableMocks()
+  .catch((err) => console.error('[msw] worker failed to start; continuing without mocks', err))
+  .finally(() => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  });

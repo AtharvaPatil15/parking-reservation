@@ -92,7 +92,14 @@ const hero = [
   http.get(`${baseURL}/config`, () => ok(configSeed)),
   http.patch(`${baseURL}/config`, async ({ request }) => {
     const patch = (await request.json().catch(() => ({}))) as Record<string, string>;
-    return ok(configSeed.map((e) => (patch[e.key] !== undefined ? { ...e, value: patch[e.key] } : e)));
+    // Persist in-place so a subsequent GET (React Query refetch after invalidation)
+    // reflects the change instead of reverting to the seed. Module-level state — a
+    // config-PATCH test should reset it (none exists yet; relevant at P5-10).
+    for (const entry of configSeed) {
+      const next = patch[entry.key];
+      if (next !== undefined) entry.value = next;
+    }
+    return ok(configSeed);
   }),
 ];
 
