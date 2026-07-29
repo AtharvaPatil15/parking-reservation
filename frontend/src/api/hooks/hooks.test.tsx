@@ -38,6 +38,6 @@ describe('hooks (against MSW)', () => {
   it('useConfig returns the config entries', async () => {
     const { result } = renderHook(() => useConfig(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.some((e) => e.key === 'scoring.distanceWeight')).toBe(true);
+    expect(result.current.data?.some((e) => e.key === 'allocation.distanceWeight')).toBe(true);
   });
 });

@@ -41,6 +41,21 @@ describe('BookingStatus', () => {
     expect(await screen.findByText(/slot released/i)).toBeInTheDocument(); // toast
   });
 
+  it('hides release for a past-dated allocation (KI-1)', async () => {
+    server.use(
+      http.get('*/api/v1/bookings/:id', ({ params }) =>
+        HttpResponse.json({ success: true, data: {
+          id: String(params.id), bookingDate: '2020-01-06', bookingType: 'PRIMARY',
+          status: 'ALLOCATED', allocatedSlotNumber: 'A-99', carpoolMemberCount: 1,
+          createdAt: '2020-01-01T08:00:00.000Z',
+        } }),
+      ),
+    );
+    renderAt();
+    expect(await screen.findByText('A-99')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /release slot/i })).not.toBeInTheDocument();
+  });
+
   it('shows an error state on 404', async () => {
     server.use(
       http.get('*/api/v1/bookings/:id', () =>

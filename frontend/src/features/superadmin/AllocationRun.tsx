@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Table, type Column } from '../../components';
 import { useAllocationBreakdown, useRunPrimaryAllocation } from '../../api/hooks';
-import { nextBookableWeekday } from '../user/bookingSchema';
+import { nextBookableWeekday } from '../../lib/dates';
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
 

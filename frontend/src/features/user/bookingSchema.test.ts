@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSchema, isBookableWeekday } from './bookingSchema';
+import { bookingSchema } from './bookingSchema';
+import { isBookableWeekday } from '../../lib/dates';
 
 describe('isBookableWeekday', () => {
   it('rejects dates JS silently normalizes (2026-02-31 → Mar 3)', () => {

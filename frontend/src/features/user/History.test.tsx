@@ -27,7 +27,9 @@ describe('History', () => {
   it('lists the user bookings', async () => {
     renderHistory();
     expect(await screen.findByText('2026-08-03')).toBeInTheDocument();
-    expect(screen.getByText('WAITLISTED')).toBeInTheDocument();
+    // Past-dated rows are resolved states, never WAITLISTED (KI-2).
+    expect(screen.getByText('ALLOCATED')).toBeInTheDocument();
+    expect(screen.getByText('REJECTED')).toBeInTheDocument();
   });
 
   it('paginates', async () => {

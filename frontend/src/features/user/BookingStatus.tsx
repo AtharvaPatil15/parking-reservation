@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Badge, Button, Card, ErrorState, LoadingState, Modal, useToast } from '../../components';
 import { useBooking, useReleaseBooking } from '../../api/hooks';
+import { isTodayOrFuture } from '../../lib/dates';
 import { statusTone } from './statusTone';
 
 function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
@@ -36,6 +37,10 @@ export function BookingStatus() {
 
   const b = booking.data;
   const sb = b.scoreBreakdown;
+  // Release only makes sense while the booking date can still be reallocated to the
+  // waitlist (F3). A past date is already resolved, so hide the control (KI-1); the
+  // live backend also rejects an ineligible release with 409/422.
+  const canRelease = b.status === 'ALLOCATED' && isTodayOrFuture(b.bookingDate);
 
   function onRelease() {
     if (!id) return;
@@ -96,7 +101,7 @@ export function BookingStatus() {
         </Card>
       )}
 
-      {b.status === 'ALLOCATED' && (
+      {canRelease && (
         <div>
           <Button variant="danger" onClick={() => setConfirmOpen(true)}>
             Release slot
