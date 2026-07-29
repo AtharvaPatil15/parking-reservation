@@ -110,6 +110,14 @@ export interface RankCandidate {
   submittedAt: Date | number;
   /** Allocations granted to this user in the previous 30 days. Tie-breaker 4: fewer is better (fairness, D4). */
   allocationsPrev30d: number;
+  /**
+   * Pre-assigned step-(5) random draw in [0, 1) for deterministic replay. Leave unset on a first
+   * run — `rankCandidates` draws a fresh value via `rng` and returns it, which the caller persists
+   * into `AllocationScoreBreakdown.tieBreakerData`. On a re-run, set this from the persisted value
+   * so the identical tie resolution is reproduced (idempotency, spec §4.5). When set, `rng` is not
+   * consulted for this candidate.
+   */
+  randomDraw?: number;
 }
 
 const asMillis = (t: Date | number): number => (t instanceof Date ? t.getTime() : t);
@@ -143,21 +151,42 @@ export function secureUnitRandom(): number {
 }
 
 /**
- * Rank candidates best-first: finalScore desc, then tie-breakers (1)–(4), then (5) a secure
- * random draw for any candidates still tied. `rng` is injectable for deterministic tests.
- * Stable: a fixed random key is drawn once per candidate, so equal keys preserve input order.
- * Does not mutate the input array.
+ * A ranked candidate: the candidate itself, its 1-based rank, and the step-(5) random draw used.
+ * Persist `randomDraw` (into `AllocationScoreBreakdown.tieBreakerData`) so every outcome is
+ * explainable (decisions §3) and can be replayed deterministically by feeding it back as
+ * `RankCandidate.randomDraw` on a re-run.
+ */
+export interface RankedResult<T> {
+  candidate: T;
+  /** 1-based position after ranking (rank 1 = best / first-served). */
+  rank: number;
+  /** The random draw in [0, 1) used for this candidate's step-(5) tie-break. */
+  randomDraw: number;
+}
+
+/**
+ * Rank candidates best-first: finalScore desc, then tie-breakers (1)–(4), then (5) a random draw
+ * for any candidates still tied. Returns each candidate with its rank and the draw used, so the
+ * caller can persist the draw (explainability) and replay deterministically.
+ *
+ * Each candidate's draw is `candidate.randomDraw` when set (replay), otherwise `rng()`. `rng` is
+ * injectable for tests and defaults to a cryptographically-secure source. Stable: on an exact draw
+ * tie, input order is preserved. Does not mutate the input array or its candidates.
  */
 export function rankCandidates<T extends RankCandidate>(
   candidates: readonly T[],
   rng: () => number = secureUnitRandom,
-): T[] {
-  const decorated = candidates.map((c, index) => ({ c, index, r: rng() }));
+): RankedResult<T>[] {
+  const decorated = candidates.map((c, index) => ({
+    c,
+    index,
+    r: c.randomDraw ?? rng(),
+  }));
   decorated.sort((x, y) => {
     const cmp = compareCandidates(x.c, y.c);
     if (cmp !== 0) return cmp;
-    if (x.r !== y.r) return x.r - y.r; // (5) secure random draw
+    if (x.r !== y.r) return x.r - y.r; // (5) random draw
     return x.index - y.index; // stable fallback when the draw ties
   });
-  return decorated.map((d) => d.c);
+  return decorated.map((d, i) => ({ candidate: d.c, rank: i + 1, randomDraw: d.r }));
 }
