@@ -16,6 +16,7 @@ import companiesRoutes from './modules/companies/companies.routes';
 import usersRoutes from './modules/users/users.routes';
 import { slotsRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
 import dashboardRoutes from './modules/dashboards/dashboards.routes';
+import bookingsRoutes from './modules/bookings/bookings.routes';
 
 export const app = express();
 
@@ -56,7 +57,8 @@ api.use('/users', usersRoutes); // /:id/approval + /:id/status
 api.use('/slots', slotsRouter);
 api.use('/blocks', blockItemRouter); // DELETE /:id
 api.use('/dashboard', dashboardRoutes);
-// Future modules mount here: /bookings, /allocation ...
+api.use('/bookings', bookingsRoutes);
+// Future modules mount here: /allocation ...
 
 app.use('/api/v1', api);
 
