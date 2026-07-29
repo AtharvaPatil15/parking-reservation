@@ -20,7 +20,7 @@ Vite + React + TS + Tailwind; theme tokens (color/spacing/radius/shadow), light/
 Button, Input, Select, Card, Table, Badge, Modal, Toast + the four **state views** (loading/empty/error/success).
 - **AC:** components reusable, accessible (labels, focus rings, keyboard), responsive; state views used app-wide.
 - **Evidence:** `frontend/src/components/*`.
-- **Status:** ☐
+- **Status:** ☑ (Button/Input/Select/Card/Badge/Table/Modal/Toast + loading/empty/error/success state views; accessible labels/focus/keyboard; theme-aware; unit tests; AppShell refactored to consume them)
 
 #### P5-03 · Router + role guards + auth context · Owner: Atharva · Tag: DEMO · Deps: P5-01
 Public `/login`,`/register`; role-guarded shells `/admin/*`,`/company/*`,`/app/*`.
