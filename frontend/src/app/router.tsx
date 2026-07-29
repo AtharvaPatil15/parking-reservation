@@ -7,6 +7,7 @@ import { NotFound } from './NotFound';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { AdminShell } from '../features/superadmin/AdminShell';
+import { AllocationRun } from '../features/superadmin/AllocationRun';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { UserShell } from '../features/user/UserShell';
 import { UserDashboard } from '../features/user/UserDashboard';
@@ -29,7 +30,9 @@ export function AppRouter() {
 
       <Route element={<RequireRole role="SUPER_ADMIN" />}>
         <Route element={<AppShell />}>
-          <Route path="/admin/*" element={<AdminShell />} />
+          <Route path="/admin" element={<AdminShell />}>
+            <Route index element={<AllocationRun />} />
+          </Route>
         </Route>
       </Route>
 

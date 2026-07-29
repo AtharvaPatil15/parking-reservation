@@ -63,7 +63,7 @@ The demo centerpiece.
 - **AC:** date picker + **"Run primary allocation"** button; ranked table (rank, user, distance, people,
   distance/carpool/final scores, outcome, slot); loading/empty/error states.
 - **Evidence:** `frontend/src/features/superadmin/AllocationRun.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (Super Admin AllocationRun at /admin — date picker + "Run primary allocation"; ranked breakdown Table (rank/user/distance/people/distance+carpool+final scores/outcome/slot) with rank-1 accent highlight; loading/empty/error states; reuses useRunPrimaryAllocation/useAllocationBreakdown + MSW; RTL tests)
 
 #### P5-10 · Super Admin — ConfigTimings · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** edit all window times + weights with inline validation (ordering, ranges); PATCHes `/config`; success toast.
