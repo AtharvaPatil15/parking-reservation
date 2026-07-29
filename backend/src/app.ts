@@ -10,6 +10,10 @@ import { correlationId } from './middleware/correlationId';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { sendError } from './lib/response';
 import configRoutes from './modules/config/config.routes';
+import authRoutes from './modules/auth/auth.routes';
+import companiesRoutes from './modules/companies/companies.routes';
+import usersRoutes from './modules/users/users.routes';
+import { slotsRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
 
 export const app = express();
 
@@ -41,8 +45,14 @@ const limiter = rateLimit({
 
 const api = express.Router();
 api.use(limiter);
+api.use('/auth', authRoutes);
 api.use('/config', configRoutes);
-// Future modules mount here: /auth, /companies, /slots, /bookings, /allocation, /dashboard ...
+api.use('/companies', companiesRoutes); // CRUD + /active + /:id/users + /:id/admins
+api.use('/companies', companyScopedRouter); // /:id/quota + /:id/blocks
+api.use('/users', usersRoutes); // /:id/approval + /:id/status
+api.use('/slots', slotsRouter);
+api.use('/blocks', blockItemRouter); // DELETE /:id
+// Future modules mount here: /bookings, /allocation, /dashboard ...
 
 app.use('/api/v1', api);
 
