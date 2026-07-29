@@ -33,7 +33,7 @@ Generated client from `openapi.yaml`; React Query hooks; MSW handlers for offlin
 - **AC:** hooks like `useLogin`, `useCreateBooking`, `useRunAllocation`, `useConfig` exist; MSW serves the hero
   endpoints; 401 handled.
 - **Evidence:** `frontend/src/api/*`, `frontend/src/mocks/*`.
-- **Status:** ☐
+- **Status:** ☑ (typed openapi-fetch client + envelope unwrap/ApiError; @tanstack/react-query client + hero hooks useLogin/useLogout/useCreateBooking/useRunPrimaryAllocation+breakdown/useConfig/useUpdateConfig; coherent MSW hero handlers + dev toggle; auth token bridge + 401→logout; tests green)
 
 #### P5-05 · Login page · Owner: Atharva · Tag: DEMO · Deps: P5-03,P5-04
 - **AC:** form (email/password) with validation; on success stores token + routes by role; error state on 401.
