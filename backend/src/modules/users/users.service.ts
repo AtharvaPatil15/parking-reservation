@@ -1,6 +1,7 @@
+import type { UserStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { NotFoundError, ValidationError } from '../../lib/errors';
-import { recordAudit } from '../../lib/audit';
+import { buildAuditData } from '../../lib/audit';
 import type { Role } from '../../lib/roles';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
@@ -30,31 +31,43 @@ export async function setApproval(actor: Actor, userId: string, decision: 'APPRO
   if (user.status !== 'PENDING') {
     throw new ValidationError('Only PENDING users can be approved or rejected');
   }
-  const newStatus = decision === 'APPROVE' ? 'ACTIVE' : 'REJECTED';
-  await prisma.user.update({ where: { id: userId }, data: { status: newStatus } });
-  await recordAudit({
-    actionType: 'USER_APPROVAL',
-    entityType: 'User',
-    entityId: userId,
-    oldValue: { status: user.status },
-    newValue: { status: newStatus, decision },
-  });
+  const newStatus: UserStatus = decision === 'APPROVE' ? 'ACTIVE' : 'REJECTED';
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { status: newStatus } }),
+    prisma.auditLog.create({
+      data: buildAuditData({
+        actionType: 'USER_APPROVAL',
+        entityType: 'User',
+        entityId: userId,
+        oldValue: { status: user.status },
+        newValue: { status: newStatus, decision },
+      }),
+    }),
+  ]);
   return prisma.user.findFirstOrThrow({ where: { id: userId }, include: userInclude });
 }
 
-export async function setStatus(actor: Actor, userId: string, status: 'ACTIVE' | 'INACTIVE') {
+export async function setStatus(actor: Actor, userId: string, status: UserStatus) {
+  // Contract accepts the full UserStatus enum; this endpoint only activates/deactivates.
+  if (status !== 'ACTIVE' && status !== 'INACTIVE') {
+    throw new ValidationError('status must be ACTIVE or INACTIVE');
+  }
   const user = await loadTargetUser(actor, userId);
   if (user.status === 'PENDING' || user.status === 'REJECTED') {
     throw new ValidationError(`Cannot set status from ${user.status}; approve or reject first`);
   }
-  await prisma.user.update({ where: { id: userId }, data: { status } });
-  await recordAudit({
-    actionType: 'USER_STATUS_CHANGED',
-    entityType: 'User',
-    entityId: userId,
-    oldValue: { status: user.status },
-    newValue: { status },
-  });
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { status } }),
+    prisma.auditLog.create({
+      data: buildAuditData({
+        actionType: 'USER_STATUS_CHANGED',
+        entityType: 'User',
+        entityId: userId,
+        oldValue: { status: user.status },
+        newValue: { status },
+      }),
+    }),
+  ]);
   return prisma.user.findFirstOrThrow({ where: { id: userId }, include: userInclude });
 }
 

@@ -45,11 +45,16 @@ export const listSlotsQuery = z.object({
   parkingAreaId: z.string().optional(),
 });
 
-export const createQuotaSchema = z.object({
-  slotCount: z.coerce.number().int().min(0),
-  effectiveFrom: dateString,
-  effectiveTo: dateString.nullable().optional(),
-});
+export const createQuotaSchema = z
+  .object({
+    slotCount: z.coerce.number().int().min(0),
+    effectiveFrom: dateString,
+    effectiveTo: dateString.nullable().optional(),
+  })
+  .refine((o) => !o.effectiveTo || o.effectiveTo >= o.effectiveFrom, {
+    message: 'effectiveTo must be on or after effectiveFrom',
+    path: ['effectiveTo'],
+  });
 
 export const createBlockSchema = z
   .object({

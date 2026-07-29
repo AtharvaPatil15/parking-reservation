@@ -1,3 +1,4 @@
+import type { UserStatus } from '@prisma/client';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
 import { UnauthenticatedError } from '../../lib/errors';
@@ -19,7 +20,7 @@ export const setStatus = asyncHandler(async (req, res) => {
   const user = await service.setStatus(
     req.user,
     req.params.id,
-    (req.body as { status: 'ACTIVE' | 'INACTIVE' }).status,
+    (req.body as { status: UserStatus }).status,
   );
   sendSuccess(res, toUserProfile(user));
 });
