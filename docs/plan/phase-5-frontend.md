@@ -46,7 +46,7 @@ shows `distanceKm`.
 - **AC:** client validation mirrors API (cutoff countdown disables submit; carpool bounds); submits to
   `POST /bookings`; success + error states.
 - **Evidence:** `frontend/src/features/user/BookingForm.tsx`.
-- **Status:** ☐
+- **Status:** ☑ (RHF+zod BookingForm at /app/book — bookable-weekday date, vehicle, carpool 1–4 + member emails (useFieldArray), special requirement; shows distanceKm from /me; live cutoff countdown from /dashboard/user disables submit; POST /bookings with 409/422 mapped errors + success state; useMe/useUserDashboard hooks + MSW; RTL tests)
 
 #### P5-07 · User — BookingStatus + score breakdown · Owner: Atharva · Tag: DEMO · Deps: P5-04
 - **AC:** shows status, allocated slot, and the distance/carpool/final **score breakdown**; release button (MVP).

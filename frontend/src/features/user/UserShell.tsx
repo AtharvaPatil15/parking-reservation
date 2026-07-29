@@ -1,7 +1,22 @@
-import { ComponentGallery } from '../dev/ComponentGallery';
+import { NavLink, Outlet } from 'react-router-dom';
+import { cn } from '../../lib/cn';
 
-/** Temporary: shows the P5-02 component gallery. Replaced by the booking
- *  form / dashboard in P5-06–P5-08. */
+const linkClass = ({ isActive }: { isActive: boolean }) =>
+  cn('text-sm transition-colors', isActive ? 'font-medium text-text' : 'text-text-muted hover:text-text');
+
+/** User-area layout: nav + routed content. */
 export function UserShell() {
-  return <ComponentGallery />;
+  return (
+    <div className="space-y-6">
+      <nav className="flex gap-4 border-b border-border pb-3">
+        <NavLink to="/app" end className={linkClass}>
+          Dashboard
+        </NavLink>
+        <NavLink to="/app/book" className={linkClass}>
+          Book a slot
+        </NavLink>
+      </nav>
+      <Outlet />
+    </div>
+  );
 }

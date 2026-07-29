@@ -9,6 +9,8 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { AdminShell } from '../features/superadmin/AdminShell';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { UserShell } from '../features/user/UserShell';
+import { ComponentGallery } from '../features/dev/ComponentGallery';
+import { BookingForm } from '../features/user/BookingForm';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
@@ -37,7 +39,10 @@ export function AppRouter() {
 
       <Route element={<RequireRole role="USER" />}>
         <Route element={<AppShell />}>
-          <Route path="/app/*" element={<UserShell />} />
+          <Route path="/app" element={<UserShell />}>
+            <Route index element={<ComponentGallery />} />
+            <Route path="book" element={<BookingForm />} />
+          </Route>
         </Route>
       </Route>
 

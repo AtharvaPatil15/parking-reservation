@@ -1,0 +1,161 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useFieldArray, useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../components';
+import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
+import { ApiError } from '../../api/http';
+import { VEHICLE_OPTIONS, bookingSchema, formatCountdown, nextBookableWeekday, type BookingFormValues } from './bookingSchema';
+
+export function BookingForm() {
+  const me = useMe();
+  const dashboard = useUserDashboard();
+  const createBooking = useCreateBooking();
+
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    formState: { errors },
+  } = useForm<BookingFormValues>({
+    resolver: zodResolver(bookingSchema),
+    defaultValues: { bookingDate: nextBookableWeekday(), carpoolPeople: 1, carpoolMembers: [] },
+  });
+  const { fields, append, remove } = useFieldArray({ control, name: 'carpoolMembers' });
+  const carpoolPeople = Number(watch('carpoolPeople')) || 1;
+
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  useEffect(() => {
+    const initial = dashboard.data?.cutoffCountdownSeconds;
+    if (initial == null) return;
+    setSecondsLeft(initial);
+    const t = setInterval(() => setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1))), 1000);
+    return () => clearInterval(t);
+  }, [dashboard.data?.cutoffCountdownSeconds]);
+  const windowClosed = secondsLeft != null && secondsLeft <= 0;
+
+  if (me.isLoading || dashboard.isLoading) return <LoadingState label="Loading booking form…" />;
+
+  if (createBooking.isSuccess) {
+    return (
+      <SuccessState
+        title="Request submitted"
+        description={`Booking ${createBooking.data.id} is ${createBooking.data.status.toLowerCase()}.`}
+        action={
+          <Link to={`/app/booking/${createBooking.data.id}`} className="text-primary hover:underline">
+            View status
+          </Link>
+        }
+      />
+    );
+  }
+
+  const errorMsg = createBooking.isError
+    ? createBooking.error instanceof ApiError
+      ? createBooking.error.status === 409
+        ? 'You already have a request for this date.'
+        : createBooking.error.status === 422 || createBooking.error.code === 'WINDOW_CLOSED'
+          ? 'The booking window is closed for this date.'
+          : createBooking.error.message
+      : 'Something went wrong. Please try again.'
+    : null;
+
+  const onSubmit = handleSubmit((values) => {
+    createBooking.mutate({
+      bookingDate: values.bookingDate,
+      vehicleType: values.vehicleType ? values.vehicleType : undefined,
+      vehicleNumber: values.vehicleNumber || undefined,
+      carpoolPeople: Number(values.carpoolPeople),
+      specialRequirement: values.specialRequirement || undefined,
+      carpoolMembers: values.carpoolMembers
+        ?.filter((m) => m.name.trim())
+        .map((m) => ({ name: m.name, employeeEmail: m.employeeEmail || undefined })),
+    });
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Book a parking slot</h1>
+        <p className="text-text-muted">
+          Home → office: {me.data?.distanceKm != null ? `${me.data.distanceKm} km` : 'not set'} · used in scoring.
+        </p>
+      </div>
+
+      {secondsLeft != null && (
+        <p role="status" className={windowClosed ? 'text-sm text-danger' : 'text-sm text-text-muted'}>
+          {windowClosed ? 'Booking window closed for this date.' : `Cutoff in ${formatCountdown(secondsLeft)}`}
+        </p>
+      )}
+
+      <Card>
+        <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+          {errorMsg && (
+            <p role="alert" className="rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
+              {errorMsg}
+            </p>
+          )}
+
+          <Input label="Date" type="date" {...register('bookingDate')} error={errors.bookingDate?.message} />
+          <Select
+            label="Vehicle"
+            placeholder="Select a vehicle"
+            options={VEHICLE_OPTIONS}
+            {...register('vehicleType')}
+            error={errors.vehicleType?.message}
+          />
+          <Input label="Vehicle number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} />
+          <Input
+            label="Carpool people"
+            type="number"
+            min={1}
+            max={4}
+            hint="Including you (1–4)."
+            {...register('carpoolPeople')}
+            error={errors.carpoolPeople?.message}
+          />
+
+          <fieldset className="flex flex-col gap-3">
+            <legend className="text-sm font-medium text-text">Carpool members (optional)</legend>
+            {fields.map((f, i) => (
+              <div key={f.id} className="flex items-start gap-2">
+                <Input
+                  aria-label={`Member ${i + 1} name`}
+                  placeholder="Name"
+                  {...register(`carpoolMembers.${i}.name`)}
+                  error={errors.carpoolMembers?.[i]?.name?.message}
+                />
+                <Input
+                  aria-label={`Member ${i + 1} email`}
+                  placeholder="Employee email"
+                  {...register(`carpoolMembers.${i}.employeeEmail`)}
+                  error={errors.carpoolMembers?.[i]?.employeeEmail?.message}
+                />
+                <Button type="button" variant="ghost" onClick={() => remove(i)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={fields.length >= carpoolPeople - 1}
+                onClick={() => append({ name: '', employeeEmail: '' })}
+              >
+                Add member
+              </Button>
+            </div>
+          </fieldset>
+
+          <Input label="Special requirement" {...register('specialRequirement')} error={errors.specialRequirement?.message} />
+
+          <Button type="submit" loading={createBooking.isPending} disabled={windowClosed}>
+            Submit request
+          </Button>
+        </form>
+      </Card>
+    </div>
+  );
+}
