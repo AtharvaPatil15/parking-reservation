@@ -1,8 +1,10 @@
 import type { CookieOptions } from 'express';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
+import { toUserProfile } from '../../lib/dto';
 import { env } from '../../config/env';
 import * as service from './auth.service';
+import type { RegisterInput } from './auth.schema';
 
 const COOKIE = 'refreshToken';
 const cookieOpts = (expires: Date): CookieOptions => ({
@@ -23,6 +25,11 @@ export const login = asyncHandler(async (req, res) => {
     expiresIn: r.expiresIn,
     user: r.user,
   });
+});
+
+export const register = asyncHandler(async (req, res) => {
+  const user = await service.register(req.body as RegisterInput);
+  sendSuccess(res, toUserProfile(user), 201);
 });
 
 export const refresh = asyncHandler(async (req, res) => {
