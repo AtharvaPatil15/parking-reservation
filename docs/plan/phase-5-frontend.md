@@ -14,7 +14,7 @@ Full spec: [`../phases-3-6-plan.md`](../phases-3-6-plan.md#phase-5--frontend).
 Vite + React + TS + Tailwind; theme tokens (color/spacing/radius/shadow), light/dark; ESLint/Prettier.
 - **AC:** `npm run dev` serves the app; Tailwind configured with tokens; base layout shell renders.
 - **Evidence:** `frontend/tailwind.config.*`, `frontend/src/app/*`.
-- **Status:** ☐
+- **Status:** ☑ (Vite+React+TS+Tailwind v3; CSS-var design tokens w/ light/dark via `data-theme`; AppShell shell; ESLint/Prettier; build/lint/test all green)
 
 #### P5-02 · Base component library · Owner: Atharva · Tag: DEMO · Deps: P5-01
 Button, Input, Select, Card, Table, Badge, Modal, Toast + the four **state views** (loading/empty/error/success).
