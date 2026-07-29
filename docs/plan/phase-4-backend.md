@@ -22,7 +22,7 @@ with time-order + range validation (D8).
 - **AC:** timings/weights read from DB not code; `PATCH /config` rejects out-of-order times
   (`primaryCutoff < primaryResultsBy ≤ commonPoolClose < commonPoolResultsBy`); change is audited.
 - **Evidence:** `backend/src/config/*`, `backend/src/modules/config/*`.
-- **Status:** ◐ (GET/PATCH /config live-tested; time-order, range & unknown-key all → 400. ✅ now guarded by `requireRole('SUPER_ADMIN')` — no-auth→401, CA→403 verified (**finding #1 closed**). ⚠ **audit write still deferred to P4-10** — `updatedById` set but no `AuditLog` row yet)
+- **Status:** ☑ (GET/PATCH /config live-tested; time-order, range & unknown-key all → 400. Guarded by `requireRole('SUPER_ADMIN')` — no-auth→401, CA→403 (**finding #1 closed**). Audit now wired (P4-10): each change writes a `CONFIG_UPDATED` AuditLog row with old/new maps.)
 
 #### P4-03 · Prisma lib + migrate + seed wiring · Owner: Devashish · Tag: DEMO · Deps: P4-01
 Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `prisma/seed.ts`; F7 partial-unique SQL applied.
@@ -64,13 +64,13 @@ Slot CRUD; effective-dated `CompanySlotAllocation`; `SlotBlock` (**SA any / CA o
 Aggregate counts per role.
 - **AC:** the three dashboard endpoints return the counts listed in Phase-1 §1.8; tenant-scoped for CA/USER.
 - **Evidence:** `backend/src/modules/dashboards/*`.
-- **Status:** ☐
+- **Status:** ☑ (SA/CA/User endpoints verified: SA slots/companies/blocked/util, CA quota/available/booked/waitlisted, User prev-count + cutoff countdown; tenant-scoped via req.user; role-guarded 403.)
 
 #### P4-10 · Audit interceptor · Owner: Devashish · Tag: MVP · Deps: P4-04
 Write `AuditLog` on key mutations (approvals, blocks, quota, config, allocation, override, release).
 - **AC:** each listed action writes actor/action/entity/old/new/ip/correlationId.
-- **Evidence:** `backend/src/modules/audit/*`.
-- **Status:** ☐
+- **Evidence:** `backend/src/lib/{audit,requestContext}.ts`, `backend/src/middleware/requestContext.ts`, wired into config/users/companies/slots services.
+- **Status:** ☑ (AsyncLocalStorage carries actor/ip/correlationId; recordAudit wired for CONFIG_UPDATED, USER_APPROVAL/STATUS, COMPANY_CREATED/UPDATED/STATUS/ADMIN_ASSIGNED, QUOTA_SET, SLOT_BLOCKED/UNBLOCKED. Verified rows carry actor+correlationId+old/new. allocation/override/release audits land with P4-13/14.)
 
 ---
 

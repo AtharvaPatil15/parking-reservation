@@ -7,6 +7,7 @@ import pinoHttp from 'pino-http';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import { correlationId } from './middleware/correlationId';
+import { requestContext } from './middleware/requestContext';
 import { errorHandler, notFound } from './middleware/errorHandler';
 import { sendError } from './lib/response';
 import configRoutes from './modules/config/config.routes';
@@ -14,6 +15,7 @@ import authRoutes from './modules/auth/auth.routes';
 import companiesRoutes from './modules/companies/companies.routes';
 import usersRoutes from './modules/users/users.routes';
 import { slotsRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
+import dashboardRoutes from './modules/dashboards/dashboards.routes';
 
 export const app = express();
 
@@ -22,6 +24,7 @@ app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(correlationId);
+app.use(requestContext);
 app.use(
   pinoHttp({
     logger,
@@ -52,7 +55,8 @@ api.use('/companies', companyScopedRouter); // /:id/quota + /:id/blocks
 api.use('/users', usersRoutes); // /:id/approval + /:id/status
 api.use('/slots', slotsRouter);
 api.use('/blocks', blockItemRouter); // DELETE /:id
-// Future modules mount here: /bookings, /allocation, /dashboard ...
+api.use('/dashboard', dashboardRoutes);
+// Future modules mount here: /bookings, /allocation ...
 
 app.use('/api/v1', api);
 

@@ -2,13 +2,21 @@ import type { CompanyStatus, UserStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
 import { isUniqueViolation } from '../../lib/prismaErrors';
+import { recordAudit } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
 
 export async function createCompany(input: { name: string; code: string }) {
   try {
-    return await prisma.company.create({ data: { name: input.name, code: input.code } });
+    const company = await prisma.company.create({ data: { name: input.name, code: input.code } });
+    await recordAudit({
+      actionType: 'COMPANY_CREATED',
+      entityType: 'Company',
+      entityId: company.id,
+      newValue: { name: company.name, code: company.code, status: company.status },
+    });
+    return company;
   } catch (err) {
     if (isUniqueViolation(err)) throw new ConflictError('Company code already exists');
     throw err;
@@ -39,13 +47,29 @@ export async function getCompany(id: string) {
 }
 
 export async function updateCompany(id: string, input: { name: string }) {
-  await getCompany(id);
-  return prisma.company.update({ where: { id }, data: { name: input.name } });
+  const before = await getCompany(id);
+  const after = await prisma.company.update({ where: { id }, data: { name: input.name } });
+  await recordAudit({
+    actionType: 'COMPANY_UPDATED',
+    entityType: 'Company',
+    entityId: id,
+    oldValue: { name: before.name },
+    newValue: { name: after.name },
+  });
+  return after;
 }
 
 export async function setCompanyStatus(id: string, status: CompanyStatus) {
-  await getCompany(id);
-  return prisma.company.update({ where: { id }, data: { status } });
+  const before = await getCompany(id);
+  const after = await prisma.company.update({ where: { id }, data: { status } });
+  await recordAudit({
+    actionType: 'COMPANY_STATUS_CHANGED',
+    entityType: 'Company',
+    entityId: id,
+    oldValue: { status: before.status },
+    newValue: { status },
+  });
+  return after;
 }
 
 export async function listCompanyUsers(
@@ -89,5 +113,11 @@ export async function assignCompanyAdmin(companyId: string, userId: string, assi
       create: { companyId, userId, assignedById },
     }),
   ]);
+  await recordAudit({
+    actionType: 'COMPANY_ADMIN_ASSIGNED',
+    entityType: 'CompanyAdmin',
+    entityId: companyId,
+    newValue: { companyId, userId },
+  });
   return { message: 'Company admin assigned' };
 }

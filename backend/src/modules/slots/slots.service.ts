@@ -2,6 +2,7 @@ import type { SlotStatus, SlotType, BlockReason } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ConflictError, NotFoundError } from '../../lib/errors';
 import { isUniqueViolation } from '../../lib/prismaErrors';
+import { recordAudit } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 
@@ -65,7 +66,7 @@ export async function createQuota(
   createdById?: string,
 ) {
   await assertCompanyExists(companyId);
-  return prisma.companySlotAllocation.create({
+  const row = await prisma.companySlotAllocation.create({
     data: {
       companyId,
       slotCount: input.slotCount,
@@ -74,6 +75,18 @@ export async function createQuota(
       createdById,
     },
   });
+  await recordAudit({
+    actionType: 'QUOTA_SET',
+    entityType: 'CompanySlotAllocation',
+    entityId: row.id,
+    newValue: {
+      companyId,
+      slotCount: input.slotCount,
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo ?? null,
+    },
+  });
+  return row;
 }
 
 export async function listQuota(companyId: string) {
@@ -98,7 +111,7 @@ export async function createBlock(
   createdById?: string,
 ) {
   await assertCompanyExists(companyId);
-  return prisma.slotBlock.create({
+  const row = await prisma.slotBlock.create({
     data: {
       companyId,
       blockedCount: input.blockedCount,
@@ -109,6 +122,19 @@ export async function createBlock(
       createdById,
     },
   });
+  await recordAudit({
+    actionType: 'SLOT_BLOCKED',
+    entityType: 'SlotBlock',
+    entityId: row.id,
+    newValue: {
+      companyId,
+      blockedCount: input.blockedCount,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      reason: input.reason,
+    },
+  });
+  return row;
 }
 
 export async function listBlocks(companyId: string, opts: PageArgs) {
@@ -128,6 +154,18 @@ export async function deleteBlock(actor: { role: Role; companyId: string }, bloc
     throw new NotFoundError('Block not found'); // hide cross-tenant existence
   }
   await prisma.slotBlock.delete({ where: { id: blockId } });
+  await recordAudit({
+    actionType: 'SLOT_UNBLOCKED',
+    entityType: 'SlotBlock',
+    entityId: blockId,
+    oldValue: {
+      companyId: block.companyId,
+      blockedCount: block.blockedCount,
+      startDate: block.startDate.toISOString().slice(0, 10),
+      endDate: block.endDate.toISOString().slice(0, 10),
+      reason: block.reason,
+    },
+  });
   return { message: 'Block removed' };
 }
 
