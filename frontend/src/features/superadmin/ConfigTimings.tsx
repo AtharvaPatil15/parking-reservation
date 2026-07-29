@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, ErrorState, Input, LoadingState, Select, useToast } from '../../components';
 import { useConfig, useUpdateConfig } from '../../api/hooks';
 import { ApiError } from '../../api/http';
@@ -26,9 +26,16 @@ export function ConfigTimings() {
   const entries = useMemo(() => config.data ?? [], [config.data]);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
-  // Seed/refresh the editable draft from the server whenever config (re)loads.
+  // Seed the editable draft from the server on first load, and re-seed on later
+  // (re)loads ONLY when the user has no unsaved edits — so a background refetch
+  // (e.g. window refocus) can't silently wipe in-progress changes.
   useEffect(() => {
+    const current = draftRef.current;
+    const dirty = entries.some((e) => current[e.key] !== undefined && current[e.key] !== e.value);
+    if (dirty) return;
     setDraft(Object.fromEntries(entries.map((e) => [e.key, e.value])));
     setErrors({});
   }, [entries]);

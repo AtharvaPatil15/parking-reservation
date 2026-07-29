@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Badge, Button, Card, EmptyState, ErrorState, LoadingState, Table, useToast,
   type BadgeTone, type Column,
@@ -23,11 +24,17 @@ export function Approvals() {
   const users = useCompanyUsers(companyId);
   const approval = useSetUserApproval(companyId);
   const { toast } = useToast();
+  // Track the row currently mutating so only its buttons show a spinner.
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   function decide(userId: string, decision: 'APPROVE' | 'REJECT') {
+    setPendingId(userId);
     approval.mutate(
       { userId, decision },
-      { onSuccess: () => toast(decision === 'APPROVE' ? 'User approved.' : 'User rejected.', { tone: 'success' }) },
+      {
+        onSuccess: () => toast(decision === 'APPROVE' ? 'User approved.' : 'User rejected.', { tone: 'success' }),
+        onSettled: () => setPendingId(null),
+      },
     );
   }
 
@@ -40,10 +47,10 @@ export function Approvals() {
       render: (u) =>
         u.status === 'PENDING' ? (
           <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" loading={approval.isPending} onClick={() => decide(u.id, 'REJECT')}>
+            <Button size="sm" variant="secondary" loading={pendingId === u.id} disabled={pendingId !== null} onClick={() => decide(u.id, 'REJECT')}>
               Reject
             </Button>
-            <Button size="sm" loading={approval.isPending} onClick={() => decide(u.id, 'APPROVE')}>
+            <Button size="sm" loading={pendingId === u.id} disabled={pendingId !== null} onClick={() => decide(u.id, 'APPROVE')}>
               Approve
             </Button>
           </div>

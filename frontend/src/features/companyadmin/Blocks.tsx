@@ -34,11 +34,13 @@ export function Blocks() {
   const [endDate, setEndDate] = useState(nextBookableWeekday());
   const [reason, setReason] = useState<BlockReason>('MAINTENANCE');
   const [reasonText, setReasonText] = useState('');
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const createError = create.error instanceof ApiError ? create.error.message : null;
   const count = Number(blockedCount);
   const countInvalid = blockedCount.trim() !== '' && (!Number.isInteger(count) || count < 1);
   const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);
-  const canSubmit = blockedCount.trim() !== '' && !countInvalid && !rangeInvalid;
+  // Guard on companyId too — without it the mutation would hit a malformed /companies//blocks path.
+  const canSubmit = Boolean(companyId) && blockedCount.trim() !== '' && !countInvalid && !rangeInvalid;
 
   function onCreate() {
     if (!canSubmit) return;
@@ -49,7 +51,11 @@ export function Blocks() {
   }
 
   function onRemove(id: string) {
-    remove.mutate(id, { onSuccess: () => toast('Block removed.', { tone: 'success' }) });
+    setRemovingId(id);
+    remove.mutate(id, {
+      onSuccess: () => toast('Block removed.', { tone: 'success' }),
+      onSettled: () => setRemovingId(null),
+    });
   }
 
   const columns: Column<SlotBlock>[] = [
@@ -60,7 +66,7 @@ export function Blocks() {
     {
       key: 'actions', header: '', align: 'right',
       render: (b) => (
-        <Button size="sm" variant="secondary" loading={remove.isPending} onClick={() => onRemove(b.id)}>
+        <Button size="sm" variant="secondary" loading={removingId === b.id} disabled={removingId !== null} onClick={() => onRemove(b.id)}>
           Remove
         </Button>
       ),

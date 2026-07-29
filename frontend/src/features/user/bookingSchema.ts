@@ -15,6 +15,10 @@ export const bookingSchema = z
     bookingDate: z.string().min(1, 'Date is required.').refine(isBookableWeekday, 'Pick a weekday (Mon–Fri), today or later.'),
     vehicleType: z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE', 'OTHER']).optional().or(z.literal('')),
     vehicleNumber: z.string().optional(),
+    // NOTE: `4` mirrors the backend default of `carpool.maxPeople` (D8). The real cap is
+    // configurable (SystemConfiguration) and the contract bakes in no fixed max — if an SA
+    // raises it, this client cap should be sourced from `useConfig()` rather than hardcoded.
+    // Kept static for the demo (cap stays 4); the backend is the authority and 422s violations.
     carpoolPeople: z.coerce.number({ invalid_type_error: 'Enter a number.' }).int('Whole number.').min(1, 'At least 1 person.').max(4, 'Up to 4 people.'),
     specialRequirement: z.string().optional(),
     carpoolMembers: z
