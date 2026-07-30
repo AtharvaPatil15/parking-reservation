@@ -22,12 +22,14 @@ describe('Slots', () => {
     expect(await screen.findByText('A-12')).toBeInTheDocument();
   });
 
-  it('creates a slot', async () => {
+  it('creates a slot and shows it in the list without a reload', async () => {
     renderSlots();
     await screen.findByText('A-12');
     await userEvent.type(screen.getByLabelText(/slot number/i), 'A-99');
     await userEvent.click(screen.getByRole('button', { name: /add slot/i }));
     expect(await screen.findByText(/slot created/i)).toBeInTheDocument();
+    // The list must refetch (invalidation) so the just-added slot is visible immediately.
+    expect(await screen.findByText('A-99')).toBeInTheDocument();
   });
 
   it('offers the parking areas (Basement 1/2/3) to allocate a slot into', async () => {
