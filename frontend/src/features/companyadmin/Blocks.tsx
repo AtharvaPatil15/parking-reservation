@@ -5,7 +5,7 @@ import {
 } from '../../components';
 import { useBlocks, useCreateBlock, useDeleteBlock } from '../../api/hooks';
 import { useAuth } from '../../lib/auth';
-import { ApiError } from '../../api/http';
+import { apiErrorText } from '../../api/http';
 import { nextBookableWeekday } from '../../lib/dates';
 import type { components } from '../../api/types';
 
@@ -35,7 +35,7 @@ export function Blocks() {
   const [reason, setReason] = useState<BlockReason>('MAINTENANCE');
   const [reasonText, setReasonText] = useState('');
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const createError = create.error instanceof ApiError ? create.error.message : null;
+  const createError = apiErrorText(create.error);
   const count = Number(blockedCount);
   const countInvalid = blockedCount.trim() !== '' && (!Number.isInteger(count) || count < 1);
   const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);

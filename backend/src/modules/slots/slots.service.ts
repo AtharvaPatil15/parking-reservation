@@ -164,6 +164,30 @@ export async function createBlock(
   createdById?: string,
 ) {
   await assertCompanyExists(companyId);
+
+  // Can't hold back more slots than the company actually has: on every day in the range,
+  // already-blocked + this new count must not exceed that day's effective quota.
+  const start = toDate(input.startDate);
+  const end = toDate(input.endDate);
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / MS_DAY) + 1;
+  for (let i = 0; i < dayCount; i++) {
+    const day = new Date(start.getTime() + i * MS_DAY);
+    const [quota, alreadyBlocked] = await Promise.all([
+      getEffectiveQuota(companyId, day),
+      getBlockedCount(companyId, day),
+    ]);
+    if (alreadyBlocked + input.blockedCount > quota) {
+      const remaining = Math.max(0, quota - alreadyBlocked);
+      throw new ValidationError('Request validation failed', [
+        {
+          field: 'blockedCount',
+          message: `Cannot block ${input.blockedCount} slot(s) on ${day.toISOString().slice(0, 10)}: the company's quota is ${quota} with ${alreadyBlocked} already blocked, so at most ${remaining} more can be blocked.`,
+        },
+      ]);
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const row = await tx.slotBlock.create({
       data: {
