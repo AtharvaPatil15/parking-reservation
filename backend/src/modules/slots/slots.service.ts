@@ -115,16 +115,19 @@ export async function createQuota(
     ]);
   }
 
+  const effectiveTo = input.effectiveTo ? toDate(input.effectiveTo) : null;
   return prisma.$transaction(async (tx) => {
-    const row = await tx.companySlotAllocation.create({
-      data: {
-        companyId,
-        slotCount: input.slotCount,
-        effectiveFrom: toDate(input.effectiveFrom),
-        effectiveTo: input.effectiveTo ? toDate(input.effectiveTo) : null,
-        createdById,
-      },
-    });
+    // One quota row per (company, effectiveFrom): setting the same start date again replaces the
+    // value instead of stacking a duplicate (which made getEffectiveQuota non-deterministic).
+    const existing = await tx.companySlotAllocation.findFirst({ where: { companyId, effectiveFrom } });
+    const row = existing
+      ? await tx.companySlotAllocation.update({
+          where: { id: existing.id },
+          data: { slotCount: input.slotCount, effectiveTo, createdById },
+        })
+      : await tx.companySlotAllocation.create({
+          data: { companyId, slotCount: input.slotCount, effectiveFrom, effectiveTo, createdById },
+        });
     await tx.auditLog.create({
       data: buildAuditData({
         actionType: 'QUOTA_SET',
