@@ -11,11 +11,15 @@ type CreateBlockRequest = components['schemas']['CreateBlockRequest'];
 type ApprovalDecision = components['schemas']['ApprovalDecision'];
 type UserStatus = components['schemas']['UserStatus'];
 
-/** GET /dashboard/company-admin — headline counts for the CA landing. */
-export function useCompanyAdminDashboard() {
+/** GET /dashboard/company-admin — headline counts for the CA landing. `date` (YYYY-MM-DD) picks the
+ *  business day for the daily figures; omit for today (IST). */
+export function useCompanyAdminDashboard(date?: string) {
   return useQuery({
-    queryKey: queryKeys.companyAdminDashboard,
-    queryFn: () => unwrap<CompanyAdminDashboard>(api.GET('/dashboard/company-admin', {})),
+    queryKey: [...queryKeys.companyAdminDashboard, date ?? ''],
+    queryFn: () =>
+      unwrap<CompanyAdminDashboard>(
+        api.GET('/dashboard/company-admin', { params: { query: date ? { date } : {} } }),
+      ),
   });
 }
 

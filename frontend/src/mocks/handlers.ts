@@ -559,6 +559,21 @@ const hero = [
     slotState = [...slotState, slot];
     return ok<ParkingSlot>(slot, 201);
   }),
+  http.patch(`${baseURL}/slots/:id`, async ({ params, request }) => {
+    const id = String(params.id);
+    const body = (await request.json().catch(() => ({}))) as Partial<ParkingSlot>;
+    const slot = slotState.find((s) => s.id === id);
+    if (!slot) return fail(404, 'NOT_FOUND', 'Slot not found');
+    Object.assign(slot, body);
+    return ok<ParkingSlot>(slot);
+  }),
+  http.delete(`${baseURL}/slots/:id`, ({ params }) => {
+    const id = String(params.id);
+    const before = slotState.length;
+    slotState = slotState.filter((s) => s.id !== id);
+    if (slotState.length === before) return fail(404, 'NOT_FOUND', 'Slot not found');
+    return ok({ message: 'Slot removed' });
+  }),
 
   // --- Quota (super admin) ---
   http.get(`${baseURL}/companies/:id/quota`, ({ params }) => ok<CompanyQuota[]>(quotaState[String(params.id)] ?? [])),

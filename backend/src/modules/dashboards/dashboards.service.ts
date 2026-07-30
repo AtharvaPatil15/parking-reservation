@@ -1,5 +1,5 @@
 import { prisma } from '../../lib/prisma';
-import { getEffectiveQuota, getBlockedCount } from '../slots/slots.service';
+import { getEffectiveQuota, getBlockedCount, countInServiceSlots } from '../slots/slots.service';
 import { getString } from '../../config/systemConfig';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -7,7 +7,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export async function superAdminDashboard(date: Date) {
   const [totalParkingSlots, totalActiveCompanies, bookedSlots, primaryBookings, commonPoolBookings, waitlistCount, blockedAgg] =
     await Promise.all([
-      prisma.parkingSlot.count({ where: { deletedAt: null } }),
+      countInServiceSlots(),
       prisma.company.count({ where: { status: 'ACTIVE', deletedAt: null } }),
       prisma.parkingAllocation.count({ where: { bookingDate: date } }),
       prisma.bookingRequest.count({ where: { bookingDate: date, bookingType: 'PRIMARY' } }),

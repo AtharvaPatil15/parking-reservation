@@ -69,6 +69,22 @@ export async function updateSlot(
   return prisma.parkingSlot.update({ where: { id }, data: input });
 }
 
+/** Soft-delete a slot (drops it from every count/list). */
+export async function deleteSlot(id: string) {
+  const existing = await prisma.parkingSlot.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) throw new NotFoundError('Slot not found');
+  await prisma.parkingSlot.update({ where: { id }, data: { deletedAt: new Date() } });
+  return { message: 'Slot removed' };
+}
+
+/**
+ * Count of physically-usable slots: not soft-deleted and not deactivated (INACTIVE). This is the
+ * "in service" inventory the dashboard reports and the quota cap allots against.
+ */
+export function countInServiceSlots(): Promise<number> {
+  return prisma.parkingSlot.count({ where: { deletedAt: null, status: { not: 'INACTIVE' } } });
+}
+
 // ---- Quota (SUPER_ADMIN) — effective-dated ---------------------------------
 
 export async function createQuota(
@@ -82,7 +98,7 @@ export async function createQuota(
   // effective date) must not exceed the building's physical slots — you can't promise more
   // parking than exists.
   const effectiveFrom = toDate(input.effectiveFrom);
-  const totalSlots = await prisma.parkingSlot.count({ where: { deletedAt: null } });
+  const totalSlots = await countInServiceSlots();
   const others = await prisma.company.findMany({
     where: { status: 'ACTIVE', deletedAt: null, id: { not: companyId } },
     select: { id: true },
@@ -99,16 +115,19 @@ export async function createQuota(
     ]);
   }
 
+  const effectiveTo = input.effectiveTo ? toDate(input.effectiveTo) : null;
   return prisma.$transaction(async (tx) => {
-    const row = await tx.companySlotAllocation.create({
-      data: {
-        companyId,
-        slotCount: input.slotCount,
-        effectiveFrom: toDate(input.effectiveFrom),
-        effectiveTo: input.effectiveTo ? toDate(input.effectiveTo) : null,
-        createdById,
-      },
-    });
+    // One quota row per (company, effectiveFrom): setting the same start date again replaces the
+    // value instead of stacking a duplicate (which made getEffectiveQuota non-deterministic).
+    const existing = await tx.companySlotAllocation.findFirst({ where: { companyId, effectiveFrom } });
+    const row = existing
+      ? await tx.companySlotAllocation.update({
+          where: { id: existing.id },
+          data: { slotCount: input.slotCount, effectiveTo, createdById },
+        })
+      : await tx.companySlotAllocation.create({
+          data: { companyId, slotCount: input.slotCount, effectiveFrom, effectiveTo, createdById },
+        });
     await tx.auditLog.create({
       data: buildAuditData({
         actionType: 'QUOTA_SET',
@@ -148,6 +167,30 @@ export async function createBlock(
   createdById?: string,
 ) {
   await assertCompanyExists(companyId);
+
+  // Can't hold back more slots than the company actually has: on every day in the range,
+  // already-blocked + this new count must not exceed that day's effective quota.
+  const start = toDate(input.startDate);
+  const end = toDate(input.endDate);
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const dayCount = Math.floor((end.getTime() - start.getTime()) / MS_DAY) + 1;
+  for (let i = 0; i < dayCount; i++) {
+    const day = new Date(start.getTime() + i * MS_DAY);
+    const [quota, alreadyBlocked] = await Promise.all([
+      getEffectiveQuota(companyId, day),
+      getBlockedCount(companyId, day),
+    ]);
+    if (alreadyBlocked + input.blockedCount > quota) {
+      const remaining = Math.max(0, quota - alreadyBlocked);
+      throw new ValidationError('Request validation failed', [
+        {
+          field: 'blockedCount',
+          message: `Cannot block ${input.blockedCount} slot(s) on ${day.toISOString().slice(0, 10)}: the company's quota is ${quota} with ${alreadyBlocked} already blocked, so at most ${remaining} more can be blocked.`,
+        },
+      ]);
+    }
+  }
+
   return prisma.$transaction(async (tx) => {
     const row = await tx.slotBlock.create({
       data: {

@@ -63,6 +63,9 @@ export const listSlots = asyncHandler(async (req, res) => {
 export const updateSlot = asyncHandler(async (req, res) => {
   sendSuccess(res, toSlot(await service.updateSlot(req.params.id, req.body)));
 });
+export const deleteSlot = asyncHandler(async (req, res) => {
+  sendSuccess(res, await service.deleteSlot(req.params.id));
+});
 
 // Quota
 export const createQuota = asyncHandler(async (req, res) => {

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table,
+  Badge, Button, Card, EmptyState, ErrorState, LoadingState, Select, Table,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
 import { useAdminBookings, useActiveCompanies } from '../../api/hooks';
@@ -25,13 +25,16 @@ const PAGE_SIZE = 20;
 /**
  * Booking roster for the admin dashboards — who booked, for what date, its status and slot.
  * `scope='company'` (Company Admin) is server-scoped to the caller's company; `scope='all'`
- * (Super Admin) shows every company and adds a company filter + column.
+ * (Super Admin) shows every company and adds a company filter + column. `date` is controlled by
+ * the dashboard's date picker (blank = all dates).
  */
-export function BookingList({ scope }: { scope: 'company' | 'all' }) {
+export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; date?: string }) {
   const showCompany = scope === 'all';
-  const [date, setDate] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [page, setPage] = useState(1);
+
+  // The date is driven by the dashboard-level picker; reset paging when it changes.
+  useEffect(() => setPage(1), [date]);
 
   const companies = useActiveCompanies();
   const bookings = useAdminBookings({
@@ -67,26 +70,22 @@ export function BookingList({ scope }: { scope: 'company' | 'all' }) {
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Reset to page 1 whenever a filter changes (avoids landing on an out-of-range page).
-  function onDate(v: string) { setDate(v); setPage(1); }
   function onCompany(v: string) { setCompanyId(v); setPage(1); }
 
   return (
     <Card title="Bookings" padded={false}>
-      <div className="flex flex-wrap items-end gap-3 px-6 pt-5">
-        <div className="w-44">
-          <Input label="Date" type="date" value={date} onChange={(e) => onDate(e.target.value)} hint="Blank = all dates" />
-        </div>
-        {showCompany && (
+      {showCompany && (
+        <div className="flex flex-wrap items-end gap-3 px-6 pt-5">
           <div className="w-52">
             <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => onCompany(e.target.value)} />
           </div>
-        )}
-        {(date || companyId) && (
-          <Button variant="secondary" size="sm" onClick={() => { setDate(''); setCompanyId(''); setPage(1); }}>
-            Clear
-          </Button>
-        )}
-      </div>
+          {companyId && (
+            <Button variant="secondary" size="sm" onClick={() => { setCompanyId(''); setPage(1); }}>
+              Clear
+            </Button>
+          )}
+        </div>
+      )}
 
       {bookings.isLoading ? (
         <LoadingState label="Loading bookings…" />

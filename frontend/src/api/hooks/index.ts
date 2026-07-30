@@ -12,6 +12,8 @@ export {
   useCreateCompany,
   useSlots,
   useCreateSlot,
+  useUpdateSlot,
+  useDeleteSlot,
   useParkingAreas,
   useCompanyQuota,
   useSetCompanyQuota,
