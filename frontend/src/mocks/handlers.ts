@@ -17,6 +17,7 @@ type SuperAdminDashboard = components['schemas']['SuperAdminDashboard'];
 type CompanyAdminDashboard = components['schemas']['CompanyAdminDashboard'];
 type Company = components['schemas']['Company'];
 type ParkingSlot = components['schemas']['ParkingSlot'];
+type ParkingArea = components['schemas']['ParkingArea'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
 type SlotBlock = components['schemas']['SlotBlock'];
 type CompanySummary = components['schemas']['CompanySummary'];
@@ -502,6 +503,9 @@ const hero = [
     const start = (page - 1) * pageSize;
     return okPage(slots.slice(start, start + pageSize), page, pageSize, slots.length);
   }),
+  http.get(`${baseURL}/parking-areas`, () =>
+    ok<ParkingArea[]>([{ id: 'area-1', name: 'Basement 1', floor: 'B1', officeLocationId: 'office-1' }]),
+  ),
   http.post(`${baseURL}/slots`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as Partial<ParkingSlot> & { slotNumber?: string; parkingAreaId?: string };
     if (!body.slotNumber || !body.parkingAreaId) return fail(400, 'VALIDATION_ERROR', 'slotNumber and parkingAreaId are required');

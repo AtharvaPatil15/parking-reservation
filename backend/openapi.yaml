@@ -1233,6 +1233,30 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /parking-areas:
+    get:
+      tags: [Slots & Quota]
+      operationId: listParkingAreas
+      summary: List parking areas (for the slot-create area picker)
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Parking areas.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ParkingArea' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /companies/{id}/quota:
     parameters:
       - name: id
@@ -1936,6 +1960,14 @@ components:
         userId: { type: string }
 
     # --- Slots & Quota (P3-05) ---
+    ParkingArea:
+      type: object
+      required: [id, name, officeLocationId]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        floor: { type: string, nullable: true }
+        officeLocationId: { type: string }
     ParkingSlot:
       type: object
       required: [id, slotNumber, parkingAreaId, slotType, status, hasEvCharging, isAccessible, createdAt, updatedAt]

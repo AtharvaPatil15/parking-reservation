@@ -12,6 +12,7 @@ export {
   useCreateCompany,
   useSlots,
   useCreateSlot,
+  useParkingAreas,
   useCompanyQuota,
   useSetCompanyQuota,
 } from './admin';

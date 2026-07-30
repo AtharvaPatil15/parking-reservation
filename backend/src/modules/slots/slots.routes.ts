@@ -19,6 +19,10 @@ slotsRouter.post('/', authenticate, requireRole('SUPER_ADMIN'), validate(createS
 slotsRouter.get('/', authenticate, requireRole('SUPER_ADMIN'), validate(listSlotsQuery, 'query'), c.listSlots);
 slotsRouter.patch('/:id', authenticate, requireRole('SUPER_ADMIN'), validate(updateSlotSchema), c.updateSlot);
 
+// /parking-areas — SUPER_ADMIN; feeds the slot-create area picker.
+export const parkingAreasRouter = Router();
+parkingAreasRouter.get('/', authenticate, requireRole('SUPER_ADMIN'), c.listParkingAreas);
+
 // /companies/:id/quota (SA) + /companies/:id/blocks (SA any / CA own)
 export const companyScopedRouter = Router();
 companyScopedRouter.post('/:id/quota', authenticate, requireRole('SUPER_ADMIN'), validate(createQuotaSchema), c.createQuota);
