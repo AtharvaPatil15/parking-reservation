@@ -23,6 +23,17 @@ export interface PageMeta {
   total: number;
 }
 
+/**
+ * Human-readable text for any thrown error, for inline form/toast display. Prefers the
+ * per-field `details` (e.g. "Exceeds available parking…", "Parking area not found") over the
+ * generic top-level `message` ("Request validation failed"). Returns null for non-API errors.
+ */
+export function apiErrorText(err: unknown): string | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.details?.length) return err.details.map((d) => d.message).join(' ');
+  return err.message;
+}
+
 interface ErrorEnvelope {
   success: false;
   error: { code: string; message: string; details?: ApiErrorDetail[] };

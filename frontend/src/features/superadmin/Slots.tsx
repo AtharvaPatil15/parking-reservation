@@ -3,8 +3,8 @@ import {
   Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
-import { useCreateSlot, useSlots } from '../../api/hooks';
-import { ApiError } from '../../api/http';
+import { useCreateSlot, useSlots, useParkingAreas } from '../../api/hooks';
+import { apiErrorText } from '../../api/http';
 import type { components } from '../../api/types';
 
 type ParkingSlot = components['schemas']['ParkingSlot'];
@@ -38,19 +38,24 @@ const columns: Column<ParkingSlot>[] = [
 
 export function Slots() {
   const slots = useSlots();
+  const areas = useParkingAreas();
   const create = useCreateSlot();
   const { toast } = useToast();
   const [slotNumber, setSlotNumber] = useState('');
-  const [parkingAreaId, setParkingAreaId] = useState('area-1');
+  const [areaId, setAreaId] = useState('');
   const [slotType, setSlotType] = useState<SlotType>('STANDARD');
-  const createError = create.error instanceof ApiError ? create.error.message : null;
+  const createError = apiErrorText(create.error);
+
+  // Default to the first real area once loaded (no more hardcoded id that fails the FK).
+  const areaOptions: SelectOption[] = (areas.data ?? []).map((a) => ({ value: a.id, label: a.name }));
+  const parkingAreaId = areaId || areas.data?.[0]?.id || '';
 
   function onCreate() {
-    if (!slotNumber.trim() || !parkingAreaId.trim()) return;
+    if (!slotNumber.trim() || !parkingAreaId) return;
     create.mutate(
       {
         slotNumber: slotNumber.trim(),
-        parkingAreaId: parkingAreaId.trim(),
+        parkingAreaId,
         slotType,
         hasEvCharging: slotType === 'EV_CHARGING',
         isAccessible: slotType === 'ACCESSIBLE',
@@ -71,13 +76,19 @@ export function Slots() {
           <div className="w-40">
             <Input label="Slot number" value={slotNumber} onChange={(e) => setSlotNumber(e.target.value)} />
           </div>
-          <div className="w-40">
-            <Input label="Area" value={parkingAreaId} onChange={(e) => setParkingAreaId(e.target.value)} />
+          <div className="w-48">
+            <Select
+              label="Area"
+              placeholder={areas.isLoading ? 'Loading areas…' : 'Select an area'}
+              options={areaOptions}
+              value={parkingAreaId}
+              onChange={(e) => setAreaId(e.target.value)}
+            />
           </div>
           <div className="w-44">
             <Select label="Type" options={SLOT_TYPES} value={slotType} onChange={(e) => setSlotType(e.target.value as SlotType)} />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={!slotNumber.trim() || !parkingAreaId.trim()}>
+          <Button onClick={onCreate} loading={create.isPending} disabled={!slotNumber.trim() || !parkingAreaId}>
             Add slot
           </Button>
         </div>

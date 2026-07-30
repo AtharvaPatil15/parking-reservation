@@ -7,6 +7,7 @@ import type { components } from '../types';
 type SuperAdminDashboard = components['schemas']['SuperAdminDashboard'];
 type Company = components['schemas']['Company'];
 type ParkingSlot = components['schemas']['ParkingSlot'];
+type ParkingArea = components['schemas']['ParkingArea'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
 type CreateSlotRequest = components['schemas']['CreateSlotRequest'];
 type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
@@ -72,6 +73,14 @@ export function useSlots(page = 1, pageSize = 10, status?: components['schemas']
       unwrapPage<ParkingSlot>(
         api.GET('/slots', { params: { query: { page, pageSize, ...(status ? { status } : {}) } } }),
       ),
+  });
+}
+
+/** GET /parking-areas — areas to choose from when creating a slot. */
+export function useParkingAreas() {
+  return useQuery({
+    queryKey: queryKeys.parkingAreas,
+    queryFn: () => unwrap<ParkingArea[]>(api.GET('/parking-areas', {})),
   });
 }
 
