@@ -92,11 +92,17 @@ export function AuthProvider({
   // Only "loading" when we have a reason to rehydrate (unseeded + a prior-session hint).
   const [isLoading, setIsLoading] = useState<boolean>(initialSession === null && hasActiveFlag());
 
+  // Set the client token synchronously so the first authenticated request after login
+  // (e.g. the dashboard fetch) carries Authorization — the mirroring effect below runs
+  // child-first, i.e. after the destination page's data-fetch effect, which would race.
+  // Also flag "a session existed" so a cold load knows to attempt silent refresh (F10).
   const login = useCallback((next: AuthSession) => {
+    setAccessToken(next.accessToken);
     setActiveFlag(true);
     setSession(next);
   }, []);
   const logout = useCallback(() => {
+    setAccessToken(null);
     setActiveFlag(false);
     setSession(null);
   }, []);

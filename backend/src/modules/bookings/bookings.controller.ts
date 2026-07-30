@@ -1,5 +1,6 @@
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
+import { parsePagination } from '../../lib/pagination';
 import { UnauthenticatedError } from '../../lib/errors';
 import * as service from './bookings.service';
 
@@ -8,6 +9,7 @@ const num = (v: unknown) => (v != null ? Number(v) : null);
 
 type CreatedBooking = Awaited<ReturnType<typeof service.createBooking>>;
 type BookingDetail = Awaited<ReturnType<typeof service.getBookingForPrincipal>>;
+type AdminBookingRow = Awaited<ReturnType<typeof service.listBookings>>['rows'][number];
 
 /** openapi BookingCreatedData. `carpoolPeople` = driver + declared members. */
 function toBookingCreated(b: CreatedBooking) {
@@ -58,6 +60,41 @@ function toBookingDetail(b: BookingDetail) {
       : null,
   };
 }
+
+/** openapi AdminBooking — a booking row for the admin dashboards (who / when / status / slot). */
+function toAdminBooking(b: AdminBookingRow) {
+  return {
+    id: b.id,
+    bookingDate: isoDate(b.bookingDate),
+    bookingType: b.bookingType,
+    status: b.status,
+    employeeName: b.user.fullName,
+    employeeEmail: b.user.email,
+    companyId: b.companyId,
+    companyName: b.company.name,
+    travelDistanceKm: num(b.travelDistanceKm),
+    carpoolPeople: b.carpoolMemberCount + 1,
+    allocationScore: num(b.allocationScore),
+    allocatedSlotNumber: b.allocation?.slot?.slotNumber ?? null,
+    submittedAt: b.submittedAt ? b.submittedAt.toISOString() : null,
+    createdAt: b.createdAt.toISOString(),
+  };
+}
+
+export const listBookings = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const p = parsePagination(req.query as Record<string, unknown>);
+  const { rows, total } = await service.listBookings(
+    req.user,
+    {
+      date: req.query.date as string | undefined,
+      companyId: req.query.companyId as string | undefined,
+      status: req.query.status as AdminBookingRow['status'] | undefined,
+    },
+    p,
+  );
+  sendSuccess(res, rows.map(toAdminBooking), 200, { page: p.page, pageSize: p.pageSize, total });
+});
 
 export const createBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();

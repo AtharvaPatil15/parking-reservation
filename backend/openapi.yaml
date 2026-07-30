@@ -377,6 +377,52 @@ paths:
   # Bookings  (P3-06)  — Role: USER (own). Tenant-scoped by companyId.
   # ---------------------------------------------------------------------------
   /bookings:
+    get:
+      tags: [Bookings]
+      operationId: listBookings
+      summary: List bookings for admins (paged, newest first)
+      description: >
+        Role COMPANY_ADMIN (scoped to their own company) or SUPER_ADMIN (all companies; optional
+        `companyId` filter). Each row carries who booked, the date, status, and allocated slot.
+        Filter by `date` and/or `status`.
+      x-maturity: DEMO
+      x-required-roles: [COMPANY_ADMIN, SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: date
+          in: query
+          required: false
+          description: Filter to a single booking date (YYYY-MM-DD).
+          schema: { type: string, format: date }
+        - name: companyId
+          in: query
+          required: false
+          description: SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN.
+          schema: { type: string }
+        - name: status
+          in: query
+          required: false
+          description: Optional filter by booking status.
+          schema: { $ref: '#/components/schemas/BookingStatus' }
+      responses:
+        '200':
+          description: Paged list of bookings.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AdminBooking' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Bookings]
       operationId: createBooking
@@ -1782,6 +1828,26 @@ components:
           type: string
           nullable: true
           description: Slot number if ALLOCATED, else null.
+        submittedAt: { type: string, nullable: true, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    AdminBooking:
+      type: object
+      description: A booking row for the admin dashboards — who booked, when, its status and slot.
+      required: [id, bookingDate, bookingType, status, employeeName, employeeEmail, companyId, companyName, carpoolPeople, createdAt]
+      properties:
+        id: { type: string }
+        bookingDate: { type: string, format: date }
+        bookingType: { $ref: '#/components/schemas/BookingType' }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        employeeName: { type: string }
+        employeeEmail: { type: string, format: email }
+        companyId: { type: string }
+        companyName: { type: string }
+        travelDistanceKm: { type: number, nullable: true }
+        carpoolPeople: { type: integer, minimum: 1, description: Driver + declared members. }
+        allocationScore: { type: number, nullable: true }
+        allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
 

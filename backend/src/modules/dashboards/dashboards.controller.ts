@@ -1,14 +1,14 @@
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
 import { UnauthenticatedError } from '../../lib/errors';
+import { currentIstCalendarDate } from '../bookings/bookings.time';
 import * as service from './dashboards.service';
 
-/** Resolve the business date: ?date=YYYY-MM-DD, else today (UTC midnight). */
+/** Resolve the business date: ?date=YYYY-MM-DD, else the current IST calendar day. */
 function resolveDate(q: unknown): Date {
   const raw = (q as { date?: string })?.date;
   if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(`${raw}T00:00:00.000Z`);
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return currentIstCalendarDate();
 }
 
 export const superAdmin = asyncHandler(async (req, res) => {

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap } from '../http';
 import { queryKeys } from '../queryKeys';
@@ -9,9 +9,16 @@ type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 
 /** POST /allocation/primary/run — returns the run summary (use `.id` for the breakdown). */
 export function useRunPrimaryAllocation() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { bookingDate: string }) =>
       unwrap<AllocationRunSummary>(api.POST('/allocation/primary/run', { body })),
+    onSuccess: () => {
+      // Allocation flips SUBMITTED → ALLOCATED/WAITLISTED and assigns slots — refresh the rosters/dashboards.
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
+      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
+      qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
+    },
   });
 }
 
