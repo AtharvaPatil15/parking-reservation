@@ -6,6 +6,7 @@ type LoginResponseData = components['schemas']['LoginResponseData'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
 type Booking = components['schemas']['Booking'];
+type AdminBooking = components['schemas']['AdminBooking'];
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type ConfigEntry = components['schemas']['ConfigEntry'];
@@ -23,6 +24,27 @@ type RegisterRequest = components['schemas']['RegisterRequest'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
+
+// Dev-only mock session persisted so a browser refresh survives in mock mode (mirrors the real
+// backend's HttpOnly refresh cookie). Never used against a real API — purely a mock artifact.
+const MOCK_SESSION_KEY = 'mock:auth';
+interface MockSession { id: string; fullName: string; email: string; role: RoleName; companyId: string; companyName: string }
+function readMockSession(): MockSession | null {
+  try {
+    const raw = localStorage.getItem(MOCK_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as MockSession) : null;
+  } catch {
+    return null;
+  }
+}
+function writeMockSession(s: MockSession | null): void {
+  try {
+    if (s) localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(MOCK_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 const okPage = <T,>(items: T[], page: number, pageSize: number, total = items.length) =>
   HttpResponse.json({ success: true, data: items, meta: { page, pageSize, total } });
 const fail = (status: number, code: string, message: string) =>
@@ -111,6 +133,24 @@ function seedBookings(): Record<string, BookingDetail> {
 /** History list order (newest first). */
 const HISTORY_IDS = ['bk-1', 'bk-2', 'bk-3'] as const;
 
+/** Admin booking roster (GET /bookings) — who booked, for what date, across companies. */
+function seedAdminBookings(): AdminBooking[] {
+  const row = (
+    id: string, employeeName: string, employeeEmail: string, companyId: string, companyName: string,
+    bookingDate: string, status: AdminBooking['status'], slot: string | null, distance: number, people: number, score: number | null,
+  ): AdminBooking => ({
+    id, bookingDate, bookingType: 'PRIMARY', status, employeeName, employeeEmail, companyId, companyName,
+    travelDistanceKm: distance, carpoolPeople: people, allocationScore: score, allocatedSlotNumber: slot,
+    submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
+  });
+  return [
+    row('ab-1', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
+    row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
+    row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
+    row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
+  ];
+}
+
 function toSummary(d: BookingDetail): Booking {
   return {
     id: d.id,
@@ -131,23 +171,20 @@ function seedCompanies(): Company[] {
   ];
 }
 
-function userProfile(id: string, fullName: string, email: string, status: UserProfile['status'], role: RoleName = 'USER'): UserProfile {
+function userProfile(
+  id: string, fullName: string, email: string, status: UserProfile['status'], role: RoleName = 'USER',
+  company: { id: string; name: string } = { id: 'mock-co', name: 'Mock Co' },
+): UserProfile {
   return {
     id, fullName, email, contactNumber: '555-0100', address: '1 Main St', pinCode: '560001',
-    distanceKm: 8.5, status, emailVerified: true, companyId: 'mock-co', companyName: 'Mock Co',
+    distanceKm: 8.5, status, emailVerified: true, companyId: company.id, companyName: company.name,
     role, createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-20T00:00:00.000Z',
   };
 }
 
 /** Company users keyed by companyId (for approvals + company user lists). */
 function seedCompanyUsers(): Record<string, UserProfile[]> {
-  const at = (companyId: string, companyName: string) =>
-    (id: string, name: string, email: string, status: UserProfile['status']): UserProfile => ({
-      ...userProfile(id, name, email, status),
-      companyId,
-      companyName,
-    });
-  const acme = at('co-acme', 'Acme Corp');
+  const acme = { id: 'co-acme', name: 'Acme Corp' };
   return {
     'mock-co': [
       userProfile('u-priya', 'Priya Rao', 'priya@mock.test', 'ACTIVE'),
@@ -156,11 +193,14 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
       userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
     ],
-    // A second company so cross-company carpooling can be exercised (a mock-co user
-    // may bring an Acme employee — carpool members can be any registered user).
+    // Acme users: two ACTIVE members so cross-company carpooling can be exercised (a
+    // mock-co user may bring an Acme employee — carpool members can be any registered
+    // user), plus a pending company-admin registration (F11) that surfaces in the
+    // Super Admin's admin-request queue.
     'co-acme': [
-      acme('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE'),
-      acme('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE'),
+      userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
+      userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
+      userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', acme),
     ],
   };
 }
@@ -245,20 +285,28 @@ const hero = [
     const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
     if (!body?.email || !body?.password) return fail(401, 'UNAUTHENTICATED', 'Invalid credentials');
     const role = roleForEmail(body.email);
-    return ok<LoginResponseData>({
-      accessToken: 'mock-access-token',
-      tokenType: 'Bearer',
-      expiresIn: 900,
-      user: {
-        id: `mock-${role.toLowerCase()}`,
-        fullName: `Mock ${role.replace('_', ' ')}`,
-        role,
-        companyId: 'mock-co',
-        companyName: 'Mock Co',
-      },
+    const user = {
+      id: `mock-${role.toLowerCase()}`,
+      fullName: `Mock ${role.replace('_', ' ')}`,
+      role,
+      companyId: 'mock-co',
+      companyName: 'Mock Co',
+    };
+    // Persist so a page refresh can rehydrate (via /auth/refresh + /me) in mock mode.
+    writeMockSession({ ...user, email: body.email });
+    return ok<LoginResponseData>({ accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900, user });
+  }),
+  // Rehydrate the access token from the persisted mock session (mirrors the real refresh-cookie flow).
+  http.post(`${baseURL}/auth/refresh`, () => {
+    if (!readMockSession()) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
+    return ok<{ accessToken: string; tokenType: 'Bearer'; expiresIn: number }>({
+      accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900,
     });
   }),
-  http.post(`${baseURL}/auth/logout`, () => ok({ message: 'Signed out' })),
+  http.post(`${baseURL}/auth/logout`, () => {
+    writeMockSession(null);
+    return ok({ message: 'Signed out' });
+  }),
   http.get(`${baseURL}/companies/active`, () =>
     ok<CompanySummary[]>(companyState.filter((c) => c.status === 'ACTIVE').map((c) => ({ id: c.id, name: c.name }))),
   ),
@@ -272,10 +320,11 @@ const hero = [
     if (exists) return fail(409, 'CONFLICT', 'An account with this email already exists');
     const company = companyState.find((c) => c.id === b.companyId && c.status === 'ACTIVE');
     if (!company) return fail(400, 'VALIDATION_ERROR', 'Company must be active');
-    // Create as PENDING and add to the company's user list so it shows up in Company-Admin approvals.
+    // Create as PENDING and add to the company's user list. A COMPANY_ADMIN request (F11) gets the
+    // COMPANY_ADMIN role so it surfaces in the Super Admin's admin-request queue instead.
+    const role: RoleName = b.registrationType === 'COMPANY_ADMIN' ? 'COMPANY_ADMIN' : 'USER';
     const user: UserProfile = {
-      ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING'),
-      companyId: company.id, companyName: company.name,
+      ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING', role, { id: company.id, name: company.name }),
       contactNumber: b.contactNumber ?? '—', address: b.address ?? '—', pinCode: b.pinCode ?? '—',
       distanceKm: b.distanceKm ?? null,
     };
@@ -330,9 +379,15 @@ const hero = [
     bookingState[id] = { ...detail, status: 'RELEASED', allocatedSlotNumber: null };
     return ok<BookingDetail>(bookingState[id]);
   }),
-  http.get(`${baseURL}/me`, () =>
-    ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE')),
-  ),
+  http.get(`${baseURL}/me`, () => {
+    const s = readMockSession();
+    if (s) {
+      return ok<UserProfile>(
+        userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName }),
+      );
+    }
+    return ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE'));
+  }),
   http.get(`${baseURL}/dashboard/user`, () =>
     ok<UserDashboard>({
       upcomingBooking: toSummary(bookingState['mock-booking-1']),
@@ -345,6 +400,21 @@ const hero = [
     const all = HISTORY_IDS.map((id) => toSummary(bookingState[id]));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
+  }),
+
+  // Admin booking roster (CA/SA). Honours ?date, ?companyId, ?status filters + pagination.
+  http.get(`${baseURL}/bookings`, ({ request }) => {
+    const url = new URL(request.url);
+    const date = url.searchParams.get('date');
+    const companyId = url.searchParams.get('companyId');
+    const status = url.searchParams.get('status');
+    const { page, pageSize } = pageParams(request);
+    let rows = seedAdminBookings();
+    if (date) rows = rows.filter((r) => r.bookingDate === date);
+    if (companyId) rows = rows.filter((r) => r.companyId === companyId);
+    if (status) rows = rows.filter((r) => r.status === status);
+    const start = (page - 1) * pageSize;
+    return okPage(rows.slice(start, start + pageSize), page, pageSize, rows.length);
   }),
 
   // --- Allocation (super admin) ---
@@ -416,6 +486,15 @@ const hero = [
   }),
 
   // --- Company users + approvals ---
+  // Super Admin's pending company-admin request queue (F11): PENDING + COMPANY_ADMIN, any company.
+  http.get(`${baseURL}/users/pending-admins`, ({ request }) => {
+    const { page, pageSize } = pageParams(request);
+    const all = Object.values(companyUserState)
+      .flat()
+      .filter((u) => u.status === 'PENDING' && u.role === 'COMPANY_ADMIN');
+    const start = (page - 1) * pageSize;
+    return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
+  }),
   http.get(`${baseURL}/companies/:id/users`, ({ params, request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');

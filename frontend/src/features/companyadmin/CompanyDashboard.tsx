@@ -1,6 +1,7 @@
 import { ErrorState, LoadingState } from '../../components';
 import { useCompanyAdminDashboard } from '../../api/hooks';
 import { StatTiles, type Stat } from '../shared/StatTiles';
+import { BookingList } from '../shared/BookingList';
 
 const fmt = (n: number | undefined) => (n == null ? '—' : n.toLocaleString());
 const pct = (n: number | undefined) => (n == null ? '—' : `${n}%`);
@@ -30,6 +31,7 @@ export function CompanyDashboard() {
         <p className="text-text-muted">Today's parking utilization for your company.</p>
       </div>
       <StatTiles stats={stats} />
+      <BookingList scope="company" />
     </div>
   );
 }

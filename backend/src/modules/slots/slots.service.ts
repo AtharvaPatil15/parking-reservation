@@ -1,6 +1,6 @@
 import type { SlotStatus, SlotType, BlockReason } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { ConflictError, NotFoundError } from '../../lib/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
 import { isUniqueViolation } from '../../lib/prismaErrors';
 import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
@@ -66,6 +66,28 @@ export async function createQuota(
   createdById?: string,
 ) {
   await assertCompanyExists(companyId);
+
+  // Aggregate cap: a company's quota + every other active company's quota (as of this row's
+  // effective date) must not exceed the building's physical slots — you can't promise more
+  // parking than exists.
+  const effectiveFrom = toDate(input.effectiveFrom);
+  const totalSlots = await prisma.parkingSlot.count({ where: { deletedAt: null } });
+  const others = await prisma.company.findMany({
+    where: { status: 'ACTIVE', deletedAt: null, id: { not: companyId } },
+    select: { id: true },
+  });
+  let allottedElsewhere = 0;
+  for (const other of others) allottedElsewhere += await getEffectiveQuota(other.id, effectiveFrom);
+  const remaining = Math.max(0, totalSlots - allottedElsewhere);
+  if (input.slotCount > remaining) {
+    throw new ValidationError('Request validation failed', [
+      {
+        field: 'slotCount',
+        message: `Exceeds available parking: the building has ${totalSlots} slots and other companies already hold ${allottedElsewhere}, so at most ${remaining} can be allotted here.`,
+      },
+    ]);
+  }
+
   return prisma.$transaction(async (tx) => {
     const row = await tx.companySlotAllocation.create({
       data: {

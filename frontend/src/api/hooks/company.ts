@@ -65,7 +65,10 @@ export function useCreateBlock(companyId: string) {
   return useMutation({
     mutationFn: (body: CreateBlockRequest) =>
       unwrap<SlotBlock>(api.POST('/companies/{id}/blocks', { params: { path: { id: companyId } }, body })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies', companyId, 'blocks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['companies', companyId, 'blocks'] });
+      qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard }); // blocks change available/blocked counts
+    },
   });
 }
 
@@ -75,6 +78,9 @@ export function useDeleteBlock(companyId: string) {
   return useMutation({
     mutationFn: (blockId: string) =>
       unwrap<{ message: string }>(api.DELETE('/blocks/{id}', { params: { path: { id: blockId } } })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['companies', companyId, 'blocks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['companies', companyId, 'blocks'] });
+      qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard }); // unblocking frees quota back up
+    },
   });
 }

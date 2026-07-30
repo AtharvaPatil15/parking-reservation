@@ -6,12 +6,15 @@ export const queryKeys = {
   me: ['me'] as const,
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number) => ['me', 'bookings', page, pageSize] as const,
+  adminBookings: (date: string, companyId: string, page: number) =>
+    ['bookings', 'admin', date, companyId, page] as const,
 
   // Auth / registration
   activeCompanies: ['companies', 'active'] as const,
 
   // Super Admin (P5-11)
   superAdminDashboard: ['dashboard', 'super-admin'] as const,
+  pendingAdmins: (page: number, pageSize: number) => ['users', 'pending-admins', page, pageSize] as const,
   companies: (page: number, pageSize: number) => ['companies', page, pageSize] as const,
   slots: (page: number, pageSize: number, status: string) => ['slots', page, pageSize, status] as const,
   companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,

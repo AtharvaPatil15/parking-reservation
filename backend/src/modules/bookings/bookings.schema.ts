@@ -4,6 +4,16 @@ import { z } from 'zod';
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD');
 const vehicleType = z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE', 'OTHER']);
+const bookingStatus = z.enum([
+  'DRAFT',
+  'SUBMITTED',
+  'CANCELLED',
+  'ALLOCATED',
+  'WAITLISTED',
+  'REJECTED',
+  'RELEASED',
+  'EXPIRED',
+]);
 
 const carpoolMemberInput = z.object({
   name: z.string().min(1),
@@ -26,3 +36,16 @@ export const createBookingSchema = z.object({
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type CarpoolMemberInput = z.infer<typeof carpoolMemberInput>;
+
+/**
+ * Admin booking-list query (GET /bookings). COMPANY_ADMIN is scoped to their own company in the
+ * service; `companyId` is honoured only for SUPER_ADMIN. `date` filters by bookingDate.
+ */
+export const listBookingsQuery = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(100).optional(),
+  date: dateString.optional(),
+  companyId: z.string().min(1).optional(),
+  status: bookingStatus.optional(),
+});
+export type ListBookingsQuery = z.infer<typeof listBookingsQuery>;

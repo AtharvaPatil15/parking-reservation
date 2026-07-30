@@ -75,10 +75,16 @@ export async function login(
 }
 
 /**
- * Register a new company user (P4-20). Creates a PENDING account under an ACTIVE company; the
- * Company Admin approves it later (P4-07). Returns the created user (with company + roles) — no
- * token, since a PENDING user cannot log in until approved. Contract documents 400/409 only, so
- * company problems surface as 400 (not 404).
+ * Register a new company user (P4-20). Creates a PENDING account under an ACTIVE company; no token
+ * is returned since a PENDING user cannot log in until approved. Contract documents 400/409 only,
+ * so company problems surface as 400 (not 404).
+ *
+ * `registrationType` (F11):
+ *  - `EMPLOYEE`      → seeded with the `USER` role; the **Company Admin** approves it (P4-07).
+ *  - `COMPANY_ADMIN` → requests admin of the (existing, ACTIVE) company; seeded with the
+ *    `COMPANY_ADMIN` role but still PENDING. The **Super Admin** approves it, and that approval
+ *    also creates the `CompanyAdmin` assignment (see users.service `setApproval`).
+ * In both cases the role is assigned now but access is gated by `status = PENDING`.
  */
 export async function register(input: RegisterInput) {
   // Company must exist and be ACTIVE.
@@ -101,6 +107,7 @@ export async function register(input: RegisterInput) {
   const existing = await prisma.user.findFirst({ where: { email: input.email, deletedAt: null } });
   if (existing) throw new ConflictError('An account with this email already exists');
 
+  const roleName = input.registrationType === 'COMPANY_ADMIN' ? 'COMPANY_ADMIN' : 'USER';
   const passwordHash = await argon2.hash(input.password);
   try {
     const user = await prisma.user.create({
@@ -115,7 +122,7 @@ export async function register(input: RegisterInput) {
         emailVerified: false,
         distanceKm: input.distanceKm ?? null,
         companyId: company.id,
-        roles: { create: { role: { connect: { name: 'USER' } } } },
+        roles: { create: { role: { connect: { name: roleName } } } },
       },
       include: { company: true, roles: { include: { role: true } } },
     });
@@ -123,7 +130,12 @@ export async function register(input: RegisterInput) {
       actionType: 'USER_REGISTERED',
       entityType: 'User',
       entityId: user.id,
-      newValue: { email: user.email, companyId: user.companyId, status: user.status },
+      newValue: {
+        email: user.email,
+        companyId: user.companyId,
+        status: user.status,
+        registrationType: input.registrationType,
+      },
     });
     return user;
   } catch (err) {

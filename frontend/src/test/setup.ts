@@ -29,6 +29,15 @@ afterEach(() => server.resetHandlers());
 // Restore mutable mock state (bookings/config/companies/... mutated by stateful
 // handlers) so one test's release/PATCH/approval can't leak into the next.
 afterEach(() => resetMockData());
+// Clear persisted auth hints (auth:active flag, mock:auth session) so a test that logs in
+// can't make the next test's cold load attempt a silent rehydration.
+afterEach(() => {
+  try {
+    localStorage.clear();
+  } catch {
+    /* no storage in this environment */
+  }
+});
 afterAll(() => server.close());
 
 // Reset the API client's module-level singletons between tests — otherwise a token set

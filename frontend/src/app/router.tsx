@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { roleHome } from '../lib/roles';
-import { RequireRole } from '../lib/guards';
+import { RequireRole, AuthLoading } from '../lib/guards';
 import { AppShell } from './AppShell';
 import { NotFound } from './NotFound';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -11,6 +11,7 @@ import { AllocationRun } from '../features/superadmin/AllocationRun';
 import { SuperAdminDashboard } from '../features/superadmin/SuperAdminDashboard';
 import { ConfigTimings } from '../features/superadmin/ConfigTimings';
 import { Companies } from '../features/superadmin/Companies';
+import { AdminApprovals } from '../features/superadmin/AdminApprovals';
 import { Slots } from '../features/superadmin/Slots';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { CompanyDashboard } from '../features/companyadmin/CompanyDashboard';
@@ -24,7 +25,8 @@ import { BookingStatus } from '../features/user/BookingStatus';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading } = useAuth();
+  if (isLoading) return <AuthLoading />;
   return <Navigate to={isAuthenticated && user ? roleHome(user.role) : '/login'} replace />;
 }
 
@@ -42,6 +44,7 @@ export function AppRouter() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="config" element={<ConfigTimings />} />
             <Route path="companies" element={<Companies />} />
+            <Route path="admin-requests" element={<AdminApprovals />} />
             <Route path="slots" element={<Slots />} />
           </Route>
         </Route>
