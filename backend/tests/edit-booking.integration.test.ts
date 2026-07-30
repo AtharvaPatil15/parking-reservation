@@ -85,7 +85,6 @@ describe('GET /companies/quota-summary — assigned per company (SA)', () => {
     await request(app).get(`${API}/companies/quota-summary`).query({ date: DATE }).set(bearer(ca)).expect(403);
   });
 });
-
 describe('GET /me/bookings — own history', () => {
   it('returns the current user’s bookings', async () => {
     const aditi = await login('aditi@assent.example');
