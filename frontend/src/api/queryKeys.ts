@@ -14,6 +14,7 @@ export const queryKeys = {
 
   // Super Admin (P5-11)
   superAdminDashboard: ['dashboard', 'super-admin'] as const,
+  pendingAdmins: (page: number, pageSize: number) => ['users', 'pending-admins', page, pageSize] as const,
   companies: (page: number, pageSize: number) => ['companies', page, pageSize] as const,
   slots: (page: number, pageSize: number, status: string) => ['slots', page, pageSize, status] as const,
   companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,

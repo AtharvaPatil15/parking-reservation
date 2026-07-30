@@ -10,6 +10,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const registerSchema = z
   .object({
     fullName: z.string().min(1, 'Full name is required.'),
+    registrationType: z.enum(['EMPLOYEE', 'COMPANY_ADMIN']),
     companyId: z.string().min(1, 'Select your company.'),
     email: z.string().min(1, 'Email is required.').regex(EMAIL_RE, 'Enter a valid email.'),
     contactNumber: z.string().min(1, 'Contact number is required.'),

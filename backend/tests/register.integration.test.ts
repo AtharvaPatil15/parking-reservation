@@ -103,3 +103,90 @@ describe('registration → approval → login', () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * P4-21 — self-service company-admin registration (F11). A COMPANY_ADMIN request is PENDING,
+ * approvable only by the Super Admin (a Company Admin gets 403), and approval both activates the
+ * user and creates the CompanyAdmin assignment.
+ */
+describe('company-admin registration → super-admin approval', () => {
+  it('is PENDING, CA cannot approve (403), SA approves + grants CompanyAdmin, then login works', async () => {
+    const email = 'newadmin@assent.example';
+    const companyId = await assentId();
+    const reg = await request(app).post(`${API}/auth/register`).send({
+      fullName: 'New Admin',
+      registrationType: 'COMPANY_ADMIN',
+      companyId,
+      email,
+      contactNumber: '+91-9000000127',
+      address: 'Admin Rd, Pune',
+      pinCode: '411103',
+      password: DEV_PASSWORD,
+      confirmPassword: DEV_PASSWORD,
+    });
+    expect(reg.status).toBe(201);
+    expect(reg.body.data.status).toBe('PENDING');
+    expect(reg.body.data.role).toBe('COMPANY_ADMIN');
+    const newUserId = reg.body.data.id as string;
+
+    // A Company Admin of the same company must NOT be able to approve an admin request → 403.
+    const caToken = await login('admin@assent.example');
+    const caApprove = await request(app)
+      .patch(`${API}/users/${newUserId}/approval`)
+      .set(bearer(caToken))
+      .send({ decision: 'APPROVE' });
+    expect(caApprove.status).toBe(403);
+
+    // Still no CompanyAdmin row yet.
+    expect(await prisma.companyAdmin.findUnique({
+      where: { companyId_userId: { companyId, userId: newUserId } },
+    })).toBeNull();
+
+    // Super Admin approves → 200, and the CompanyAdmin assignment is created.
+    const saToken = await login('superadmin@redbricks.example');
+    const saApprove = await request(app)
+      .patch(`${API}/users/${newUserId}/approval`)
+      .set(bearer(saToken))
+      .send({ decision: 'APPROVE' });
+    expect(saApprove.status).toBe(200);
+    expect(saApprove.body.data.status).toBe('ACTIVE');
+    expect(await prisma.companyAdmin.findUnique({
+      where: { companyId_userId: { companyId, userId: newUserId } },
+    })).not.toBeNull();
+
+    // Login now works with the COMPANY_ADMIN role.
+    const ok = await request(app).post(`${API}/auth/login`).send({ email, password: DEV_PASSWORD });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.user.role).toBe('COMPANY_ADMIN');
+    expect(ok.body.data.user.companyId).toBe(companyId);
+  });
+
+  it('exposes pending company-admin requests to the SA queue only (CA → 403)', async () => {
+    const email = 'queue-admin@assent.example';
+    const reg = await request(app).post(`${API}/auth/register`).send({
+      fullName: 'Queue Admin',
+      registrationType: 'COMPANY_ADMIN',
+      companyId: await assentId(),
+      email,
+      contactNumber: '+91-9000000128',
+      address: 'Queue St, Pune',
+      pinCode: '411104',
+      password: DEV_PASSWORD,
+      confirmPassword: DEV_PASSWORD,
+    });
+    expect(reg.status).toBe(201);
+
+    // Super Admin sees the request in the queue.
+    const saToken = await login('superadmin@redbricks.example');
+    const queue = await request(app).get(`${API}/users/pending-admins`).set(bearer(saToken));
+    expect(queue.status).toBe(200);
+    const emails = (queue.body.data as Array<{ email: string; role: string }>).map((u) => u.email);
+    expect(emails).toContain(email);
+    expect(queue.body.data.every((u: { role: string }) => u.role === 'COMPANY_ADMIN')).toBe(true);
+
+    // A Company Admin cannot read the queue → 403.
+    const caToken = await login('admin@assent.example');
+    const forbidden = await request(app).get(`${API}/users/pending-admins`).set(bearer(caToken));
+    expect(forbidden.status).toBe(403);
+  });
+});

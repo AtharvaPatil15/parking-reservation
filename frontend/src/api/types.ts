@@ -543,6 +543,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/pending-admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending company-admin registration requests
+         * @description Super Admin only. Returns PENDING users who registered as `COMPANY_ADMIN` (registrationType) across all companies — the Super Admin's approval queue (F11).
+         */
+        get: operations["listPendingCompanyAdmins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/approval": {
         parameters: {
             query?: never;
@@ -560,7 +580,7 @@ export interface paths {
         head?: never;
         /**
          * Approve or reject a pending user
-         * @description Company Admin (own company). APPROVE → ACTIVE, REJECT → REJECTED.
+         * @description APPROVE → ACTIVE, REJECT → REJECTED. Company Admin for their own company's employees; a company-admin registration request (COMPANY_ADMIN role) is Super-Admin-only and its approval also grants the CompanyAdmin assignment (F11).
          */
         patch: operations["setUserApproval"];
         trace?: never;
@@ -901,6 +921,12 @@ export interface components {
             contactNumber: string;
             address: string;
             pinCode: string;
+            /**
+             * @description Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin. COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the Super Admin; approval also grants the CompanyAdmin assignment (F11).
+             * @default EMPLOYEE
+             * @enum {string}
+             */
+            registrationType: "EMPLOYEE" | "COMPANY_ADMIN";
             /** @description Manually-entered home→office distance in km (D6). Optional at registration. */
             distanceKm?: number | null;
             /** Format: password */
@@ -2509,6 +2535,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listPendingCompanyAdmins: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of pending company-admin requests */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["UserProfile"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     setUserApproval: {

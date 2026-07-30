@@ -2,8 +2,15 @@ import type { UserStatus } from '@prisma/client';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
 import { UnauthenticatedError } from '../../lib/errors';
+import { parsePagination } from '../../lib/pagination';
 import { toUserProfile } from '../../lib/dto';
 import * as service from './users.service';
+
+export const listPendingAdmins = asyncHandler(async (req, res) => {
+  const p = parsePagination(req.query as Record<string, unknown>);
+  const { rows, total } = await service.listPendingAdmins(p);
+  sendSuccess(res, rows.map(toUserProfile), 200, { page: p.page, pageSize: p.pageSize, total });
+});
 
 export const setApproval = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();

@@ -11,10 +11,15 @@ import type { components } from '../../api/types';
 
 type RegisterRequest = components['schemas']['RegisterRequest'];
 
+const REGISTRATION_TYPE_OPTIONS: SelectOption[] = [
+  { value: 'EMPLOYEE', label: 'Employee — book parking' },
+  { value: 'COMPANY_ADMIN', label: 'Company admin — manage my company' },
+];
+
 export function RegisterPage() {
   const companies = useActiveCompanies();
   const registerUser = useRegister();
-  const [submitted, setSubmitted] = useState(false);
+  const [submittedAs, setSubmittedAs] = useState<'EMPLOYEE' | 'COMPANY_ADMIN' | null>(null);
 
   const {
     register,
@@ -24,7 +29,7 @@ export function RegisterPage() {
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      fullName: '', companyId: '', email: '', contactNumber: '',
+      fullName: '', registrationType: 'EMPLOYEE', companyId: '', email: '', contactNumber: '',
       address: '', pinCode: '', distanceKm: '', password: '', confirmPassword: '',
     },
   });
@@ -34,6 +39,7 @@ export function RegisterPage() {
   const onSubmit: SubmitHandler<RegisterFormValues> = (values) => {
     const body: RegisterRequest = {
       fullName: values.fullName,
+      registrationType: values.registrationType,
       companyId: values.companyId,
       email: values.email,
       contactNumber: values.contactNumber,
@@ -44,7 +50,7 @@ export function RegisterPage() {
       confirmPassword: values.confirmPassword,
     };
     registerUser.mutate(body, {
-      onSuccess: () => setSubmitted(true),
+      onSuccess: () => setSubmittedAs(values.registrationType),
       onError: (err) => {
         if (err instanceof ApiError && err.status === 409) {
           setError('email', { message: 'An account with this email already exists.' });
@@ -73,11 +79,15 @@ export function RegisterPage() {
     <div className="min-h-screen bg-canvas text-text">
       <PublicHeader />
       <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-        {submitted ? (
+        {submittedAs ? (
           <Card>
             <SuccessState
               title="Registration submitted"
-              description="Your account is pending approval by your company admin. You'll be able to sign in once it's approved."
+              description={
+                submittedAs === 'COMPANY_ADMIN'
+                  ? "Your company-admin request is pending approval by the super admin. You'll be able to sign in once it's approved."
+                  : "Your account is pending approval by your company admin. You'll be able to sign in once it's approved."
+              }
               action={
                 <Link to="/login" className="text-primary hover:underline">
                   Back to sign in
@@ -95,6 +105,13 @@ export function RegisterPage() {
             <Card>
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
                 <Input label="Full name" error={errors.fullName?.message} {...register('fullName')} />
+                <Select
+                  label="Registering as"
+                  options={REGISTRATION_TYPE_OPTIONS}
+                  hint="Company-admin requests are approved by the super admin."
+                  error={errors.registrationType?.message}
+                  {...register('registrationType')}
+                />
                 <Select
                   label="Company"
                   placeholder={companies.isLoading ? 'Loading companies…' : 'Select your company'}
