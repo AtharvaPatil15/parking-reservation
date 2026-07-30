@@ -130,11 +130,19 @@ function seedBookings(): Record<string, BookingDetail> {
       submittedAt: '2026-07-18T09:00:00.000Z', createdAt: '2026-07-18T08:00:00.000Z',
       carpoolMembers: [],
     },
+    // Future, still-SUBMITTED request → editable (drives the edit-carpool flow).
+    'bk-4': {
+      id: 'bk-4', bookingDate: '2026-08-04', bookingType: 'PRIMARY', status: 'SUBMITTED',
+      travelDistanceKm: 6.0, vehicleType: 'CAR', vehicleNumber: 'KA-04-3456', carpoolMemberCount: 1,
+      specialRequirement: null, allocationScore: null, allocatedSlotNumber: null,
+      submittedAt: '2026-07-30T09:00:00.000Z', createdAt: '2026-07-30T08:00:00.000Z',
+      carpoolMembers: [{ id: 'm4', name: 'Existing Member', employeeEmail: 'exist@mock.test', sameCompany: true, isScored: false }],
+    },
   };
 }
 
 /** History list order (newest first). */
-const HISTORY_IDS = ['bk-1', 'bk-2', 'bk-3'] as const;
+const HISTORY_IDS = ['bk-4', 'bk-1', 'bk-2', 'bk-3'] as const;
 
 /** Admin booking roster (GET /bookings) — who booked, for what date, across companies. */
 function seedAdminBookings(): AdminBooking[] {

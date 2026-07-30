@@ -27,6 +27,6 @@ describe('user hooks (against MSW)', () => {
     const { result } = renderHook(() => useMyBookings(1, 10), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.items.length).toBeGreaterThan(0);
-    expect(result.current.data?.meta.total).toBe(3);
+    expect(result.current.data?.meta.total).toBe(4);
   });
 });
