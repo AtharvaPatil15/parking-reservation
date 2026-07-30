@@ -157,9 +157,13 @@ goes to the **Super Admin** for approval (mirrors the employee→Company-Admin f
   creates a `PENDING` user with the `COMPANY_ADMIN` role on an existing ACTIVE company (no new `Company` is
   created). Approval of such a request is **SUPER_ADMIN-only** (a Company Admin → `403`); on `APPROVE` the user
   flips to `ACTIVE` **and** a `CompanyAdmin` row is created in the same transaction; both actions audited.
-- **Evidence:** `backend/openapi.yaml` (`RegisterRequest.registrationType`); `backend/src/modules/auth/auth.{schema,service}.ts`;
-  `backend/src/modules/users/users.service.ts` (`setApproval`); FE `frontend/src/features/auth/RegisterPage.tsx` + `registerSchema.ts`.
-- **Status:** ☑ (backend `tsc` clean, unit 47/47, **integration 5/5** incl. new CA-path test in `register.integration.test.ts` — register→PENDING(COMPANY_ADMIN)→CA-approve `403`→SA-approve `200`+`CompanyAdmin` row→login `COMPANY_ADMIN`; FE `tsc` clean + RegisterPage tests 6/6 incl. CA-path. Contract + FE `types.ts` regenerated.)
+  Also adds the **Super Admin approval queue**: `GET /users/pending-admins` (SA-only) lists PENDING
+  `COMPANY_ADMIN` requests across all companies, surfaced as the `/admin/admin-requests` page.
+- **Evidence:** `backend/openapi.yaml` (`RegisterRequest.registrationType`, `GET /users/pending-admins`);
+  `backend/src/modules/auth/auth.{schema,service}.ts`; `backend/src/modules/users/{users.service,users.controller,users.routes}.ts`
+  (`listPendingAdmins` + `setApproval`); FE `frontend/src/features/auth/RegisterPage.tsx` + `registerSchema.ts`,
+  `frontend/src/features/superadmin/AdminApprovals.tsx` (+ nav/route, `usePendingAdmins`/`useApproveAdminRequest` hooks).
+- **Status:** ☑ (backend `tsc` clean, unit 47/47, **integration 6/6** — register→PENDING(COMPANY_ADMIN)→CA-approve `403`→SA-approve `200`+`CompanyAdmin` row→login `COMPANY_ADMIN`, plus SA-queue list visible to SA / `403` for CA; FE `tsc` clean, **full suite 114/114** incl. RegisterPage CA-path + new AdminApprovals tests. Contract + FE `types.ts` regenerated.)
 
 ## Phase Definition of Done
 DEMO tasks ☑: login, **registration (P4-20)**, config, booking create/status, allocation run + breakdown,

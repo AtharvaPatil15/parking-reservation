@@ -11,6 +11,7 @@ import { AllocationRun } from '../features/superadmin/AllocationRun';
 import { SuperAdminDashboard } from '../features/superadmin/SuperAdminDashboard';
 import { ConfigTimings } from '../features/superadmin/ConfigTimings';
 import { Companies } from '../features/superadmin/Companies';
+import { AdminApprovals } from '../features/superadmin/AdminApprovals';
 import { Slots } from '../features/superadmin/Slots';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { CompanyDashboard } from '../features/companyadmin/CompanyDashboard';
@@ -42,6 +43,7 @@ export function AppRouter() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="config" element={<ConfigTimings />} />
             <Route path="companies" element={<Companies />} />
+            <Route path="admin-requests" element={<AdminApprovals />} />
             <Route path="slots" element={<Slots />} />
           </Route>
         </Route>

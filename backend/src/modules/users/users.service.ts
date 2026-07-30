@@ -2,6 +2,7 @@ import type { Prisma, UserStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { buildAuditData } from '../../lib/audit';
+import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
@@ -24,6 +25,29 @@ async function loadTargetUser(actor: Actor, userId: string) {
     throw new NotFoundError('User not found');
   }
   return user;
+}
+
+/**
+ * List PENDING users who registered as COMPANY_ADMIN, across all companies — the Super Admin's
+ * approval queue (F11). Route-guarded SUPER_ADMIN-only, so no tenant scoping here.
+ */
+export async function listPendingAdmins(opts: PageArgs) {
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    status: 'PENDING',
+    roles: { some: { role: { name: 'COMPANY_ADMIN' } } },
+  };
+  const [rows, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: userInclude,
+      orderBy: { createdAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return { rows, total };
 }
 
 export async function setApproval(actor: Actor, userId: string, decision: 'APPROVE' | 'REJECT') {

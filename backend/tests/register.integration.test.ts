@@ -160,4 +160,33 @@ describe('company-admin registration → super-admin approval', () => {
     expect(ok.body.data.user.role).toBe('COMPANY_ADMIN');
     expect(ok.body.data.user.companyId).toBe(companyId);
   });
+
+  it('exposes pending company-admin requests to the SA queue only (CA → 403)', async () => {
+    const email = 'queue-admin@assent.example';
+    const reg = await request(app).post(`${API}/auth/register`).send({
+      fullName: 'Queue Admin',
+      registrationType: 'COMPANY_ADMIN',
+      companyId: await assentId(),
+      email,
+      contactNumber: '+91-9000000128',
+      address: 'Queue St, Pune',
+      pinCode: '411104',
+      password: DEV_PASSWORD,
+      confirmPassword: DEV_PASSWORD,
+    });
+    expect(reg.status).toBe(201);
+
+    // Super Admin sees the request in the queue.
+    const saToken = await login('superadmin@redbricks.example');
+    const queue = await request(app).get(`${API}/users/pending-admins`).set(bearer(saToken));
+    expect(queue.status).toBe(200);
+    const emails = (queue.body.data as Array<{ email: string; role: string }>).map((u) => u.email);
+    expect(emails).toContain(email);
+    expect(queue.body.data.every((u: { role: string }) => u.role === 'COMPANY_ADMIN')).toBe(true);
+
+    // A Company Admin cannot read the queue → 403.
+    const caToken = await login('admin@assent.example');
+    const forbidden = await request(app).get(`${API}/users/pending-admins`).set(bearer(caToken));
+    expect(forbidden.status).toBe(403);
+  });
 });

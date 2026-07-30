@@ -131,10 +131,13 @@ function seedCompanies(): Company[] {
   ];
 }
 
-function userProfile(id: string, fullName: string, email: string, status: UserProfile['status'], role: RoleName = 'USER'): UserProfile {
+function userProfile(
+  id: string, fullName: string, email: string, status: UserProfile['status'], role: RoleName = 'USER',
+  company: { id: string; name: string } = { id: 'mock-co', name: 'Mock Co' },
+): UserProfile {
   return {
     id, fullName, email, contactNumber: '555-0100', address: '1 Main St', pinCode: '560001',
-    distanceKm: 8.5, status, emailVerified: true, companyId: 'mock-co', companyName: 'Mock Co',
+    distanceKm: 8.5, status, emailVerified: true, companyId: company.id, companyName: company.name,
     role, createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-20T00:00:00.000Z',
   };
 }
@@ -148,6 +151,10 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-nadia', 'Nadia Khan', 'nadia@mock.test', 'PENDING'),
       userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
       userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
+    ],
+    // A pending company-admin registration (F11) — surfaces in the Super Admin's admin-request queue.
+    'co-acme': [
+      userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', { id: 'co-acme', name: 'Acme Corp' }),
     ],
   };
 }
@@ -250,10 +257,11 @@ const hero = [
     if (exists) return fail(409, 'CONFLICT', 'An account with this email already exists');
     const company = companyState.find((c) => c.id === b.companyId && c.status === 'ACTIVE');
     if (!company) return fail(400, 'VALIDATION_ERROR', 'Company must be active');
-    // Create as PENDING and add to the company's user list so it shows up in Company-Admin approvals.
+    // Create as PENDING and add to the company's user list. A COMPANY_ADMIN request (F11) gets the
+    // COMPANY_ADMIN role so it surfaces in the Super Admin's admin-request queue instead.
+    const role: RoleName = b.registrationType === 'COMPANY_ADMIN' ? 'COMPANY_ADMIN' : 'USER';
     const user: UserProfile = {
-      ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING'),
-      companyId: company.id, companyName: company.name,
+      ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING', role, { id: company.id, name: company.name }),
       contactNumber: b.contactNumber ?? '—', address: b.address ?? '—', pinCode: b.pinCode ?? '—',
       distanceKm: b.distanceKm ?? null,
     };
@@ -376,6 +384,15 @@ const hero = [
   }),
 
   // --- Company users + approvals ---
+  // Super Admin's pending company-admin request queue (F11): PENDING + COMPANY_ADMIN, any company.
+  http.get(`${baseURL}/users/pending-admins`, ({ request }) => {
+    const { page, pageSize } = pageParams(request);
+    const all = Object.values(companyUserState)
+      .flat()
+      .filter((u) => u.status === 'PENDING' && u.role === 'COMPANY_ADMIN');
+    const start = (page - 1) * pageSize;
+    return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
+  }),
   http.get(`${baseURL}/companies/:id/users`, ({ params, request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
