@@ -69,7 +69,8 @@ export function BookingForm() {
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
         specialRequirement: values.specialRequirement || undefined,
-        carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail || undefined })),
+        // Email is required by the schema, so pass it through unchanged (no `|| undefined`).
+        carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail })),
       },
       {
         onError: (e) => {

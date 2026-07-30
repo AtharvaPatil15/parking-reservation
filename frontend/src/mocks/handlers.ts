@@ -194,10 +194,10 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
       userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
     ],
-    // Acme users: two ACTIVE members so cross-company carpooling can be exercised (a
-    // mock-co user may bring an Acme employee — carpool members can be any registered
-    // user), plus a pending company-admin registration (F11) that surfaces in the
-    // Super Admin's admin-request queue.
+    // Acme users. Two ACTIVE members let cross-company carpooling be exercised: a
+    // mock-co user may bring an Acme employee, since carpool members can be any
+    // registered user. Blair is a pending company-admin registration (F11) that
+    // surfaces in the Super Admin's admin-request queue.
     'co-acme': [
       userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
       userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
@@ -340,14 +340,20 @@ const hero = [
       carpoolPeople?: number;
       carpoolMembers?: { name?: string; employeeEmail?: string }[];
     };
-    // Carpool members must be existing users (any company). Reject unknown emails
-    // with per-member field details so the form can flag the exact row.
+    // Carpool members must be existing users (any company). Every member needs an
+    // email, and it must resolve to a registered user — reject both cases with
+    // per-member field details so the form can flag the exact row.
     const dir = directoryEmails();
-    const details = (b.carpoolMembers ?? []).flatMap((m, i) =>
-      m.employeeEmail && !dir.has(m.employeeEmail.toLowerCase())
-        ? [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }]
-        : [],
-    );
+    const details = (b.carpoolMembers ?? []).flatMap((m, i) => {
+      const email = m.employeeEmail?.trim();
+      if (!email) {
+        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
+      }
+      if (!dir.has(email.toLowerCase())) {
+        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
+      }
+      return [];
+    });
     if (details.length > 0) {
       return HttpResponse.json(
         { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
