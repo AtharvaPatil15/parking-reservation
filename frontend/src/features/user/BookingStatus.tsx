@@ -1,9 +1,24 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Badge, Button, Card, ErrorState, LoadingState, Modal, useToast } from '../../components';
-import { useBooking, useReleaseBooking } from '../../api/hooks';
+import {
+  Badge, Button, Card, ErrorState, Input, LoadingState, Modal, Select, useToast, type SelectOption,
+} from '../../components';
+import { useBooking, useReleaseBooking, useUpdateBooking } from '../../api/hooks';
+import { apiErrorText } from '../../api/http';
 import { isTodayOrFuture } from '../../lib/dates';
 import { statusTone } from './statusTone';
+import type { components } from '../../api/types';
+
+type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
+type VehicleType = components['schemas']['VehicleType'];
+
+const VEHICLE_TYPES: SelectOption[] = [
+  { value: 'CAR', label: 'Car' },
+  { value: 'BIKE', label: 'Bike' },
+  { value: 'EV_CAR', label: 'EV Car' },
+  { value: 'EV_BIKE', label: 'EV Bike' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
@@ -18,8 +33,14 @@ export function BookingStatus() {
   const { id } = useParams();
   const booking = useBooking(id);
   const release = useReleaseBooking();
+  const update = useUpdateBooking(id ?? '');
   const { toast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [vehicleType, setVehicleType] = useState('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [people, setPeople] = useState('1');
+  const [special, setSpecial] = useState('');
 
   if (booking.isLoading) return <LoadingState label="Loading booking…" />;
   if (booking.isError || !booking.data) {
@@ -41,6 +62,10 @@ export function BookingStatus() {
   // waitlist (F3). A past date is already resolved, so hide the control (KI-1); the
   // live backend also rejects an ineligible release with 409/422.
   const canRelease = b.status === 'ALLOCATED' && isTodayOrFuture(b.bookingDate);
+  // Edit is allowed only while the request is still pending and the date can still be booked; the
+  // backend re-checks the primary cutoff and rejects a late edit with 422.
+  const canEdit = b.status === 'SUBMITTED' && isTodayOrFuture(b.bookingDate);
+  const editError = apiErrorText(update.error);
 
   function onRelease() {
     if (!id) return;
@@ -48,6 +73,30 @@ export function BookingStatus() {
       onSuccess: () => {
         setConfirmOpen(false);
         toast('Slot released.', { tone: 'success' });
+      },
+    });
+  }
+
+  function openEdit() {
+    setVehicleType(b.vehicleType ?? '');
+    setVehicleNumber(b.vehicleNumber ?? '');
+    setPeople(String(b.carpoolMemberCount + 1));
+    setSpecial(b.specialRequirement ?? '');
+    setEditOpen(true);
+  }
+
+  function onSaveEdit() {
+    if (!id) return;
+    const body: UpdateBookingRequest = {
+      carpoolPeople: Math.max(1, Number(people) || 1),
+      vehicleNumber: vehicleNumber.trim() || null,
+      specialRequirement: special.trim() || null,
+      ...(vehicleType ? { vehicleType: vehicleType as VehicleType } : {}),
+    };
+    update.mutate(body, {
+      onSuccess: () => {
+        setEditOpen(false);
+        toast('Booking updated.', { tone: 'success' });
       },
     });
   }
@@ -101,13 +150,57 @@ export function BookingStatus() {
         </Card>
       )}
 
-      {canRelease && (
-        <div>
-          <Button variant="danger" onClick={() => setConfirmOpen(true)}>
-            Release slot
-          </Button>
+      {(canEdit || canRelease) && (
+        <div className="flex gap-2">
+          {canEdit && (
+            <Button variant="secondary" onClick={openEdit}>
+              Edit booking
+            </Button>
+          )}
+          {canRelease && (
+            <Button variant="danger" onClick={() => setConfirmOpen(true)}>
+              Release slot
+            </Button>
+          )}
         </div>
       )}
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit booking"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={update.isPending} onClick={onSaveEdit}>
+              Save changes
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Select
+            label="Vehicle type"
+            placeholder="Select…"
+            options={VEHICLE_TYPES}
+            value={vehicleType}
+            onChange={(e) => setVehicleType(e.target.value)}
+          />
+          <Input label="Vehicle number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
+          <Input
+            label="People (incl. you)"
+            type="number"
+            min={1}
+            value={people}
+            onChange={(e) => setPeople(e.target.value)}
+            hint="Driver counts as person 1. Distance isn't editable — it's snapshotted from your profile."
+          />
+          <Input label="Special requirement" value={special} onChange={(e) => setSpecial(e.target.value)} />
+          {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
+        </div>
+      </Modal>
 
       <Modal
         open={confirmOpen}

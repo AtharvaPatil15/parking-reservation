@@ -37,6 +37,18 @@ export const createBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type CarpoolMemberInput = z.infer<typeof carpoolMemberInput>;
 
+/** Partial edit before the primary cutoff (openapi `UpdateBookingRequest`). At least one field. */
+export const updateBookingSchema = z
+  .object({
+    vehicleType: vehicleType.optional(),
+    vehicleNumber: z.string().min(1).nullable().optional(),
+    carpoolPeople: z.coerce.number().int().min(1).optional(),
+    specialRequirement: z.string().min(1).nullable().optional(),
+    carpoolMembers: z.array(carpoolMemberInput).optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: 'At least one field is required' });
+export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+
 /**
  * Admin booking-list query (GET /bookings). COMPANY_ADMIN is scoped to their own company in the
  * service; `companyId` is honoured only for SUPER_ADMIN. `date` filters by bookingDate.

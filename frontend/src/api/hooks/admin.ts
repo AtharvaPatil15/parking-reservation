@@ -9,6 +9,7 @@ type Company = components['schemas']['Company'];
 type ParkingSlot = components['schemas']['ParkingSlot'];
 type ParkingArea = components['schemas']['ParkingArea'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
+type CompanyQuotaSummaryEntry = components['schemas']['CompanyQuotaSummaryEntry'];
 type CreateSlotRequest = components['schemas']['CreateSlotRequest'];
 type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
 type UserProfile = components['schemas']['UserProfile'];
@@ -22,6 +23,17 @@ export function useSuperAdminDashboard(date?: string) {
     queryFn: () =>
       unwrap<SuperAdminDashboard>(
         api.GET('/dashboard/super-admin', { params: { query: date ? { date } : {} } }),
+      ),
+  });
+}
+
+/** GET /companies/quota-summary — effective assigned slots per company for a date. */
+export function useCompanyQuotaSummary(date: string) {
+  return useQuery({
+    queryKey: queryKeys.companiesQuotaSummary(date),
+    queryFn: () =>
+      unwrap<CompanyQuotaSummaryEntry[]>(
+        api.GET('/companies/quota-summary', { params: { query: date ? { date } : {} } }),
       ),
   });
 }

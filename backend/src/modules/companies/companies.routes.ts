@@ -10,6 +10,7 @@ import {
   assignAdminSchema,
   listCompaniesQuery,
   listUsersQuery,
+  quotaSummaryQuery,
 } from './companies.schema';
 import * as c from './companies.controller';
 
@@ -17,6 +18,10 @@ const router = Router();
 
 // Public: registration dropdown (id + name of active companies).
 router.get('/active', c.listActiveCompanies);
+
+// Assigned quota per company for a date (SA) — feeds the Companies "Assigned" column. Must precede
+// the '/:id' route so it isn't captured as an id.
+router.get('/quota-summary', authenticate, requireRole('SUPER_ADMIN'), validate(quotaSummaryQuery, 'query'), c.quotaSummary);
 
 // Company management — SUPER_ADMIN only.
 router.post('/', authenticate, requireRole('SUPER_ADMIN'), validate(createCompanySchema), c.createCompany);

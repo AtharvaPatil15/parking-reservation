@@ -3,19 +3,31 @@ import {
   Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Modal, Table, useToast,
   type Column,
 } from '../../components';
-import { useCompanies, useCreateCompany, useCompanyQuota, useSetCompanyQuota } from '../../api/hooks';
+import {
+  useCompanies, useCreateCompany, useCompanyQuota, useSetCompanyQuota, useCompanyQuotaSummary,
+} from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import { nextBookableWeekday } from '../../lib/dates';
 import type { components } from '../../api/types';
 
 type Company = components['schemas']['Company'];
 
-const columns = (onQuota: (c: Company) => void): Column<Company>[] => [
+const columns = (
+  onQuota: (c: Company) => void,
+  assignedFor: (companyId: string) => number | null,
+): Column<Company>[] => [
   { key: 'name', header: 'Company', render: (c) => <span className="font-medium text-text">{c.name}</span> },
   { key: 'code', header: 'Code', render: (c) => <span className="tabular-nums">{c.code}</span> },
   {
     key: 'status', header: 'Status',
     render: (c) => <Badge tone={c.status === 'ACTIVE' ? 'success' : 'neutral'}>{c.status}</Badge>,
+  },
+  {
+    key: 'assigned', header: 'Assigned', align: 'right',
+    render: (c) => {
+      const n = assignedFor(c.id);
+      return <span className="tabular-nums text-text">{n === null ? '—' : n}</span>;
+    },
   },
   {
     key: 'actions', header: '', align: 'right',
@@ -94,7 +106,15 @@ export function Companies() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [active, setActive] = useState<Company | null>(null);
+  const [assignedOn, setAssignedOn] = useState(nextBookableWeekday());
+  const summary = useCompanyQuotaSummary(assignedOn);
   const createError = apiErrorText(create.error);
+
+  // companyId → assigned slots for the picked date (null while loading, so the column shows '—').
+  const assignedFor = (companyId: string): number | null => {
+    if (!summary.data) return null;
+    return summary.data.find((e) => e.companyId === companyId)?.assignedSlots ?? 0;
+  };
 
   function onCreate() {
     if (!name.trim() || !code.trim()) return;
@@ -127,6 +147,17 @@ export function Companies() {
       </Card>
 
       <Card title="All companies" padded={false}>
+        <div className="flex flex-wrap items-end gap-3 px-4 pt-4">
+          <div className="w-44">
+            <Input
+              label="Assigned on"
+              type="date"
+              value={assignedOn}
+              onChange={(e) => setAssignedOn(e.target.value)}
+              hint="Effective quota for this date"
+            />
+          </div>
+        </div>
         {companies.isLoading ? (
           <LoadingState label="Loading companies…" />
         ) : companies.isError ? (
@@ -134,7 +165,7 @@ export function Companies() {
         ) : !companies.data || companies.data.items.length === 0 ? (
           <EmptyState title="No companies" />
         ) : (
-          <Table columns={columns(setActive)} rows={companies.data.items} rowKey={(c) => c.id} />
+          <Table columns={columns(setActive, assignedFor)} rows={companies.data.items} rowKey={(c) => c.id} />
         )}
       </Card>
 
