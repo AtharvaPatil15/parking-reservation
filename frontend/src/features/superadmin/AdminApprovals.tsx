@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, LoadingState, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, LoadingState, Pager, Table, useToast,
   type Column,
 } from '../../components';
 import { usePendingAdmins, useAdminRequestHistory, useApproveAdminRequest } from '../../api/hooks';
@@ -15,8 +15,10 @@ type UserProfile = components['schemas']['UserProfile'];
  * so decisions stay visible after they leave the pending queue.
  */
 export function AdminApprovals() {
-  const requests = usePendingAdmins();
-  const history = useAdminRequestHistory();
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const requests = usePendingAdmins(pendingPage);
+  const history = useAdminRequestHistory(historyPage);
   const approval = useApproveAdminRequest();
   const { toast } = useToast();
   // Track the row currently mutating so only its buttons show a spinner.
@@ -86,7 +88,10 @@ export function AdminApprovals() {
         ) : !requests.data || requests.data.items.length === 0 ? (
           <EmptyState title="No pending requests" description="New company-admin sign-ups will appear here." />
         ) : (
-          <Table columns={columns} rows={requests.data.items} rowKey={(u) => u.id} />
+          <>
+            <Table columns={columns} rows={requests.data.items} rowKey={(u) => u.id} />
+            <Pager page={requests.data.meta.page} pageSize={requests.data.meta.pageSize} total={requests.data.meta.total} onPage={setPendingPage} />
+          </>
         )}
       </Card>
 
@@ -98,7 +103,12 @@ export function AdminApprovals() {
         ) : historyItems.length === 0 ? (
           <EmptyState title="No decisions yet" description="Approved and rejected requests will be listed here." />
         ) : (
-          <Table columns={historyColumns} rows={historyItems} rowKey={(u) => u.id} />
+          <>
+            <Table columns={historyColumns} rows={historyItems} rowKey={(u) => u.id} />
+            {history.data && (
+              <Pager page={history.data.meta.page} pageSize={history.data.meta.pageSize} total={history.data.meta.total} onPage={setHistoryPage} />
+            )}
+          </>
         )}
       </Card>
     </div>

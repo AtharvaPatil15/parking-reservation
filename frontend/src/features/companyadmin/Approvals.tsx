@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, LoadingState, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, LoadingState, Pager, Table, useToast,
   type BadgeTone, type Column,
 } from '../../components';
 import { useCompanyUsers, useSetUserApproval } from '../../api/hooks';
@@ -21,7 +21,8 @@ function statusTone(status: UserProfile['status']): BadgeTone {
 export function Approvals() {
   const { user } = useAuth();
   const companyId = user?.companyId ?? undefined;
-  const users = useCompanyUsers(companyId);
+  const [page, setPage] = useState(1);
+  const users = useCompanyUsers(companyId, page);
   const approval = useSetUserApproval(companyId);
   const { toast } = useToast();
   // Track the row currently mutating so only its buttons show a spinner.
@@ -73,7 +74,10 @@ export function Approvals() {
         ) : !users.data || users.data.items.length === 0 ? (
           <EmptyState title="No members yet" />
         ) : (
-          <Table columns={columns} rows={users.data.items} rowKey={(u) => u.id} />
+          <>
+            <Table columns={columns} rows={users.data.items} rowKey={(u) => u.id} />
+            <Pager page={users.data.meta.page} pageSize={users.data.meta.pageSize} total={users.data.meta.total} onPage={setPage} />
+          </>
         )}
       </Card>
     </div>

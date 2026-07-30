@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Pager, Select, Table, useToast,
   type Column, type SelectOption,
 } from '../../components';
 import { useBlocks, useCreateBlock, useDeleteBlock } from '../../api/hooks';
@@ -24,7 +24,8 @@ const REASONS: SelectOption[] = [
 export function Blocks() {
   const { user } = useAuth();
   const companyId = user?.companyId ?? undefined;
-  const blocks = useBlocks(companyId);
+  const [page, setPage] = useState(1);
+  const blocks = useBlocks(companyId, page);
   const create = useCreateBlock(companyId ?? '');
   const remove = useDeleteBlock(companyId ?? '');
   const { toast } = useToast();
@@ -81,8 +82,8 @@ export function Blocks() {
       </div>
 
       <Card title="Add block">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-24">
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Input
               label="Slots"
               type="number"
@@ -91,11 +92,7 @@ export function Blocks() {
               onChange={(e) => setBlockedCount(e.target.value)}
               error={countInvalid ? 'Whole number ≥ 1' : undefined}
             />
-          </div>
-          <div className="w-40">
             <Input label="Start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </div>
-          <div className="w-40">
             <Input
               label="End"
               type="date"
@@ -103,18 +100,16 @@ export function Blocks() {
               onChange={(e) => setEndDate(e.target.value)}
               error={rangeInvalid ? 'End must be on/after start' : undefined}
             />
-          </div>
-          <div className="w-48">
             <Select label="Reason" options={REASONS} value={reason} onChange={(e) => setReason(e.target.value as BlockReason)} />
-          </div>
-          <div className="w-48">
             <Input label="Note" value={reasonText} onChange={(e) => setReasonText(e.target.value)} hint="Optional" />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={!canSubmit}>
-            Add block
-          </Button>
+          {createError && <p role="alert" className="text-sm text-danger">{createError}</p>}
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button onClick={onCreate} loading={create.isPending} disabled={!canSubmit}>
+              Add block
+            </Button>
+          </div>
         </div>
-        {createError && <p role="alert" className="mt-3 text-sm text-danger">{createError}</p>}
       </Card>
 
       <Card title="Active blocks" padded={false}>
@@ -125,7 +120,10 @@ export function Blocks() {
         ) : !blocks.data || blocks.data.items.length === 0 ? (
           <EmptyState title="No blocks" description="None of your quota is held back." />
         ) : (
-          <Table columns={columns} rows={blocks.data.items} rowKey={(b) => b.id} />
+          <>
+            <Table columns={columns} rows={blocks.data.items} rowKey={(b) => b.id} />
+            <Pager page={blocks.data.meta.page} pageSize={blocks.data.meta.pageSize} total={blocks.data.meta.total} onPage={setPage} />
+          </>
         )}
       </Card>
     </div>
