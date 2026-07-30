@@ -897,6 +897,12 @@ export interface components {
             contactNumber: string;
             address: string;
             pinCode: string;
+            /**
+             * @description Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin. COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the Super Admin; approval also grants the CompanyAdmin assignment (F11).
+             * @default EMPLOYEE
+             * @enum {string}
+             */
+            registrationType: "EMPLOYEE" | "COMPANY_ADMIN";
             /** @description Manually-entered home→office distance in km (D6). Optional at registration. */
             distanceKm?: number | null;
             /** Format: password */

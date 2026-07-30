@@ -1681,6 +1681,14 @@ components:
         contactNumber: { type: string }
         address: { type: string }
         pinCode: { type: string }
+        registrationType:
+          type: string
+          enum: [EMPLOYEE, COMPANY_ADMIN]
+          default: EMPLOYEE
+          description: >
+            Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin.
+            COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the
+            Super Admin; approval also grants the CompanyAdmin assignment (F11).
         distanceKm:
           type: number
           nullable: true
