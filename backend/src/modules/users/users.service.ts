@@ -1,7 +1,8 @@
-import type { UserStatus } from '@prisma/client';
+import type { Prisma, UserStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { NotFoundError, ValidationError } from '../../lib/errors';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { buildAuditData } from '../../lib/audit';
+import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
@@ -26,13 +27,44 @@ async function loadTargetUser(actor: Actor, userId: string) {
   return user;
 }
 
+/**
+ * List PENDING users who registered as COMPANY_ADMIN, across all companies — the Super Admin's
+ * approval queue (F11). Route-guarded SUPER_ADMIN-only, so no tenant scoping here.
+ */
+export async function listPendingAdmins(opts: PageArgs) {
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    status: 'PENDING',
+    roles: { some: { role: { name: 'COMPANY_ADMIN' } } },
+  };
+  const [rows, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: userInclude,
+      orderBy: { createdAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return { rows, total };
+}
+
 export async function setApproval(actor: Actor, userId: string, decision: 'APPROVE' | 'REJECT') {
   const user = await loadTargetUser(actor, userId);
   if (user.status !== 'PENDING') {
     throw new ValidationError('Only PENDING users can be approved or rejected');
   }
+
+  // A company-admin registration (F11) is a privileged request: only the Super Admin may action
+  // it — a Company Admin cannot approve another admin into their own company.
+  const isAdminRequest = user.roles.some((r) => r.role.name === 'COMPANY_ADMIN');
+  if (isAdminRequest && actor.role !== 'SUPER_ADMIN') {
+    throw new ForbiddenError('Company-admin registrations are approved by the super admin');
+  }
+
   const newStatus: UserStatus = decision === 'APPROVE' ? 'ACTIVE' : 'REJECTED';
-  await prisma.$transaction([
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.user.update({ where: { id: userId }, data: { status: newStatus } }),
     prisma.auditLog.create({
       data: buildAuditData({
@@ -40,10 +72,32 @@ export async function setApproval(actor: Actor, userId: string, decision: 'APPRO
         entityType: 'User',
         entityId: userId,
         oldValue: { status: user.status },
-        newValue: { status: newStatus, decision },
+        newValue: { status: newStatus, decision, grantedCompanyAdmin: isAdminRequest && decision === 'APPROVE' },
       }),
     }),
-  ]);
+  ];
+
+  // On approval of an admin request, grant the CompanyAdmin assignment (role already attached at
+  // registration). Mirrors companies.service `assignCompanyAdmin`.
+  if (isAdminRequest && decision === 'APPROVE') {
+    ops.push(
+      prisma.companyAdmin.upsert({
+        where: { companyId_userId: { companyId: user.companyId, userId } },
+        update: {},
+        create: { companyId: user.companyId, userId, assignedById: actor.id },
+      }),
+      prisma.auditLog.create({
+        data: buildAuditData({
+          actionType: 'COMPANY_ADMIN_ASSIGNED',
+          entityType: 'CompanyAdmin',
+          entityId: user.companyId,
+          newValue: { companyId: user.companyId, userId, via: 'registration' },
+        }),
+      }),
+    );
+  }
+
+  await prisma.$transaction(ops);
   return prisma.user.findFirstOrThrow({ where: { id: userId }, include: userInclude });
 }
 

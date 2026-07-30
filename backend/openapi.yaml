@@ -958,6 +958,38 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /users/pending-admins:
+    get:
+      tags: [Company Users]
+      operationId: listPendingCompanyAdmins
+      summary: List pending company-admin registration requests
+      description: >
+        Super Admin only. Returns PENDING users who registered as `COMPANY_ADMIN`
+        (registrationType) across all companies — the Super Admin's approval queue (F11).
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paged list of pending company-admin requests
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserProfile' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /users/{id}/approval:
     parameters:
       - name: id
@@ -968,7 +1000,10 @@ paths:
       tags: [Company Users]
       operationId: setUserApproval
       summary: Approve or reject a pending user
-      description: Company Admin (own company). APPROVE → ACTIVE, REJECT → REJECTED.
+      description: >
+        APPROVE → ACTIVE, REJECT → REJECTED. Company Admin for their own company's employees;
+        a company-admin registration request (COMPANY_ADMIN role) is Super-Admin-only and its
+        approval also grants the CompanyAdmin assignment (F11).
       x-maturity: MVP
       x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
       requestBody:
@@ -1681,6 +1716,14 @@ components:
         contactNumber: { type: string }
         address: { type: string }
         pinCode: { type: string }
+        registrationType:
+          type: string
+          enum: [EMPLOYEE, COMPANY_ADMIN]
+          default: EMPLOYEE
+          description: >
+            Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin.
+            COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the
+            Super Admin; approval also grants the CompanyAdmin assignment (F11).
         distanceKm:
           type: number
           nullable: true

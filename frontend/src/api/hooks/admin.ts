@@ -10,6 +10,8 @@ type ParkingSlot = components['schemas']['ParkingSlot'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
 type CreateSlotRequest = components['schemas']['CreateSlotRequest'];
 type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
+type UserProfile = components['schemas']['UserProfile'];
+type ApprovalDecision = components['schemas']['ApprovalDecision'];
 
 /** GET /dashboard/super-admin — headline counts for the SA landing. */
 export function useSuperAdminDashboard() {
@@ -40,6 +42,25 @@ export function useCreateCompany() {
       qc.invalidateQueries({
         predicate: (q) => q.queryKey[0] === 'companies' && typeof q.queryKey[1] === 'number',
       }),
+  });
+}
+
+/** GET /users/pending-admins — the Super Admin's pending company-admin request queue (F11). */
+export function usePendingAdmins(page = 1, pageSize = 10) {
+  return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
+    queryKey: queryKeys.pendingAdmins(page, pageSize),
+    queryFn: () =>
+      unwrapPage<UserProfile>(api.GET('/users/pending-admins', { params: { query: { page, pageSize } } })),
+  });
+}
+
+/** PATCH /users/{id}/approval — approve/reject a pending company-admin request (SA queue). */
+export function useApproveAdminRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, decision }: { userId: string; decision: ApprovalDecision }) =>
+      unwrap<UserProfile>(api.PATCH('/users/{id}/approval', { params: { path: { id: userId } }, body: { decision } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] }),
   });
 }
 

@@ -1,6 +1,19 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { LoadingState } from '../components';
 import { useAuth } from './auth';
 import { roleHome, type Role } from './roles';
+
+/**
+ * Full-screen placeholder shown while the session is being restored from the refresh cookie on a
+ * cold load — prevents a guard from bouncing an about-to-be-restored user to /login.
+ */
+export function AuthLoading() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-canvas text-text">
+      <LoadingState label="Restoring your session…" />
+    </div>
+  );
+}
 
 /**
  * Gate for authenticated-only areas. Unauthenticated → /login, preserving the
@@ -12,8 +25,9 @@ import { roleHome, type Role } from './roles';
  * all of its guarded routes.
  */
 export function RequireAuth() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  if (isLoading) return <AuthLoading />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
@@ -25,8 +39,9 @@ export function RequireAuth() {
  * user is sent to their own home (never a dead-end, never a redirect loop).
  */
 export function RequireRole({ role }: { role: Role }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isLoading } = useAuth();
   const location = useLocation();
+  if (isLoading) return <AuthLoading />;
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }

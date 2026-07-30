@@ -63,6 +63,15 @@ describe('RegisterPage', () => {
     expect(screen.getByText(/pending approval/i)).toBeInTheDocument();
   });
 
+  it('shows the super-admin approval message for a company-admin registration', async () => {
+    renderRegister();
+    await fillValid('newadmin@user.test');
+    await userEvent.selectOptions(screen.getByLabelText(/registering as/i), 'COMPANY_ADMIN');
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+    expect(await screen.findByText(/registration submitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/pending approval by the super admin/i)).toBeInTheDocument();
+  });
+
   it('surfaces a duplicate-email conflict inline', async () => {
     renderRegister();
     await fillValid('priya@mock.test'); // already seeded in mock-co
