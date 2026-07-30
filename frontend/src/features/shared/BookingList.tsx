@@ -62,6 +62,9 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     { key: 'date', header: 'Date', className: 'tabular-nums', render: (b) => b.bookingDate },
     { key: 'type', header: 'Type', render: (b) => <Badge tone="neutral">{b.bookingType}</Badge> },
     { key: 'status', header: 'Status', render: (b) => <Badge tone={STATUS_TONE[b.status]}>{b.status}</Badge> },
+    // Show the allocation score for every request — not only allocated ones — so admins
+    // can see how waitlisted/unallocated bookings scored ('—' before scoring runs).
+    { key: 'score', header: 'Score', align: 'right', className: 'tabular-nums', render: (b) => (b.allocationScore != null ? b.allocationScore.toFixed(1) : '—') },
     { key: 'slot', header: 'Slot', align: 'right', className: 'tabular-nums', render: (b) => b.allocatedSlotNumber ?? '—' },
   ];
 

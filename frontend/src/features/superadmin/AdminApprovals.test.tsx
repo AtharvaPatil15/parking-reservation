@@ -29,4 +29,13 @@ describe('AdminApprovals', () => {
     await userEvent.click(screen.getByRole('button', { name: /approve/i }));
     expect(await screen.findByText(/company admin approved/i)).toBeInTheDocument();
   });
+
+  it('keeps a session history of processed requests', async () => {
+    renderAdminApprovals();
+    await screen.findByText('Blair Ng');
+    await userEvent.click(screen.getByRole('button', { name: /approve/i }));
+    // The "Recently processed" panel records the decision so it isn't lost from view.
+    expect(await screen.findByText(/recently processed/i)).toBeInTheDocument();
+    expect(await screen.findByText('Approved')).toBeInTheDocument();
+  });
 });

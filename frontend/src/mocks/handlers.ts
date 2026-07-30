@@ -569,7 +569,11 @@ const hero = [
     return okPage(slots.slice(start, start + pageSize), page, pageSize, slots.length);
   }),
   http.get(`${baseURL}/parking-areas`, () =>
-    ok<ParkingArea[]>([{ id: 'area-1', name: 'Basement 1', floor: 'B1', officeLocationId: 'office-1' }]),
+    ok<ParkingArea[]>([
+      { id: 'area-1', name: 'Basement 1', floor: 'B1', officeLocationId: 'office-1' },
+      { id: 'area-2', name: 'Basement 2', floor: 'B2', officeLocationId: 'office-1' },
+      { id: 'area-3', name: 'Basement 3', floor: 'B3', officeLocationId: 'office-1' },
+    ]),
   ),
   http.post(`${baseURL}/slots`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as Partial<ParkingSlot> & { slotNumber?: string; parkingAreaId?: string };
