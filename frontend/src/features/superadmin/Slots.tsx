@@ -3,7 +3,7 @@ import {
   Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
-import { useCreateSlot, useSlots, useParkingAreas, useUpdateSlot, useDeleteSlot } from '../../api/hooks';
+import { useCreateSlot, useSlots, useParkingAreas, useCreateParkingArea, useUpdateSlot, useDeleteSlot } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import type { components } from '../../api/types';
 
@@ -35,12 +35,23 @@ export function Slots() {
   const create = useCreateSlot();
   const update = useUpdateSlot();
   const remove = useDeleteSlot();
+  const createArea = useCreateParkingArea();
   const { toast } = useToast();
   const [slotNumber, setSlotNumber] = useState('');
   const [areaId, setAreaId] = useState('');
   const [slotType, setSlotType] = useState<SlotType>('STANDARD');
+  const [areaName_, setAreaName_] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const createError = apiErrorText(create.error);
+  const createAreaError = apiErrorText(createArea.error);
+
+  function onCreateArea() {
+    if (!areaName_.trim()) return;
+    createArea.mutate(
+      { name: areaName_.trim() },
+      { onSuccess: () => { toast('Parking area created.', { tone: 'success' }); setAreaName_(''); } },
+    );
+  }
 
   const areaOptions: SelectOption[] = (areas.data ?? []).map((a) => ({ value: a.id, label: a.name }));
   const areaName = (id: string) => (areas.data ?? []).find((a) => a.id === id)?.name ?? id;
@@ -118,6 +129,18 @@ export function Slots() {
         <h2 className="text-xl font-semibold tracking-tight">Parking slots</h2>
         <p className="text-text-muted">The physical inventory allocation draws from. Deactivated slots don't count as in service.</p>
       </div>
+
+      <Card title="Add parking area">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-56">
+            <Input label="Area name" value={areaName_} onChange={(e) => setAreaName_(e.target.value)} hint="e.g. Basement 4" />
+          </div>
+          <Button onClick={onCreateArea} loading={createArea.isPending} disabled={!areaName_.trim()}>
+            Add area
+          </Button>
+        </div>
+        {createAreaError && <p role="alert" className="mt-3 text-sm text-danger">{createAreaError}</p>}
+      </Card>
 
       <Card title="Add slot">
         <div className="flex flex-wrap items-end gap-3">

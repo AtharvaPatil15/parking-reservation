@@ -20,6 +20,11 @@ const blockReason = z.enum([
   'OTHER',
 ]);
 
+export const createParkingAreaSchema = z.object({
+  name: z.string().min(1),
+  floor: z.string().min(1).nullable().optional(),
+});
+
 export const createSlotSchema = z.object({
   slotNumber: z.string().min(1),
   parkingAreaId: z.string().min(1),

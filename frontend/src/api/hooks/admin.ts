@@ -12,6 +12,7 @@ type CompanyQuota = components['schemas']['CompanyQuota'];
 type CompanyQuotaSummaryEntry = components['schemas']['CompanyQuotaSummaryEntry'];
 type CreateSlotRequest = components['schemas']['CreateSlotRequest'];
 type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
+type CreateParkingAreaRequest = components['schemas']['CreateParkingAreaRequest'];
 type UserProfile = components['schemas']['UserProfile'];
 type ApprovalDecision = components['schemas']['ApprovalDecision'];
 
@@ -71,13 +72,28 @@ export function usePendingAdmins(page = 1, pageSize = 10) {
   });
 }
 
+/** GET /users/admin-requests/history — processed company-admin requests (approval history). */
+export function useAdminRequestHistory(page = 1, pageSize = 10) {
+  return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
+    queryKey: queryKeys.adminRequestHistory(page, pageSize),
+    queryFn: () =>
+      unwrapPage<UserProfile>(
+        api.GET('/users/admin-requests/history', { params: { query: { page, pageSize } } }),
+      ),
+  });
+}
+
 /** PATCH /users/{id}/approval — approve/reject a pending company-admin request (SA queue). */
 export function useApproveAdminRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, decision }: { userId: string; decision: ApprovalDecision }) =>
       unwrap<UserProfile>(api.PATCH('/users/{id}/approval', { params: { path: { id: userId } }, body: { decision } })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] });
+      // The decided request now belongs in the approval history.
+      qc.invalidateQueries({ queryKey: ['users', 'admin-requests', 'history'] });
+    },
   });
 }
 
@@ -97,6 +113,15 @@ export function useParkingAreas() {
   return useQuery({
     queryKey: queryKeys.parkingAreas,
     queryFn: () => unwrap<ParkingArea[]>(api.GET('/parking-areas', {})),
+  });
+}
+
+/** POST /parking-areas — create an area (e.g. "Basement 2"). */
+export function useCreateParkingArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateParkingAreaRequest) => unwrap<ParkingArea>(api.POST('/parking-areas', { body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.parkingAreas }),
   });
 }
 

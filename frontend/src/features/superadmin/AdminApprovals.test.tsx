@@ -30,12 +30,11 @@ describe('AdminApprovals', () => {
     expect(await screen.findByText(/company admin approved/i)).toBeInTheDocument();
   });
 
-  it('keeps a session history of processed requests', async () => {
+  it('records processed requests in the approval history', async () => {
     renderAdminApprovals();
     await screen.findByText('Blair Ng');
     await userEvent.click(screen.getByRole('button', { name: /approve/i }));
-    // The "Recently processed" panel records the decision so it isn't lost from view.
-    expect(await screen.findByText(/recently processed/i)).toBeInTheDocument();
+    // The decided request moves to the persisted "Approval history" (server-backed).
     expect(await screen.findByText('Approved')).toBeInTheDocument();
   });
 });
