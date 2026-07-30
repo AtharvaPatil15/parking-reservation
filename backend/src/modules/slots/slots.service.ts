@@ -60,7 +60,14 @@ export async function listSlots(opts: { status?: SlotStatus; parkingAreaId?: str
     ...(opts.parkingAreaId ? { parkingAreaId: opts.parkingAreaId } : {}),
   };
   const [rows, total] = await Promise.all([
-    prisma.parkingSlot.findMany({ where, orderBy: { slotNumber: 'asc' }, skip: opts.skip, take: opts.take }),
+    // Newest first so a just-created slot lands at the top of page 1 — the SA sees what they
+    // just added without hunting for it in slot-number order (secondary sort keeps it stable).
+    prisma.parkingSlot.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { slotNumber: 'asc' }],
+      skip: opts.skip,
+      take: opts.take,
+    }),
     prisma.parkingSlot.count({ where }),
   ]);
   return { rows, total };

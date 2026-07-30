@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Badge, Button, Card, ErrorState, Input, LoadingState, Modal, Select, useToast, type SelectOption,
+  Badge, Button, Card, ErrorState, Input, LoadingState, Modal, useToast,
 } from '../../components';
 import { useBooking, useReleaseBooking, useUpdateBooking } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
@@ -11,19 +11,10 @@ import { statusTone } from './statusTone';
 import type { components } from '../../api/types';
 
 type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
-type VehicleType = components['schemas']['VehicleType'];
 
 // Mirror the create flow's hard cap (bookingSchema: carpoolPeople 1–4) so an edit
 // can't push people past 4 or spawn an unbounded number of member rows.
 const MAX_CARPOOL_PEOPLE = 4;
-
-const VEHICLE_TYPES: SelectOption[] = [
-  { value: 'CAR', label: 'Car' },
-  { value: 'BIKE', label: 'Bike' },
-  { value: 'EV_CAR', label: 'EV Car' },
-  { value: 'EV_BIKE', label: 'EV Bike' },
-  { value: 'OTHER', label: 'Other' },
-];
 
 function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
@@ -42,7 +33,6 @@ export function BookingStatus() {
   const { toast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [vehicleType, setVehicleType] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
   const [special, setSpecial] = useState('');
@@ -95,7 +85,6 @@ export function BookingStatus() {
   }
 
   function openEdit() {
-    setVehicleType(b.vehicleType ?? '');
     setVehicleNumber(b.vehicleNumber ?? '');
     setPeople(String(b.carpoolMemberCount + 1));
     setSpecial(b.specialRequirement ?? '');
@@ -114,7 +103,6 @@ export function BookingStatus() {
       vehicleNumber: vehicleNumber.trim() || null,
       specialRequirement: special.trim() || null,
       carpoolMembers: cleanedMembers,
-      ...(vehicleType ? { vehicleType: vehicleType as VehicleType } : {}),
     };
     update.mutate(body, {
       onSuccess: () => {
@@ -205,14 +193,7 @@ export function BookingStatus() {
         }
       >
         <div className="space-y-4">
-          <Select
-            label="Vehicle type"
-            placeholder="Select…"
-            options={VEHICLE_TYPES}
-            value={vehicleType}
-            onChange={(e) => setVehicleType(e.target.value)}
-          />
-          <Input label="Vehicle number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
+          <Input label="Car number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
           <Input
             label="People (incl. you)"
             type="number"

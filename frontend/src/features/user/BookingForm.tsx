@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
 import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../components';
+import { Button, Card, Input, LoadingState, SuccessState } from '../../components';
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
 import { cn } from '../../lib/cn';
 import { BackLink } from '../shared/BackLink';
-import { VEHICLE_OPTIONS, bookingSchema, type BookingFormValues } from './bookingSchema';
+import { bookingSchema, type BookingFormValues } from './bookingSchema';
 import { formatCountdown, nextBookableWeekday } from '../../lib/dates';
 
 // Escalate the cutoff timer to a warning tone inside the final 30 minutes.
@@ -71,7 +71,9 @@ export function BookingForm() {
     createBooking.mutate(
       {
         bookingDate: values.bookingDate,
-        vehicleType: values.vehicleType ? values.vehicleType : undefined,
+        // Demo simplification: the UI only offers car bookings. The API/enum still accepts BIKE/EV_CAR,
+        // so this is a client-side narrowing, not a contract change — the picker can be restored later.
+        vehicleType: 'CAR',
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
         specialRequirement: values.specialRequirement || undefined,
@@ -130,17 +132,11 @@ export function BookingForm() {
             </p>
           )}
 
-          {/* Short fields paired into a 2-col grid so the form reads compactly. */}
+          {/* Short fields paired into a 2-col grid so the form reads compactly.
+              Demo is car-only, so there's no vehicle-type picker (see mutate body). */}
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="Date" type="date" {...register('bookingDate')} error={errors.bookingDate?.message} />
-            <Select
-              label="Vehicle"
-              placeholder="Select a vehicle"
-              options={VEHICLE_OPTIONS}
-              {...register('vehicleType')}
-              error={errors.vehicleType?.message}
-            />
-            <Input label="Vehicle number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} />
+            <Input label="Car number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} hint="Optional" />
             <Input
               label="Carpool people"
               type="number"
