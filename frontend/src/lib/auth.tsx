@@ -117,3 +117,9 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
   return ctx;
 }
+
+/** Like useAuth but returns null instead of throwing when no provider is mounted —
+ *  for presentational helpers that may render outside the app's provider tree (e.g. in tests). */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}

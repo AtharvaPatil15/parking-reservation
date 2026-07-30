@@ -6,6 +6,7 @@ import {
 import { useBooking, useReleaseBooking, useUpdateBooking } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import { isTodayOrFuture } from '../../lib/dates';
+import { BackLink } from '../shared/BackLink';
 import { statusTone } from './statusTone';
 import type { components } from '../../api/types';
 
@@ -121,6 +122,7 @@ export function BookingStatus() {
 
   return (
     <div className="space-y-6">
+      <BackLink to="/my-bookings" label="Back to my bookings" />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Booking status</h1>
