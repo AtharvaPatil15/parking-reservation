@@ -12,10 +12,10 @@ function renderHistory() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrap = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/app/history']}>
+      <MemoryRouter initialEntries={['/my-bookings']}>
         <Routes>
-          <Route path="/app/history" element={children} />
-          <Route path="/app/booking/:id" element={<div>Detail</div>} />
+          <Route path="/my-bookings" element={children} />
+          <Route path="/booking/:id" element={<div>Detail</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>

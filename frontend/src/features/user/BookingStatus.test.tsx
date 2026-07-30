@@ -14,9 +14,9 @@ function renderAt(id = 'bk-1') {
   const Wrap = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
       <ToastProvider>
-        <MemoryRouter initialEntries={[`/app/booking/${id}`]}>
+        <MemoryRouter initialEntries={[`/booking/${id}`]}>
           <Routes>
-            <Route path="/app/booking/:id" element={children} />
+            <Route path="/booking/:id" element={children} />
             <Route path="/app" element={<div>User area</div>} />
           </Routes>
         </MemoryRouter>

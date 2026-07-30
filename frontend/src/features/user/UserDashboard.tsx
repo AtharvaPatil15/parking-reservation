@@ -31,7 +31,7 @@ export function UserDashboard() {
                 {secondsLeft <= 0 ? 'Booking window closed.' : `Cutoff in ${formatCountdown(secondsLeft)}`}
               </p>
             )}
-            <Link to={`/app/booking/${upcoming.id}`} className="text-primary hover:underline">
+            <Link to={`/booking/${upcoming.id}`} className="text-primary hover:underline">
               View status &amp; score
             </Link>
           </div>
@@ -41,7 +41,7 @@ export function UserDashboard() {
           title="No upcoming booking"
           description="Reserve a parking slot for the next bookable weekday."
           action={
-            <Link to="/app/book" className="text-primary hover:underline">
+            <Link to="/book" className="text-primary hover:underline">
               Book a slot
             </Link>
           }
@@ -49,12 +49,12 @@ export function UserDashboard() {
       )}
 
       <div className="flex flex-wrap items-center gap-4">
-        <Link to="/app/book">
+        <Link to="/book">
           <Button>Book a slot</Button>
         </Link>
         <p className="text-sm text-text-muted">
           {d.previousBookingsCount} past booking{d.previousBookingsCount === 1 ? '' : 's'} ·{' '}
-          <Link to="/app/history" className="text-primary hover:underline">
+          <Link to="/my-bookings" className="text-primary hover:underline">
             View history
           </Link>
         </p>

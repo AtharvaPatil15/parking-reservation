@@ -16,6 +16,7 @@ import companiesRoutes from './modules/companies/companies.routes';
 import usersRoutes from './modules/users/users.routes';
 import { slotsRouter, parkingAreasRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
 import dashboardRoutes from './modules/dashboards/dashboards.routes';
+import meRoutes from './modules/me/me.routes';
 import bookingsRoutes from './modules/bookings/bookings.routes';
 import allocationRoutes, { allocationsRouter } from './modules/allocation/allocation.routes';
 
@@ -59,6 +60,7 @@ api.use('/slots', slotsRouter);
 api.use('/parking-areas', parkingAreasRouter); // GET — area picker for slot creation
 api.use('/blocks', blockItemRouter); // DELETE /:id
 api.use('/dashboard', dashboardRoutes);
+api.use('/me', meRoutes); // GET/PATCH profile + GET /me/bookings (own history)
 api.use('/bookings', bookingsRoutes);
 api.use('/allocation', allocationRoutes);
 api.use('/allocations', allocationsRouter); // per-slot roster — CA (own) / SA (all)
