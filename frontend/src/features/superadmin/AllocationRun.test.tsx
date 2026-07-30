@@ -35,6 +35,13 @@ describe('AllocationRun', () => {
     expect(screen.getByText('WAITLISTED')).toBeInTheDocument();
   });
 
+  it('starts the common pool and shows its ranked results', async () => {
+    renderRun();
+    await userEvent.click(screen.getByRole('button', { name: /start common pool/i }));
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    expect(screen.getAllByText('ALLOCATED').length).toBeGreaterThan(0);
+  });
+
   it('shows an error when the run fails', async () => {
     server.use(
       http.post('*/api/v1/allocation/primary/run', () =>

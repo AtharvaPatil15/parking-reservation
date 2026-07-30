@@ -1,7 +1,13 @@
 export { useLogin, useLogout, useRegister, useActiveCompanies } from './auth';
 export { useCreateBooking, useUpdateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
 export type { AdminBookingsFilter } from './bookings';
-export { useRunPrimaryAllocation, useAllocationBreakdown } from './allocation';
+export {
+  useRunPrimaryAllocation,
+  useRunCommonPoolAllocation,
+  useAllocationBreakdown,
+  useAllocations,
+} from './allocation';
+export type { AllocationsFilter } from './allocation';
 export { useConfig, useUpdateConfig } from './config';
 export { useMe, useMyBookings, useUserDashboard } from './user';
 export {

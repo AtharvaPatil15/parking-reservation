@@ -3,6 +3,8 @@ export const queryKeys = {
   config: ['config'] as const,
   booking: (id: string) => ['booking', id] as const,
   allocationBreakdown: (runId: string) => ['allocationRun', runId, 'breakdown'] as const,
+  allocations: (date: string, companyId: string, type: string, page: number) =>
+    ['allocations', date, companyId, type, page] as const,
   me: ['me'] as const,
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number) => ['me', 'bookings', page, pageSize] as const,

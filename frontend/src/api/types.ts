@@ -369,7 +369,7 @@ export interface paths {
         put?: never;
         /**
          * Run common-pool allocation for a date
-         * @description Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate).
+         * @description Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate). Enrolls the users waitlisted by primary as common-pool requests, derives pool inventory from every company's unused quota, and assigns it cross-company by FinalScore.
          */
         post: operations["runCommonPoolAllocation"];
         delete?: never;
@@ -436,6 +436,26 @@ export interface paths {
          * @description Role: SUPER_ADMIN. Explains every outcome with per-factor scores + rank (decisions §3).
          */
         get: operations["getAllocationBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-slot allocation roster (who holds which seat, primary vs common pool)
+         * @description Role COMPANY_ADMIN (scoped to their own company) or SUPER_ADMIN (all companies; optional `companyId` filter). Each row is one allocated seat with the employee, date, and whether it came from primary or the common pool. Filter by `date` and/or `type`.
+         */
+        get: operations["listAllocations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1040,6 +1060,20 @@ export interface components {
             submittedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+        };
+        /** @description One allocated seat and who holds it for the date (primary or common pool). */
+        AllocationRosterItem: {
+            id: string;
+            slotNumber: string;
+            allocationType: components["schemas"]["BookingType"];
+            /** Format: date */
+            bookingDate: string;
+            employeeName: string;
+            /** Format: email */
+            employeeEmail: string;
+            companyId: string;
+            companyName: string;
+            allocationScore?: number | null;
         };
         Notification: {
             id: string;
@@ -2368,6 +2402,43 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAllocations: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                /** @description Filter to a single booking date (YYYY-MM-DD). */
+                date?: string;
+                /** @description SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN. */
+                companyId?: string;
+                /** @description Optional filter — PRIMARY or COMMON_POOL allocations. */
+                type?: components["schemas"]["BookingType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of allocated seats. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRosterItem"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listCompanies: {
