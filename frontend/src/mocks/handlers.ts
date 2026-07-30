@@ -23,6 +23,27 @@ type RegisterRequest = components['schemas']['RegisterRequest'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
+
+// Dev-only mock session persisted so a browser refresh survives in mock mode (mirrors the real
+// backend's HttpOnly refresh cookie). Never used against a real API — purely a mock artifact.
+const MOCK_SESSION_KEY = 'mock:auth';
+interface MockSession { id: string; fullName: string; email: string; role: RoleName; companyId: string; companyName: string }
+function readMockSession(): MockSession | null {
+  try {
+    const raw = localStorage.getItem(MOCK_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as MockSession) : null;
+  } catch {
+    return null;
+  }
+}
+function writeMockSession(s: MockSession | null): void {
+  try {
+    if (s) localStorage.setItem(MOCK_SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(MOCK_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 const okPage = <T,>(items: T[], page: number, pageSize: number, total = items.length) =>
   HttpResponse.json({ success: true, data: items, meta: { page, pageSize, total } });
 const fail = (status: number, code: string, message: string) =>
@@ -230,20 +251,28 @@ const hero = [
     const body = (await request.json().catch(() => null)) as { email?: string; password?: string } | null;
     if (!body?.email || !body?.password) return fail(401, 'UNAUTHENTICATED', 'Invalid credentials');
     const role = roleForEmail(body.email);
-    return ok<LoginResponseData>({
-      accessToken: 'mock-access-token',
-      tokenType: 'Bearer',
-      expiresIn: 900,
-      user: {
-        id: `mock-${role.toLowerCase()}`,
-        fullName: `Mock ${role.replace('_', ' ')}`,
-        role,
-        companyId: 'mock-co',
-        companyName: 'Mock Co',
-      },
+    const user = {
+      id: `mock-${role.toLowerCase()}`,
+      fullName: `Mock ${role.replace('_', ' ')}`,
+      role,
+      companyId: 'mock-co',
+      companyName: 'Mock Co',
+    };
+    // Persist so a page refresh can rehydrate (via /auth/refresh + /me) in mock mode.
+    writeMockSession({ ...user, email: body.email });
+    return ok<LoginResponseData>({ accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900, user });
+  }),
+  // Rehydrate the access token from the persisted mock session (mirrors the real refresh-cookie flow).
+  http.post(`${baseURL}/auth/refresh`, () => {
+    if (!readMockSession()) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
+    return ok<{ accessToken: string; tokenType: 'Bearer'; expiresIn: number }>({
+      accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900,
     });
   }),
-  http.post(`${baseURL}/auth/logout`, () => ok({ message: 'Signed out' })),
+  http.post(`${baseURL}/auth/logout`, () => {
+    writeMockSession(null);
+    return ok({ message: 'Signed out' });
+  }),
   http.get(`${baseURL}/companies/active`, () =>
     ok<CompanySummary[]>(companyState.filter((c) => c.status === 'ACTIVE').map((c) => ({ id: c.id, name: c.name }))),
   ),
@@ -298,9 +327,15 @@ const hero = [
     bookingState[id] = { ...detail, status: 'RELEASED', allocatedSlotNumber: null };
     return ok<BookingDetail>(bookingState[id]);
   }),
-  http.get(`${baseURL}/me`, () =>
-    ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE')),
-  ),
+  http.get(`${baseURL}/me`, () => {
+    const s = readMockSession();
+    if (s) {
+      return ok<UserProfile>(
+        userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName }),
+      );
+    }
+    return ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE'));
+  }),
   http.get(`${baseURL}/dashboard/user`, () =>
     ok<UserDashboard>({
       upcomingBooking: toSummary(bookingState['mock-booking-1']),
