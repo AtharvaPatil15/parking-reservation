@@ -5,6 +5,8 @@ const NAV = [
   { to: '/company', label: 'Dashboard', end: true },
   { to: '/company/approvals', label: 'Approvals' },
   { to: '/company/blocks', label: 'Blocks' },
+  { to: '/book', label: 'Book' },
+  { to: '/my-bookings', label: 'My bookings' },
 ];
 
 /** Company-admin area layout: heading + section nav; content routes through the Outlet. */

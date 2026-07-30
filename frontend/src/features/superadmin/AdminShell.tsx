@@ -8,6 +8,8 @@ const NAV = [
   { to: '/admin/companies', label: 'Companies' },
   { to: '/admin/admin-requests', label: 'Admin requests' },
   { to: '/admin/slots', label: 'Slots' },
+  { to: '/book', label: 'Book' },
+  { to: '/my-bookings', label: 'My bookings' },
 ];
 
 /** Super-admin area layout: heading + section nav; content routes through the Outlet. */

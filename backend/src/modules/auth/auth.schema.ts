@@ -16,7 +16,7 @@ export const registerSchema = z
     fullName: z.string().min(1),
     companyId: z.string().min(1),
     email: z.string().email(),
-    contactNumber: z.string().min(1),
+    contactNumber: z.string().regex(/^\d{10}$/, 'Contact number must be 10 digits'),
     address: z.string().min(1),
     pinCode: z.string().regex(/^\d{6}$/, 'PIN code must be 6 digits'),
     registrationType: z.enum(['EMPLOYEE', 'COMPANY_ADMIN']).default('EMPLOYEE'),

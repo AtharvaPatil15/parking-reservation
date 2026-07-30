@@ -13,9 +13,15 @@ export const registerSchema = z
     registrationType: z.enum(['EMPLOYEE', 'COMPANY_ADMIN']),
     companyId: z.string().min(1, 'Select your company.'),
     email: z.string().min(1, 'Email is required.').regex(EMAIL_RE, 'Enter a valid email.'),
-    contactNumber: z.string().min(1, 'Contact number is required.'),
+    contactNumber: z
+      .string()
+      .min(1, 'Contact number is required.')
+      .regex(/^\d{10}$/, 'Enter a 10-digit phone number (digits only).'),
     address: z.string().min(1, 'Address is required.'),
-    pinCode: z.string().min(1, 'PIN code is required.'),
+    pinCode: z
+      .string()
+      .min(1, 'PIN code is required.')
+      .regex(/^\d{6}$/, 'PIN code must be 6 digits.'),
     distanceKm: z
       .string()
       .optional()

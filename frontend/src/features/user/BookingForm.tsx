@@ -38,7 +38,7 @@ export function BookingForm() {
         title="Request submitted"
         description={`Booking ${createBooking.data.id} is ${createBooking.data.status.toLowerCase()}.`}
         action={
-          <Link to={`/app/booking/${createBooking.data.id}`} className="text-primary hover:underline">
+          <Link to={`/booking/${createBooking.data.id}`} className="text-primary hover:underline">
             View status
           </Link>
         }
