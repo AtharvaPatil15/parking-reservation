@@ -13,6 +13,10 @@ import type { components } from '../../api/types';
 type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
 type VehicleType = components['schemas']['VehicleType'];
 
+// Mirror the create flow's hard cap (bookingSchema: carpoolPeople 1–4) so an edit
+// can't push people past 4 or spawn an unbounded number of member rows.
+const MAX_CARPOOL_PEOPLE = 4;
+
 const VEHICLE_TYPES: SelectOption[] = [
   { value: 'CAR', label: 'Car' },
   { value: 'BIKE', label: 'Bike' },
@@ -79,7 +83,7 @@ export function BookingStatus() {
     });
   }
 
-  const peopleNum = Math.max(1, Number(people) || 1);
+  const peopleNum = Math.min(MAX_CARPOOL_PEOPLE, Math.max(1, Number(people) || 1));
   function addMember() {
     setMembers((prev) => [...prev, { name: '', employeeEmail: '' }]);
   }
@@ -213,6 +217,7 @@ export function BookingStatus() {
             label="People (incl. you)"
             type="number"
             min={1}
+            max={MAX_CARPOOL_PEOPLE}
             value={people}
             onChange={(e) => setPeople(e.target.value)}
             hint="Driver counts as person 1. Distance isn't editable — it's snapshotted from your profile."

@@ -130,9 +130,11 @@ function seedBookings(): Record<string, BookingDetail> {
       submittedAt: '2026-07-18T09:00:00.000Z', createdAt: '2026-07-18T08:00:00.000Z',
       carpoolMembers: [],
     },
-    // Future, still-SUBMITTED request → editable (drives the edit-carpool flow).
+    // Far-future, still-SUBMITTED request → always editable (drives the edit-carpool flow).
+    // Fixed well ahead of now so BookingStatus's isTodayOrFuture edit gate never lapses,
+    // keeping the demo/screenshots stable over time.
     'bk-4': {
-      id: 'bk-4', bookingDate: '2026-08-04', bookingType: 'PRIMARY', status: 'SUBMITTED',
+      id: 'bk-4', bookingDate: '2099-12-31', bookingType: 'PRIMARY', status: 'SUBMITTED',
       travelDistanceKm: 6.0, vehicleType: 'CAR', vehicleNumber: 'KA-04-3456', carpoolMemberCount: 1,
       specialRequirement: null, allocationScore: null, allocatedSlotNumber: null,
       submittedAt: '2026-07-30T09:00:00.000Z', createdAt: '2026-07-30T08:00:00.000Z',
