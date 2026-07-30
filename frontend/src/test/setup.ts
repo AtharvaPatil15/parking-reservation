@@ -29,11 +29,12 @@ afterEach(() => server.resetHandlers());
 // Restore mutable mock state (bookings/config/companies/... mutated by stateful
 // handlers) so one test's release/PATCH/approval can't leak into the next.
 afterEach(() => resetMockData());
-// Clear persisted auth hints (auth:active flag, mock:auth session) so a test that logs in
-// can't make the next test's cold load attempt a silent rehydration.
+// Clear persisted auth state (auth:session in sessionStorage, mock:auth in localStorage) so a
+// test that logs in can't make the next test's cold load restore or rehydrate a session.
 afterEach(() => {
   try {
     localStorage.clear();
+    sessionStorage.clear();
   } catch {
     /* no storage in this environment */
   }

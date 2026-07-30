@@ -1,4 +1,4 @@
-import { act, render, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { api } from '../api/client';
@@ -44,28 +44,21 @@ describe('AuthProvider', () => {
     expect(() => render(<Bad />)).toThrow(/AuthProvider/);
   });
 
-  it('rehydrates the session from the refresh cookie on cold load when a prior session is hinted', async () => {
-    // Simulate a page refresh after a prior login: the `auth:active` hint is present and the
-    // refresh + /me endpoints succeed (the mock reads the persisted session).
-    localStorage.setItem('auth:active', '1');
-    localStorage.setItem(
-      'mock:auth',
-      JSON.stringify({ id: 'u9', fullName: 'Rhea Return', email: 'rhea@acme.test', role: 'COMPANY_ADMIN', companyId: 'co1', companyName: 'Acme' }),
-    );
-
+  it('restores a persisted session on cold load (survives a page refresh)', () => {
+    // Simulate a refresh: a prior login left the session in sessionStorage.
+    sessionStorage.setItem('auth:session', JSON.stringify(session));
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
-    // Starts loading (a hint exists), then restores the session.
-    expect(result.current.isLoading).toBe(true);
-    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.user?.role).toBe('COMPANY_ADMIN');
-    expect(result.current.accessToken).toBe('mock-access-token');
+    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.user?.fullName).toBe('Uma User');
+    expect(result.current.accessToken).toBe('tok');
   });
 
-  it('stays anonymous on cold load when there is no prior-session hint', async () => {
+  it('persists the session to storage on login and clears it on logout', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.isAuthenticated).toBe(false);
+    act(() => result.current.login(session));
+    expect(sessionStorage.getItem('auth:session')).toContain('Uma User');
+    act(() => result.current.logout());
+    expect(sessionStorage.getItem('auth:session')).toBeNull();
   });
 
   it('bridges the access token into the API client after login', async () => {
