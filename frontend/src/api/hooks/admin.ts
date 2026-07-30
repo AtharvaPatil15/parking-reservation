@@ -14,11 +14,15 @@ type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
 type UserProfile = components['schemas']['UserProfile'];
 type ApprovalDecision = components['schemas']['ApprovalDecision'];
 
-/** GET /dashboard/super-admin — headline counts for the SA landing. */
-export function useSuperAdminDashboard() {
+/** GET /dashboard/super-admin — headline counts for the SA landing. `date` (YYYY-MM-DD) picks the
+ *  business day for the daily figures; omit for today (IST). */
+export function useSuperAdminDashboard(date?: string) {
   return useQuery({
-    queryKey: queryKeys.superAdminDashboard,
-    queryFn: () => unwrap<SuperAdminDashboard>(api.GET('/dashboard/super-admin', {})),
+    queryKey: [...queryKeys.superAdminDashboard, date ?? ''],
+    queryFn: () =>
+      unwrap<SuperAdminDashboard>(
+        api.GET('/dashboard/super-admin', { params: { query: date ? { date } : {} } }),
+      ),
   });
 }
 
