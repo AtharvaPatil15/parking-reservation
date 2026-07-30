@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Pager, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
 import { useCreateSlot, useSlots, useParkingAreas, useCreateParkingArea, useUpdateSlot, useDeleteSlot } from '../../api/hooks';
@@ -30,7 +30,8 @@ function statusTone(status: ParkingSlot['status']): BadgeTone {
 }
 
 export function Slots() {
-  const slots = useSlots();
+  const [page, setPage] = useState(1);
+  const slots = useSlots(page);
   const areas = useParkingAreas();
   const create = useCreateSlot();
   const update = useUpdateSlot();
@@ -174,7 +175,10 @@ export function Slots() {
         ) : !slots.data || slots.data.items.length === 0 ? (
           <EmptyState title="No slots" />
         ) : (
-          <Table columns={columns} rows={slots.data.items} rowKey={(s) => s.id} />
+          <>
+            <Table columns={columns} rows={slots.data.items} rowKey={(s) => s.id} />
+            <Pager page={slots.data.meta.page} pageSize={slots.data.meta.pageSize} total={slots.data.meta.total} onPage={setPage} />
+          </>
         )}
       </Card>
     </div>

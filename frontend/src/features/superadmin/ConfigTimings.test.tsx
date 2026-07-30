@@ -23,6 +23,14 @@ describe('ConfigTimings', () => {
     expect(screen.getByLabelText(/weight of the distance sub-score/i)).toBeInTheDocument();
   });
 
+  it('does not expose the raw config keys (function names) to the user', async () => {
+    renderConfig();
+    await screen.findByLabelText(/primary window closes/i);
+    expect(screen.queryByText('booking.primaryCutoff')).not.toBeInTheDocument();
+    expect(screen.queryByText('allocation.distanceWeight')).not.toBeInTheDocument();
+    expect(screen.queryByText('carpool.maxPeople')).not.toBeInTheDocument();
+  });
+
   it('flags an out-of-range weight inline', async () => {
     renderConfig();
     const weight = await screen.findByLabelText(/weight of the distance sub-score/i);

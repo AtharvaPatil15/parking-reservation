@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Modal, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Modal, Pager, Table, useToast,
   type Column,
 } from '../../components';
 import {
@@ -100,7 +100,8 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
 }
 
 export function Companies() {
-  const companies = useCompanies();
+  const [page, setPage] = useState(1);
+  const companies = useCompanies(page);
   const create = useCreateCompany();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -165,7 +166,10 @@ export function Companies() {
         ) : !companies.data || companies.data.items.length === 0 ? (
           <EmptyState title="No companies" />
         ) : (
-          <Table columns={columns(setActive, assignedFor)} rows={companies.data.items} rowKey={(c) => c.id} />
+          <>
+            <Table columns={columns(setActive, assignedFor)} rows={companies.data.items} rowKey={(c) => c.id} />
+            <Pager page={companies.data.meta.page} pageSize={companies.data.meta.pageSize} total={companies.data.meta.total} onPage={setPage} />
+          </>
         )}
       </Card>
 

@@ -92,8 +92,8 @@ export function ConfigTimings() {
   function renderField(e: ConfigEntry) {
     const value = draft[e.key] ?? '';
     const common = {
+      // Show a human label (description, else a humanized key) — never the raw config key.
       label: e.description || labelForKey(e.key),
-      hint: errors[e.key] ? undefined : e.key,
       error: errors[e.key],
     };
     if (e.valueType === 'BOOLEAN') {

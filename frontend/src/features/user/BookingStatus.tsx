@@ -41,6 +41,7 @@ export function BookingStatus() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
   const [special, setSpecial] = useState('');
+  const [members, setMembers] = useState<{ name: string; employeeEmail: string }[]>([]);
 
   if (booking.isLoading) return <LoadingState label="Loading booking…" />;
   if (booking.isError || !booking.data) {
@@ -77,20 +78,37 @@ export function BookingStatus() {
     });
   }
 
+  const peopleNum = Math.max(1, Number(people) || 1);
+  function addMember() {
+    setMembers((prev) => [...prev, { name: '', employeeEmail: '' }]);
+  }
+  function removeMember(i: number) {
+    setMembers((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function setMember(i: number, field: 'name' | 'employeeEmail', val: string) {
+    setMembers((prev) => prev.map((m, idx) => (idx === i ? { ...m, [field]: val } : m)));
+  }
+
   function openEdit() {
     setVehicleType(b.vehicleType ?? '');
     setVehicleNumber(b.vehicleNumber ?? '');
     setPeople(String(b.carpoolMemberCount + 1));
     setSpecial(b.specialRequirement ?? '');
+    setMembers((b.carpoolMembers ?? []).map((m) => ({ name: m.name, employeeEmail: m.employeeEmail ?? '' })));
     setEditOpen(true);
   }
 
   function onSaveEdit() {
     if (!id) return;
+    const cleanedMembers = members
+      .filter((m) => m.name.trim())
+      .map((m) => ({ name: m.name.trim(), employeeEmail: m.employeeEmail.trim() || undefined }));
     const body: UpdateBookingRequest = {
-      carpoolPeople: Math.max(1, Number(people) || 1),
+      // Keep people ≥ declared members + driver so the edit is internally consistent.
+      carpoolPeople: Math.max(peopleNum, cleanedMembers.length + 1),
       vehicleNumber: vehicleNumber.trim() || null,
       specialRequirement: special.trim() || null,
+      carpoolMembers: cleanedMembers,
       ...(vehicleType ? { vehicleType: vehicleType as VehicleType } : {}),
     };
     update.mutate(body, {
@@ -197,6 +215,39 @@ export function BookingStatus() {
             onChange={(e) => setPeople(e.target.value)}
             hint="Driver counts as person 1. Distance isn't editable — it's snapshotted from your profile."
           />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-text">Carpool members</span>
+              <Button type="button" size="sm" variant="secondary" disabled={members.length >= peopleNum - 1} onClick={addMember}>
+                Add member
+              </Button>
+            </div>
+            {members.length === 0 ? (
+              <p className="text-xs text-text-muted">No members added.</p>
+            ) : (
+              members.map((m, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <Input
+                    aria-label={`Member ${i + 1} name`}
+                    placeholder="Name"
+                    value={m.name}
+                    onChange={(e) => setMember(i, 'name', e.target.value)}
+                  />
+                  <Input
+                    aria-label={`Member ${i + 1} email`}
+                    placeholder="Employee email"
+                    value={m.employeeEmail}
+                    onChange={(e) => setMember(i, 'employeeEmail', e.target.value)}
+                  />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeMember(i)}>
+                    Remove
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
           <Input label="Special requirement" value={special} onChange={(e) => setSpecial(e.target.value)} />
           {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
         </div>

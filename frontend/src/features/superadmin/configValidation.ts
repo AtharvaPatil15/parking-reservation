@@ -81,7 +81,14 @@ export function validateTimingOrder(values: Record<string, string>): Record<stri
   return Object.fromEntries(TIMING_KEYS.map((k) => [k, message]));
 }
 
-/** Human label for a config key (falls back to the raw key). */
+/**
+ * Human label for a config key — never the raw dotted key. Uses the curated timing labels,
+ * else humanizes the last segment (e.g. `allocation.distanceWeight` → "Distance weight",
+ * `carpool.maxPeople` → "Max people").
+ */
 export function labelForKey(key: string): string {
-  return TIMING_LABELS[key] ?? key;
+  if (TIMING_LABELS[key]) return TIMING_LABELS[key];
+  const last = key.split('.').pop() ?? key;
+  const words = last.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

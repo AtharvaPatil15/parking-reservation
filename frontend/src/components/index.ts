@@ -8,6 +8,7 @@ export { Table, type TableProps, type Column } from './Table';
 export { Modal, type ModalProps } from './Modal';
 export { ToastProvider, useToast, type ToastOptions, type ToastTone } from './Toast';
 export { Spinner } from './Spinner';
+export { Pager, type PagerProps } from './Pager';
 export {
   LoadingState,
   EmptyState,
