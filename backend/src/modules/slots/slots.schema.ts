@@ -20,6 +20,12 @@ const blockReason = z.enum([
   'OTHER',
 ]);
 
+export const createParkingAreaSchema = z.object({
+  // `.trim()` so a whitespace-only name (e.g. "   ") is rejected, not stored as blank.
+  name: z.string().trim().min(1),
+  floor: z.string().trim().min(1).nullable().optional(),
+});
+
 export const createSlotSchema = z.object({
   slotNumber: z.string().min(1),
   parkingAreaId: z.string().min(1),

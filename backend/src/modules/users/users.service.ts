@@ -50,6 +50,30 @@ export async function listPendingAdmins(opts: PageArgs) {
   return { rows, total };
 }
 
+/**
+ * List PROCESSED company-admin registration requests (status ACTIVE or REJECTED), across all
+ * companies — the Super Admin's approval history (F11), so decisions aren't lost once actioned.
+ * SUPER_ADMIN-only route; newest decision first (by updatedAt).
+ */
+export async function listAdminRequestHistory(opts: PageArgs) {
+  const where: Prisma.UserWhereInput = {
+    deletedAt: null,
+    status: { in: ['ACTIVE', 'REJECTED'] },
+    roles: { some: { role: { name: 'COMPANY_ADMIN' } } },
+  };
+  const [rows, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      include: userInclude,
+      orderBy: { updatedAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  return { rows, total };
+}
+
 export async function setApproval(actor: Actor, userId: string, decision: 'APPROVE' | 'REJECT') {
   const user = await loadTargetUser(actor, userId);
   if (user.status !== 'PENDING') {

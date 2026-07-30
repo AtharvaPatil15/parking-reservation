@@ -29,4 +29,20 @@ describe('Slots', () => {
     await userEvent.click(screen.getByRole('button', { name: /add slot/i }));
     expect(await screen.findByText(/slot created/i)).toBeInTheDocument();
   });
+
+  it('offers the parking areas (Basement 1/2/3) to allocate a slot into', async () => {
+    renderSlots();
+    await screen.findByText('A-12');
+    expect(await screen.findByRole('option', { name: 'Basement 1' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Basement 2' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Basement 3' })).toBeInTheDocument();
+  });
+
+  it('creates a new parking area', async () => {
+    renderSlots();
+    await screen.findByText('A-12');
+    await userEvent.type(screen.getByLabelText(/area name/i), 'Basement 4');
+    await userEvent.click(screen.getByRole('button', { name: /add area/i }));
+    expect(await screen.findByText(/parking area created/i)).toBeInTheDocument();
+  });
 });

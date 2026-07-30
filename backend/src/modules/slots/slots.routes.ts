@@ -7,6 +7,7 @@ import {
   createSlotSchema,
   updateSlotSchema,
   listSlotsQuery,
+  createParkingAreaSchema,
   createQuotaSchema,
   createBlockSchema,
   listBlocksQuery,
@@ -20,9 +21,10 @@ slotsRouter.get('/', authenticate, requireRole('SUPER_ADMIN'), validate(listSlot
 slotsRouter.patch('/:id', authenticate, requireRole('SUPER_ADMIN'), validate(updateSlotSchema), c.updateSlot);
 slotsRouter.delete('/:id', authenticate, requireRole('SUPER_ADMIN'), c.deleteSlot);
 
-// /parking-areas — SUPER_ADMIN; feeds the slot-create area picker.
+// /parking-areas — SUPER_ADMIN; feeds the slot-create area picker + lets SA add areas.
 export const parkingAreasRouter = Router();
 parkingAreasRouter.get('/', authenticate, requireRole('SUPER_ADMIN'), c.listParkingAreas);
+parkingAreasRouter.post('/', authenticate, requireRole('SUPER_ADMIN'), validate(createParkingAreaSchema), c.createParkingArea);
 
 // /companies/:id/quota (SA) + /companies/:id/blocks (SA any / CA own)
 export const companyScopedRouter = Router();
