@@ -3,6 +3,7 @@ import { cn } from '../../lib/cn';
 
 const NAV = [
   { to: '/company', label: 'Dashboard', end: true },
+  { to: '/company/allocations', label: 'Allocations' },
   { to: '/company/approvals', label: 'Approvals' },
   { to: '/company/blocks', label: 'Blocks' },
 ];

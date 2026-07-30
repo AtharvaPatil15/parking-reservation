@@ -15,6 +15,7 @@ import { AdminApprovals } from '../features/superadmin/AdminApprovals';
 import { Slots } from '../features/superadmin/Slots';
 import { CompanyShell } from '../features/companyadmin/CompanyShell';
 import { CompanyDashboard } from '../features/companyadmin/CompanyDashboard';
+import { Allocations } from '../features/companyadmin/Allocations';
 import { Approvals } from '../features/companyadmin/Approvals';
 import { Blocks } from '../features/companyadmin/Blocks';
 import { UserShell } from '../features/user/UserShell';
@@ -53,6 +54,7 @@ export function AppRouter() {
         <Route element={<AppShell />}>
           <Route path="/company" element={<CompanyShell />}>
             <Route index element={<CompanyDashboard />} />
+            <Route path="allocations" element={<Allocations />} />
             <Route path="approvals" element={<Approvals />} />
             <Route path="blocks" element={<Blocks />} />
           </Route>
