@@ -13,6 +13,9 @@ export const listCompaniesQuery = z.object({
   pageSize: z.coerce.number().int().positive().max(100).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
 });
+export const quotaSummaryQuery = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD').optional(),
+});
 export const listUsersQuery = z.object({
   page: z.coerce.number().int().positive().optional(),
   pageSize: z.coerce.number().int().positive().max(100).optional(),

@@ -32,6 +32,13 @@ export const listActiveCompanies = asyncHandler(async (_req, res) => {
   sendSuccess(res, await service.listActiveCompanies());
 });
 
+export const quotaSummary = asyncHandler(async (req, res) => {
+  const dateStr = req.query.date as string | undefined;
+  // Default to "today" (UTC midnight) when no date is supplied; the effective-quota lookup is date-only.
+  const date = dateStr ? new Date(`${dateStr}T00:00:00.000Z`) : new Date();
+  sendSuccess(res, await service.quotaSummary(date));
+});
+
 export const getCompany = asyncHandler(async (req, res) => {
   sendSuccess(res, toCompany(await service.getCompany(req.params.id)));
 });

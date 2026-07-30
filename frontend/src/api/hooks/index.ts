@@ -1,5 +1,5 @@
 export { useLogin, useLogout, useRegister, useActiveCompanies } from './auth';
-export { useCreateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
+export { useCreateBooking, useUpdateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
 export type { AdminBookingsFilter } from './bookings';
 export { useRunPrimaryAllocation, useAllocationBreakdown } from './allocation';
 export { useConfig, useUpdateConfig } from './config';
@@ -10,6 +10,7 @@ export {
   useApproveAdminRequest,
   useCompanies,
   useCreateCompany,
+  useCompanyQuotaSummary,
   useSlots,
   useCreateSlot,
   useUpdateSlot,

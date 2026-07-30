@@ -875,6 +875,36 @@ paths:
                         items: { $ref: '#/components/schemas/CompanySummary' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /companies/quota-summary:
+    get:
+      tags: [Companies]
+      operationId: companyQuotaSummary
+      summary: Assigned slot quota per company for a date
+      description: "Super Admin. Effective-dated `CompanySlotAllocation` resolved for `date` (default today) — powers the Companies 'Assigned' column."
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Effective assigned quota per company on the date.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CompanyQuotaSummaryEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /companies/{id}:
     parameters:
       - name: id
@@ -1935,6 +1965,13 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
+    CompanyQuotaSummaryEntry:
+      type: object
+      description: A company's effective assigned slot quota on a given date.
+      required: [companyId, assignedSlots]
+      properties:
+        companyId: { type: string }
+        assignedSlots: { type: integer }
     CreateCompanyRequest:
       type: object
       required: [name, code]

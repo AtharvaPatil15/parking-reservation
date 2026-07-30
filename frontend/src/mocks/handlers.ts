@@ -19,6 +19,7 @@ type Company = components['schemas']['Company'];
 type ParkingSlot = components['schemas']['ParkingSlot'];
 type ParkingArea = components['schemas']['ParkingArea'];
 type CompanyQuota = components['schemas']['CompanyQuota'];
+type CompanyQuotaSummaryEntry = components['schemas']['CompanyQuotaSummaryEntry'];
 type SlotBlock = components['schemas']['SlotBlock'];
 type CompanySummary = components['schemas']['CompanySummary'];
 type RegisterRequest = components['schemas']['RegisterRequest'];
@@ -386,6 +387,21 @@ const hero = [
     bookingState[id] = { ...detail, status: 'RELEASED', allocatedSlotNumber: null };
     return ok<BookingDetail>(bookingState[id]);
   }),
+  http.patch(`${baseURL}/bookings/:id`, async ({ params, request }) => {
+    const id = String(params.id);
+    const detail = bookingState[id];
+    if (!detail) return fail(404, 'NOT_FOUND', 'Booking not found');
+    const body = (await request.json().catch(() => ({}))) as Partial<{
+      vehicleType: BookingDetail['vehicleType']; vehicleNumber: string | null;
+      carpoolPeople: number; specialRequirement: string | null;
+    }>;
+    if (body.vehicleType !== undefined) detail.vehicleType = body.vehicleType;
+    if (body.vehicleNumber !== undefined) detail.vehicleNumber = body.vehicleNumber;
+    if (body.specialRequirement !== undefined) detail.specialRequirement = body.specialRequirement;
+    if (body.carpoolPeople != null) detail.carpoolMemberCount = Math.max(0, body.carpoolPeople - 1);
+    bookingState[id] = detail;
+    return ok<BookingDetail>(detail);
+  }),
   http.get(`${baseURL}/me`, () => {
     const s = readMockSession();
     if (s) {
@@ -474,6 +490,16 @@ const hero = [
     const { page, pageSize } = pageParams(request);
     const start = (page - 1) * pageSize;
     return okPage(companyState.slice(start, start + pageSize), page, pageSize, companyState.length);
+  }),
+  http.get(`${baseURL}/companies/quota-summary`, ({ request }) => {
+    const date = new URL(request.url).searchParams.get('date') || '9999-12-31';
+    const entries: CompanyQuotaSummaryEntry[] = companyState.map((c) => {
+      const eff = (quotaState[c.id] ?? [])
+        .filter((q) => q.effectiveFrom <= date && (!q.effectiveTo || q.effectiveTo >= date))
+        .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1))[0];
+      return { companyId: c.id, assignedSlots: eff?.slotCount ?? 0 };
+    });
+    return ok<CompanyQuotaSummaryEntry[]>(entries);
   }),
   http.post(`${baseURL}/companies`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as { name?: string; code?: string };

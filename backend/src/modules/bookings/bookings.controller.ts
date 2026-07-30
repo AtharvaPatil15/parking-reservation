@@ -102,6 +102,12 @@ export const createBooking = asyncHandler(async (req, res) => {
   sendSuccess(res, toBookingCreated(booking), 201);
 });
 
+export const updateBooking = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const booking = await service.updateBooking(req.user.id, req.params.id, req.body);
+  sendSuccess(res, toBookingDetail(booking), 200);
+});
+
 export const getBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.getBookingForPrincipal(req.user, req.params.id);

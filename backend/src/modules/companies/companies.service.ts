@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
 import { isUniqueViolation } from '../../lib/prismaErrors';
 import { buildAuditData } from '../../lib/audit';
+import { getEffectiveQuota } from '../slots/slots.service';
 import type { PageArgs } from '../../lib/pagination';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
@@ -82,6 +83,21 @@ export async function setCompanyStatus(id: string, status: CompanyStatus) {
     });
     return after;
   });
+}
+
+/**
+ * Effective assigned slot quota per company on a date (SA). Resolves each company's effective-dated
+ * `CompanySlotAllocation` row for `date` (0 when none applies). Powers the Companies "Assigned" column.
+ */
+export async function quotaSummary(date: Date) {
+  const companies = await prisma.company.findMany({
+    where: { deletedAt: null },
+    orderBy: { name: 'asc' },
+    select: { id: true },
+  });
+  return Promise.all(
+    companies.map(async (c) => ({ companyId: c.id, assignedSlots: await getEffectiveQuota(c.id, date) })),
+  );
 }
 
 export async function listCompanyUsers(

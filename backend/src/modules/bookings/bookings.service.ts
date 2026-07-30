@@ -9,7 +9,7 @@ import {
   parseCalendarDate,
 } from './bookings.time';
 import type { PageArgs } from '../../lib/pagination';
-import type { CreateBookingInput, ListBookingsQuery } from './bookings.schema';
+import type { CreateBookingInput, UpdateBookingInput, ListBookingsQuery } from './bookings.schema';
 
 const DEFAULT_PRIMARY_CUTOFF = '18:00';
 const DEFAULT_MAX_PEOPLE = 4;
@@ -140,6 +140,115 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     }
     throw err;
   }
+}
+
+/**
+ * Edit an own, still-pending booking before the primary cutoff (PATCH /bookings/{id}). Partial:
+ * vehicle, carpool headcount, special requirement, and (optionally) the carpool member list.
+ * Distance stays snapshotted (F6) — not editable. Rejects edits once the request is no longer
+ * SUBMITTED/DRAFT or the window has closed (422). `now` is injectable for testing.
+ */
+export async function updateBooking(
+  userId: string,
+  bookingId: string,
+  input: UpdateBookingInput,
+  now: Date = new Date(),
+) {
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id: bookingId },
+    include: { carpoolMembers: true },
+  });
+  // Hide existence from non-owners (consistent with GET) — 404, not 403.
+  if (!booking || booking.userId !== userId) throw new NotFoundError('Booking not found');
+  if (booking.status !== 'SUBMITTED' && booking.status !== 'DRAFT') {
+    throw new WindowClosedError('This booking can no longer be edited');
+  }
+
+  // Editable only while the primary window is still open (F2) — read live config (D8).
+  const cutoff = (await getString('booking.primaryCutoff')) ?? DEFAULT_PRIMARY_CUTOFF;
+  const bookingDateIso = booking.bookingDate.toISOString().slice(0, 10);
+  if (!isBeforePrimaryCutoff(now, bookingDateIso, cutoff)) {
+    throw new WindowClosedError(
+      `Editing closed — the primary window for ${bookingDateIso} has passed (cutoff ${cutoff} IST)`,
+    );
+  }
+
+  // Resulting headcount (driver = person 1). Cap against live config (D8).
+  const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
+  const nextPeople = input.carpoolPeople ?? booking.carpoolMemberCount + 1;
+  if (nextPeople > maxPeople) fail('carpoolPeople', `Must be between 1 and ${maxPeople}`);
+
+  // Resolve replacement members if provided; else keep existing (but ensure they still fit).
+  let memberRows: Array<{
+    bookingRequestId: string;
+    bookingDate: Date;
+    name: string;
+    employeeEmail: string | null;
+    employeeUserId: string | null;
+    contactNumber: string | null;
+    pickupLocation: string | null;
+    sameCompany: boolean;
+    isScored: boolean;
+  }> | null = null;
+
+  if (input.carpoolMembers) {
+    const members = input.carpoolMembers;
+    if (members.length > nextPeople - 1) {
+      fail('carpoolMembers', `Cannot list more members than carpoolPeople - 1 (${nextPeople - 1})`);
+    }
+    const trimmedEmails = members.map((m) => m.employeeEmail?.trim()).filter((e): e is string => !!e);
+    const lowered = trimmedEmails.map((e) => e.toLowerCase());
+    const firstDupe = lowered.find((e, i) => lowered.indexOf(e) !== i);
+    if (firstDupe) fail('carpoolMembers', `Duplicate carpool member email: ${firstDupe}`);
+    const employees = trimmedEmails.length
+      ? await prisma.user.findMany({
+          where: { companyId: booking.companyId, status: 'ACTIVE', email: { in: trimmedEmails } },
+          select: { id: true, email: true },
+        })
+      : [];
+    const employeeIdByEmail = new Map(employees.map((e) => [e.email.toLowerCase(), e.id]));
+    memberRows = members.map((m) => {
+      const email = m.employeeEmail?.trim() || null;
+      const employeeUserId = email ? employeeIdByEmail.get(email.toLowerCase()) ?? null : null;
+      const scored = employeeUserId !== null;
+      return {
+        bookingRequestId: bookingId,
+        bookingDate: booking.bookingDate,
+        name: m.name,
+        employeeEmail: email,
+        employeeUserId,
+        contactNumber: m.contactNumber ?? null,
+        pickupLocation: m.pickupLocation ?? null,
+        sameCompany: scored,
+        isScored: scored,
+      };
+    });
+  } else if (input.carpoolPeople != null && booking.carpoolMembers.length > nextPeople - 1) {
+    fail('carpoolPeople', `Remove carpool members first — you have ${booking.carpoolMembers.length}`);
+  }
+
+  const data: Prisma.BookingRequestUpdateInput = {};
+  if (input.vehicleType !== undefined) data.vehicleType = input.vehicleType ?? null;
+  if (input.vehicleNumber !== undefined) data.vehicleNumber = input.vehicleNumber ?? null;
+  if (input.specialRequirement !== undefined) data.specialRequirement = input.specialRequirement ?? null;
+  if (input.carpoolPeople != null) data.carpoolMemberCount = nextPeople - 1;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (memberRows) {
+        await tx.bookingCarpoolMember.deleteMany({ where: { bookingRequestId: bookingId } });
+        if (memberRows.length) await tx.bookingCarpoolMember.createMany({ data: memberRows });
+      }
+      if (Object.keys(data).length) await tx.bookingRequest.update({ where: { id: bookingId }, data });
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new ConflictError('A carpool member is already part of another booking for this date');
+    }
+    throw err;
+  }
+
+  return getBookingForPrincipal({ id: userId, role: 'USER', companyId: booking.companyId }, bookingId);
 }
 
 /**

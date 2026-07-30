@@ -5,6 +5,7 @@ import { queryKeys } from '../queryKeys';
 import type { components } from '../types';
 
 type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
+type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
 type AdminBooking = components['schemas']['AdminBooking'];
@@ -50,6 +51,21 @@ export function useCreateBooking() {
       qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
       qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
       qc.invalidateQueries({ queryKey: ['bookings', 'admin'] }); // new booking shows on admin rosters
+    },
+  });
+}
+
+/** PATCH /bookings/{id} — edit an own, still-pending booking before the primary cutoff. */
+export function useUpdateBooking(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateBookingRequest) =>
+      unwrap<BookingDetail>(api.PATCH('/bookings/{id}', { params: { path: { id } }, body })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.booking(id) });
+      qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
+      qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
     },
   });
 }

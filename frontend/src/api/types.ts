@@ -482,6 +482,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/companies/quota-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assigned slot quota per company for a date
+         * @description Super Admin. Effective-dated `CompanySlotAllocation` resolved for `date` (default today) — powers the Companies 'Assigned' column.
+         */
+        get: operations["companyQuotaSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/companies/{id}": {
         parameters: {
             query?: never;
@@ -1061,6 +1081,11 @@ export interface components {
         CompanySummary: {
             id: string;
             name: string;
+        };
+        /** @description A company's effective assigned slot quota on a given date. */
+        CompanyQuotaSummaryEntry: {
+            companyId: string;
+            assignedSlots: number;
         };
         CreateCompanyRequest: {
             name: string;
@@ -2430,6 +2455,33 @@ export interface operations {
                 };
             };
             429: components["responses"]["RateLimited"];
+        };
+    };
+    companyQuotaSummary: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective assigned quota per company on the date. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["CompanyQuotaSummaryEntry"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getCompany: {
