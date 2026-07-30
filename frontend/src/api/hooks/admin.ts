@@ -89,7 +89,36 @@ export function useCreateSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateSlotRequest) => unwrap<ParkingSlot>(api.POST('/slots', { body })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['slots'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['slots'] });
+      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
+    },
+  });
+}
+
+/** PATCH /slots/{id} — update a slot (used here to activate/deactivate via status). */
+export function useUpdateSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & components['schemas']['UpdateSlotRequest']) =>
+      unwrap<ParkingSlot>(api.PATCH('/slots/{id}', { params: { path: { id } }, body })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['slots'] });
+      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
+    },
+  });
+}
+
+/** DELETE /slots/{id} — soft-delete a slot (drops it from inventory + counts). */
+export function useDeleteSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap<{ message: string }>(api.DELETE('/slots/{id}', { params: { path: { id } } })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['slots'] });
+      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
+    },
   });
 }
 

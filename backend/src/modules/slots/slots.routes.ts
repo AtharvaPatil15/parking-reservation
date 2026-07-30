@@ -18,6 +18,7 @@ export const slotsRouter = Router();
 slotsRouter.post('/', authenticate, requireRole('SUPER_ADMIN'), validate(createSlotSchema), c.createSlot);
 slotsRouter.get('/', authenticate, requireRole('SUPER_ADMIN'), validate(listSlotsQuery, 'query'), c.listSlots);
 slotsRouter.patch('/:id', authenticate, requireRole('SUPER_ADMIN'), validate(updateSlotSchema), c.updateSlot);
+slotsRouter.delete('/:id', authenticate, requireRole('SUPER_ADMIN'), c.deleteSlot);
 
 // /parking-areas — SUPER_ADMIN; feeds the slot-create area picker.
 export const parkingAreasRouter = Router();

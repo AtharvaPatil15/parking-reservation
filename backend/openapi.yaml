@@ -1232,6 +1232,17 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Slots & Quota]
+      operationId: deleteSlot
+      summary: Remove a parking slot (soft delete)
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /parking-areas:
     get:

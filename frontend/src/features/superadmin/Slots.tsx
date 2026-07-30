@@ -3,7 +3,7 @@ import {
   Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
-import { useCreateSlot, useSlots, useParkingAreas } from '../../api/hooks';
+import { useCreateSlot, useSlots, useParkingAreas, useUpdateSlot, useDeleteSlot } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import type { components } from '../../api/types';
 
@@ -29,25 +29,21 @@ function statusTone(status: ParkingSlot['status']): BadgeTone {
   }
 }
 
-const columns: Column<ParkingSlot>[] = [
-  { key: 'slotNumber', header: 'Slot', render: (s) => <span className="font-medium text-text">{s.slotNumber}</span> },
-  { key: 'area', header: 'Area', render: (s) => s.parkingAreaId },
-  { key: 'type', header: 'Type', render: (s) => <Badge tone="neutral">{s.slotType}</Badge> },
-  { key: 'status', header: 'Status', render: (s) => <Badge tone={statusTone(s.status)}>{s.status}</Badge> },
-];
-
 export function Slots() {
   const slots = useSlots();
   const areas = useParkingAreas();
   const create = useCreateSlot();
+  const update = useUpdateSlot();
+  const remove = useDeleteSlot();
   const { toast } = useToast();
   const [slotNumber, setSlotNumber] = useState('');
   const [areaId, setAreaId] = useState('');
   const [slotType, setSlotType] = useState<SlotType>('STANDARD');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const createError = apiErrorText(create.error);
 
-  // Default to the first real area once loaded (no more hardcoded id that fails the FK).
   const areaOptions: SelectOption[] = (areas.data ?? []).map((a) => ({ value: a.id, label: a.name }));
+  const areaName = (id: string) => (areas.data ?? []).find((a) => a.id === id)?.name ?? id;
   const parkingAreaId = areaId || areas.data?.[0]?.id || '';
 
   function onCreate() {
@@ -64,11 +60,63 @@ export function Slots() {
     );
   }
 
+  function onToggle(slot: ParkingSlot) {
+    const next = slot.status === 'INACTIVE' ? 'AVAILABLE' : 'INACTIVE';
+    setBusyId(slot.id);
+    update.mutate(
+      { id: slot.id, status: next },
+      {
+        onSuccess: () => toast(next === 'INACTIVE' ? 'Slot deactivated.' : 'Slot activated.', { tone: 'success' }),
+        onSettled: () => setBusyId(null),
+      },
+    );
+  }
+
+  function onDelete(slot: ParkingSlot) {
+    setBusyId(slot.id);
+    remove.mutate(slot.id, {
+      onSuccess: () => toast(`Slot ${slot.slotNumber} removed.`, { tone: 'success' }),
+      onSettled: () => setBusyId(null),
+    });
+  }
+
+  const columns: Column<ParkingSlot>[] = [
+    { key: 'slotNumber', header: 'Slot', render: (s) => <span className="font-medium text-text">{s.slotNumber}</span> },
+    { key: 'area', header: 'Area', render: (s) => areaName(s.parkingAreaId) },
+    { key: 'type', header: 'Type', render: (s) => <Badge tone="neutral">{s.slotType}</Badge> },
+    { key: 'status', header: 'Status', render: (s) => <Badge tone={statusTone(s.status)}>{s.status}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      render: (s) => (
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busyId === s.id && update.isPending}
+            disabled={busyId !== null}
+            onClick={() => onToggle(s)}
+          >
+            {s.status === 'INACTIVE' ? 'Activate' : 'Deactivate'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busyId === s.id && remove.isPending}
+            disabled={busyId !== null}
+            onClick={() => onDelete(s)}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight">Parking slots</h2>
-        <p className="text-text-muted">The physical inventory allocation draws from.</p>
+        <p className="text-text-muted">The physical inventory allocation draws from. Deactivated slots don't count as in service.</p>
       </div>
 
       <Card title="Add slot">

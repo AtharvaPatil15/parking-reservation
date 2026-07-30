@@ -69,6 +69,22 @@ export async function updateSlot(
   return prisma.parkingSlot.update({ where: { id }, data: input });
 }
 
+/** Soft-delete a slot (drops it from every count/list). */
+export async function deleteSlot(id: string) {
+  const existing = await prisma.parkingSlot.findFirst({ where: { id, deletedAt: null } });
+  if (!existing) throw new NotFoundError('Slot not found');
+  await prisma.parkingSlot.update({ where: { id }, data: { deletedAt: new Date() } });
+  return { message: 'Slot removed' };
+}
+
+/**
+ * Count of physically-usable slots: not soft-deleted and not deactivated (INACTIVE). This is the
+ * "in service" inventory the dashboard reports and the quota cap allots against.
+ */
+export function countInServiceSlots(): Promise<number> {
+  return prisma.parkingSlot.count({ where: { deletedAt: null, status: { not: 'INACTIVE' } } });
+}
+
 // ---- Quota (SUPER_ADMIN) — effective-dated ---------------------------------
 
 export async function createQuota(
@@ -82,7 +98,7 @@ export async function createQuota(
   // effective date) must not exceed the building's physical slots — you can't promise more
   // parking than exists.
   const effectiveFrom = toDate(input.effectiveFrom);
-  const totalSlots = await prisma.parkingSlot.count({ where: { deletedAt: null } });
+  const totalSlots = await countInServiceSlots();
   const others = await prisma.company.findMany({
     where: { status: 'ACTIVE', deletedAt: null, id: { not: companyId } },
     select: { id: true },
