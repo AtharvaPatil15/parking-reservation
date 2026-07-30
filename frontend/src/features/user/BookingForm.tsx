@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../components';
+import { Button, Card, Input, LoadingState, SuccessState } from '../../components';
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
-import { VEHICLE_OPTIONS, bookingSchema, type BookingFormValues } from './bookingSchema';
+import { bookingSchema, type BookingFormValues } from './bookingSchema';
 import { formatCountdown, nextBookableWeekday } from '../../lib/dates';
 
 export function BookingForm() {
@@ -65,7 +65,7 @@ export function BookingForm() {
     createBooking.mutate(
       {
         bookingDate: values.bookingDate,
-        vehicleType: values.vehicleType ? values.vehicleType : undefined,
+        vehicleType: 'CAR', // demo: car-only flow
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
         specialRequirement: values.specialRequirement || undefined,
@@ -110,14 +110,7 @@ export function BookingForm() {
           )}
 
           <Input label="Date" type="date" {...register('bookingDate')} error={errors.bookingDate?.message} />
-          <Select
-            label="Vehicle"
-            placeholder="Select a vehicle"
-            options={VEHICLE_OPTIONS}
-            {...register('vehicleType')}
-            error={errors.vehicleType?.message}
-          />
-          <Input label="Vehicle number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} />
+          <Input label="Car number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} hint="Optional" />
           <Input
             label="Carpool people"
             type="number"

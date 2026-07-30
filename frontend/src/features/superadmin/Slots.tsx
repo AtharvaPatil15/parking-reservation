@@ -8,15 +8,6 @@ import { apiErrorText } from '../../api/http';
 import type { components } from '../../api/types';
 
 type ParkingSlot = components['schemas']['ParkingSlot'];
-type SlotType = components['schemas']['SlotType'];
-
-const SLOT_TYPES: SelectOption[] = [
-  { value: 'STANDARD', label: 'Standard' },
-  { value: 'ACCESSIBLE', label: 'Accessible' },
-  { value: 'EV_CHARGING', label: 'EV charging' },
-  { value: 'VISITOR', label: 'Visitor' },
-  { value: 'RESERVED', label: 'Reserved' },
-];
 
 function statusTone(status: ParkingSlot['status']): BadgeTone {
   switch (status) {
@@ -29,8 +20,11 @@ function statusTone(status: ParkingSlot['status']): BadgeTone {
   }
 }
 
+const PAGE_SIZE = 10;
+
 export function Slots() {
-  const slots = useSlots();
+  const [page, setPage] = useState(1);
+  const slots = useSlots(page, PAGE_SIZE);
   const areas = useParkingAreas();
   const create = useCreateSlot();
   const update = useUpdateSlot();
@@ -38,9 +32,11 @@ export function Slots() {
   const { toast } = useToast();
   const [slotNumber, setSlotNumber] = useState('');
   const [areaId, setAreaId] = useState('');
-  const [slotType, setSlotType] = useState<SlotType>('STANDARD');
   const [busyId, setBusyId] = useState<string | null>(null);
   const createError = apiErrorText(create.error);
+
+  const total = slots.data?.meta.total ?? 0;
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const areaOptions: SelectOption[] = (areas.data ?? []).map((a) => ({ value: a.id, label: a.name }));
   const areaName = (id: string) => (areas.data ?? []).find((a) => a.id === id)?.name ?? id;
@@ -52,11 +48,17 @@ export function Slots() {
       {
         slotNumber: slotNumber.trim(),
         parkingAreaId,
-        slotType,
-        hasEvCharging: slotType === 'EV_CHARGING',
-        isAccessible: slotType === 'ACCESSIBLE',
+        slotType: 'STANDARD', // demo: plain car slots only — no EV/accessible/visitor types
+        hasEvCharging: false,
+        isAccessible: false,
       },
-      { onSuccess: () => { toast('Slot created.', { tone: 'success' }); setSlotNumber(''); } },
+      {
+        onSuccess: () => {
+          toast('Slot created.', { tone: 'success' });
+          setSlotNumber('');
+          setPage(1); // newest-first: jump to page 1 so the just-added slot is visible at the top
+        },
+      },
     );
   }
 
@@ -83,7 +85,6 @@ export function Slots() {
   const columns: Column<ParkingSlot>[] = [
     { key: 'slotNumber', header: 'Slot', render: (s) => <span className="font-medium text-text">{s.slotNumber}</span> },
     { key: 'area', header: 'Area', render: (s) => areaName(s.parkingAreaId) },
-    { key: 'type', header: 'Type', render: (s) => <Badge tone="neutral">{s.slotType}</Badge> },
     { key: 'status', header: 'Status', render: (s) => <Badge tone={statusTone(s.status)}>{s.status}</Badge> },
     {
       key: 'actions', header: '', align: 'right',
@@ -133,9 +134,6 @@ export function Slots() {
               onChange={(e) => setAreaId(e.target.value)}
             />
           </div>
-          <div className="w-44">
-            <Select label="Type" options={SLOT_TYPES} value={slotType} onChange={(e) => setSlotType(e.target.value as SlotType)} />
-          </div>
           <Button onClick={onCreate} loading={create.isPending} disabled={!slotNumber.trim() || !parkingAreaId}>
             Add slot
           </Button>
@@ -151,7 +149,19 @@ export function Slots() {
         ) : !slots.data || slots.data.items.length === 0 ? (
           <EmptyState title="No slots" />
         ) : (
-          <Table columns={columns} rows={slots.data.items} rowKey={(s) => s.id} />
+          <>
+            <Table columns={columns} rows={slots.data.items} rowKey={(s) => s.id} />
+            <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
+              <span>{total} slot{total === 1 ? '' : 's'}</span>
+              {lastPage > 1 && (
+                <div className="flex items-center gap-3">
+                  <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
+                  <span className="tabular-nums">Page {page} / {lastPage}</span>
+                  <Button variant="secondary" size="sm" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>Next</Button>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </Card>
     </div>

@@ -1,19 +1,10 @@
 import { z } from 'zod';
-import type { SelectOption } from '../../components';
 import { isBookableWeekday } from '../../lib/dates';
 
-export const VEHICLE_OPTIONS: SelectOption[] = [
-  { value: 'CAR', label: 'Car' },
-  { value: 'BIKE', label: 'Motorbike' },
-  { value: 'EV_CAR', label: 'EV — Car' },
-  { value: 'EV_BIKE', label: 'EV — Bike' },
-  { value: 'OTHER', label: 'Other' },
-];
-
+// Booking is car-only for the demo — the vehicle is always a CAR, so there's no vehicle-type field.
 export const bookingSchema = z
   .object({
     bookingDate: z.string().min(1, 'Date is required.').refine(isBookableWeekday, 'Pick a weekday (Mon–Fri), today or later.'),
-    vehicleType: z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE', 'OTHER']).optional().or(z.literal('')),
     vehicleNumber: z.string().optional(),
     // NOTE: `4` mirrors the backend default of `carpool.maxPeople` (D8). The real cap is
     // configurable (SystemConfiguration) and the contract bakes in no fixed max — if an SA
