@@ -141,6 +141,13 @@ function userProfile(id: string, fullName: string, email: string, status: UserPr
 
 /** Company users keyed by companyId (for approvals + company user lists). */
 function seedCompanyUsers(): Record<string, UserProfile[]> {
+  const at = (companyId: string, companyName: string) =>
+    (id: string, name: string, email: string, status: UserProfile['status']): UserProfile => ({
+      ...userProfile(id, name, email, status),
+      companyId,
+      companyName,
+    });
+  const acme = at('co-acme', 'Acme Corp');
   return {
     'mock-co': [
       userProfile('u-priya', 'Priya Rao', 'priya@mock.test', 'ACTIVE'),
@@ -148,6 +155,12 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-nadia', 'Nadia Khan', 'nadia@mock.test', 'PENDING'),
       userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
       userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
+    ],
+    // A second company so cross-company carpooling can be exercised (a mock-co user
+    // may bring an Acme employee — carpool members can be any registered user).
+    'co-acme': [
+      acme('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE'),
+      acme('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE'),
     ],
   };
 }
@@ -216,6 +229,15 @@ const pageParams = (request: Request) => {
   return { page: Number(url.searchParams.get('page') ?? '1'), pageSize: Number(url.searchParams.get('pageSize') ?? '10') };
 };
 
+/**
+ * Every registered user's email, across all companies (case-insensitive). Carpool
+ * members must be existing users — but not necessarily same-company — so this spans
+ * the whole directory. Stands in for a backend user-lookup the frozen contract does
+ * not expose to the USER role.
+ */
+const directoryEmails = (): Set<string> =>
+  new Set(Object.values(companyUserState).flatMap((list) => list.map((u) => u.email.toLowerCase())));
+
 /** Coherent, deterministic handlers for the hero + admin flows (override the generated random ones). */
 const hero = [
   // --- Auth ---
@@ -263,7 +285,25 @@ const hero = [
 
   // --- User bookings ---
   http.post(`${baseURL}/bookings`, async ({ request }) => {
-    const b = (await request.json().catch(() => ({}))) as { bookingDate?: string; carpoolPeople?: number };
+    const b = (await request.json().catch(() => ({}))) as {
+      bookingDate?: string;
+      carpoolPeople?: number;
+      carpoolMembers?: { name?: string; employeeEmail?: string }[];
+    };
+    // Carpool members must be existing users (any company). Reject unknown emails
+    // with per-member field details so the form can flag the exact row.
+    const dir = directoryEmails();
+    const details = (b.carpoolMembers ?? []).flatMap((m, i) =>
+      m.employeeEmail && !dir.has(m.employeeEmail.toLowerCase())
+        ? [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }]
+        : [],
+    );
+    if (details.length > 0) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
+        { status: 400 },
+      );
+    }
     return ok<BookingCreatedData>(
       {
         id: 'mock-booking-1',
