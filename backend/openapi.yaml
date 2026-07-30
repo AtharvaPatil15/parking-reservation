@@ -672,8 +672,11 @@ paths:
       tags: [Allocation]
       operationId: runCommonPoolAllocation
       summary: Run common-pool allocation for a date
-      description: "Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate)."
-      x-maturity: Later
+      description: >
+        Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate). Enrolls the users
+        waitlisted by primary as common-pool requests, derives pool inventory from every company's
+        unused quota, and assigns it cross-company by FinalScore.
+      x-maturity: DEMO
       x-required-roles: [SUPER_ADMIN]
       requestBody:
         required: true
@@ -787,6 +790,54 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /allocations:
+    get:
+      tags: [Allocation]
+      operationId: listAllocations
+      summary: Per-slot allocation roster (who holds which seat, primary vs common pool)
+      description: >
+        Role COMPANY_ADMIN (scoped to their own company) or SUPER_ADMIN (all companies; optional
+        `companyId` filter). Each row is one allocated seat with the employee, date, and whether it
+        came from primary or the common pool. Filter by `date` and/or `type`.
+      x-maturity: DEMO
+      x-required-roles: [COMPANY_ADMIN, SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: date
+          in: query
+          required: false
+          description: Filter to a single booking date (YYYY-MM-DD).
+          schema: { type: string, format: date }
+        - name: companyId
+          in: query
+          required: false
+          description: SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN.
+          schema: { type: string }
+        - name: type
+          in: query
+          required: false
+          description: Optional filter — PRIMARY or COMMON_POOL allocations.
+          schema: { $ref: '#/components/schemas/BookingType' }
+      responses:
+        '200':
+          description: Paged list of allocated seats.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AllocationRosterItem' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   # ---------------------------------------------------------------------------
   # Companies + Company-Users  (P3-04)
@@ -1915,6 +1966,21 @@ components:
         allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
+
+    AllocationRosterItem:
+      type: object
+      description: One allocated seat and who holds it for the date (primary or common pool).
+      required: [id, slotNumber, allocationType, bookingDate, employeeName, employeeEmail, companyId, companyName]
+      properties:
+        id: { type: string }
+        slotNumber: { type: string }
+        allocationType: { $ref: '#/components/schemas/BookingType' }
+        bookingDate: { type: string, format: date }
+        employeeName: { type: string }
+        employeeEmail: { type: string, format: email }
+        companyId: { type: string }
+        companyName: { type: string }
+        allocationScore: { type: number, nullable: true }
 
     Notification:
       type: object

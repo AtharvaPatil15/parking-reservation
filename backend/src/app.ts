@@ -18,7 +18,7 @@ import { slotsRouter, parkingAreasRouter, companyScopedRouter, blockItemRouter }
 import dashboardRoutes from './modules/dashboards/dashboards.routes';
 import meRoutes from './modules/me/me.routes';
 import bookingsRoutes from './modules/bookings/bookings.routes';
-import allocationRoutes from './modules/allocation/allocation.routes';
+import allocationRoutes, { allocationsRouter } from './modules/allocation/allocation.routes';
 
 export const app = express();
 
@@ -63,6 +63,7 @@ api.use('/dashboard', dashboardRoutes);
 api.use('/me', meRoutes); // GET/PATCH profile + GET /me/bookings (own history)
 api.use('/bookings', bookingsRoutes);
 api.use('/allocation', allocationRoutes);
+api.use('/allocations', allocationsRouter); // per-slot roster — CA (own) / SA (all)
 
 app.use('/api/v1', api);
 

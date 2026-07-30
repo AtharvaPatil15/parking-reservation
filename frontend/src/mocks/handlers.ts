@@ -9,6 +9,7 @@ type Booking = components['schemas']['Booking'];
 type AdminBooking = components['schemas']['AdminBooking'];
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
+type AllocationRosterItem = components['schemas']['AllocationRosterItem'];
 type ConfigEntry = components['schemas']['ConfigEntry'];
 type RoleName = components['schemas']['RoleName'];
 type UserProfile = components['schemas']['UserProfile'];
@@ -150,6 +151,24 @@ function seedAdminBookings(): AdminBooking[] {
     row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
     row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
     row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
+  ];
+}
+
+/** Allocated-seat roster (GET /allocations) — which slot is held by whom, primary vs common pool. */
+function seedAllocations(): AllocationRosterItem[] {
+  const row = (
+    id: string, slotNumber: string, allocationType: AllocationRosterItem['allocationType'],
+    employeeName: string, employeeEmail: string, companyId: string, companyName: string,
+    bookingDate: string, score: number | null,
+  ): AllocationRosterItem => ({
+    id, slotNumber, allocationType, bookingDate, employeeName, employeeEmail, companyId, companyName,
+    allocationScore: score,
+  });
+  return [
+    row('al-1', 'A-12', 'PRIMARY', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 47.2),
+    row('al-2', 'A-13', 'PRIMARY', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 35.3),
+    row('al-3', 'B-04', 'COMMON_POOL', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 26.1),
+    row('al-4', 'C-01', 'COMMON_POOL', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-03', 22.0),
   ];
 }
 
@@ -447,6 +466,12 @@ const hero = [
       idempotencyKey: 'demo', attemptCount: 1, totalRequests: 3, allocatedCount: 2, waitlistedCount: 1,
     }),
   ),
+  http.post(`${baseURL}/allocation/common-pool/run`, () =>
+    ok<AllocationRunSummary>({
+      id: 'run-cp-demo', runType: 'COMMON_POOL', bookingDate: '2026-08-03', status: 'COMPLETED',
+      idempotencyKey: 'demo-cp', attemptCount: 1, totalRequests: 2, allocatedCount: 2, waitlistedCount: 0,
+    }),
+  ),
   http.get(`${baseURL}/allocation/runs/:id/breakdown`, ({ params }) =>
     ok<AllocationBreakdown>({
       runId: String(params.id), bookingDate: '2026-08-03', status: 'COMPLETED',
@@ -458,6 +483,19 @@ const hero = [
       ],
     }),
   ),
+  http.get(`${baseURL}/allocations`, ({ request }) => {
+    const url = new URL(request.url);
+    const date = url.searchParams.get('date');
+    const companyId = url.searchParams.get('companyId');
+    const type = url.searchParams.get('type');
+    const { page, pageSize } = pageParams(request);
+    let rows = seedAllocations();
+    if (date) rows = rows.filter((r) => r.bookingDate === date);
+    if (companyId) rows = rows.filter((r) => r.companyId === companyId);
+    if (type) rows = rows.filter((r) => r.allocationType === type);
+    const start = (page - 1) * pageSize;
+    return okPage(rows.slice(start, start + pageSize), page, pageSize, rows.length);
+  }),
 
   // --- Config (super admin) ---
   http.get(`${baseURL}/config`, () => ok<ConfigEntry[]>(configState)),
