@@ -39,8 +39,17 @@ export function AuthProvider({
 }) {
   const [session, setSession] = useState<AuthSession | null>(initialSession);
 
-  const login = useCallback((next: AuthSession) => setSession(next), []);
-  const logout = useCallback(() => setSession(null), []);
+  // Set the client token synchronously so the first authenticated request after login
+  // (e.g. the dashboard fetch) carries Authorization — the mirroring effect below runs
+  // child-first, i.e. after the destination page's data-fetch effect, which would race.
+  const login = useCallback((next: AuthSession) => {
+    setAccessToken(next.accessToken);
+    setSession(next);
+  }, []);
+  const logout = useCallback(() => {
+    setAccessToken(null);
+    setSession(null);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({

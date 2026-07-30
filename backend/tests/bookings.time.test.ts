@@ -4,6 +4,7 @@ import {
   isBookableWeekday,
   primaryCutoffInstant,
   isBeforePrimaryCutoff,
+  currentIstCalendarDate,
 } from '../src/modules/bookings/bookings.time';
 
 /**
@@ -49,6 +50,27 @@ describe('primaryCutoffInstant (F1 — cutoff on the preceding day, IST)', () =>
   it('rejects a malformed cutoff', () => {
     expect(() => primaryCutoffInstant('2026-07-31', '25:00')).toThrow(RangeError);
     expect(() => primaryCutoffInstant('2026-07-31', 'noon')).toThrow(RangeError);
+  });
+});
+
+describe('currentIstCalendarDate (business "today" is the IST day, not UTC)', () => {
+  it('returns UTC-midnight of the IST calendar date', () => {
+    // 2026-07-30 01:22 IST == 2026-07-29T19:52Z. UTC day is the 29th, IST day is the 30th.
+    // The business date must follow IST → 2026-07-30.
+    expect(currentIstCalendarDate(new Date('2026-07-29T19:52:00.000Z')).toISOString()).toBe(
+      '2026-07-30T00:00:00.000Z',
+    );
+  });
+  it('does not roll the day forward late in the IST evening', () => {
+    // 2026-07-30 23:00 IST == 2026-07-30T17:30Z — still the 30th in IST.
+    expect(currentIstCalendarDate(new Date('2026-07-30T17:30:00.000Z')).toISOString()).toBe(
+      '2026-07-30T00:00:00.000Z',
+    );
+  });
+  it('rolls to the next IST day exactly at IST midnight (18:30Z)', () => {
+    expect(currentIstCalendarDate(new Date('2026-07-30T18:30:00.000Z')).toISOString()).toBe(
+      '2026-07-31T00:00:00.000Z',
+    );
   });
 });
 

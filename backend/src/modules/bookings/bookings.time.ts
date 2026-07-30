@@ -17,6 +17,17 @@ export function parseCalendarDate(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
+/**
+ * The app's business "today": the current IST calendar date as a UTC-midnight instant.
+ * Date-scoped rows (quota, blocks, allocations, bookingDate) are all stored as UTC-midnight
+ * of an IST calendar date, so anything defaulting to "today" must use the IST day — the UTC
+ * day is one behind between 00:00 and 05:30 IST, which silently drops that day's records.
+ */
+export function currentIstCalendarDate(now: Date = new Date()): Date {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
+}
+
 /** True if `date` is a real calendar date and round-trips (rejects e.g. 2026-02-30, 2026-13-01). */
 export function isValidCalendarDate(date: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
