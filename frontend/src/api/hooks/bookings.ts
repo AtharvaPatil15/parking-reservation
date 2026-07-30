@@ -1,12 +1,44 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
-import { unwrap } from '../http';
+import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
 import type { components } from '../types';
 
 type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
+type AdminBooking = components['schemas']['AdminBooking'];
+
+export interface AdminBookingsFilter {
+  date?: string;
+  companyId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/**
+ * GET /bookings — admin roster (who booked, when, status, slot). COMPANY_ADMIN is scoped to
+ * their own company server-side; SUPER_ADMIN sees all and may pass `companyId`/`date` filters.
+ */
+export function useAdminBookings(filter: AdminBookingsFilter = {}) {
+  const { date, companyId, page = 1, pageSize = 20 } = filter;
+  return useQuery<{ items: AdminBooking[]; meta: PageMeta }>({
+    queryKey: queryKeys.adminBookings(date ?? '', companyId ?? '', page),
+    queryFn: () =>
+      unwrapPage<AdminBooking>(
+        api.GET('/bookings', {
+          params: {
+            query: {
+              page,
+              pageSize,
+              ...(date ? { date } : {}),
+              ...(companyId ? { companyId } : {}),
+            },
+          },
+        }),
+      ),
+  });
+}
 
 /** POST /bookings. */
 export function useCreateBooking() {
@@ -17,6 +49,7 @@ export function useCreateBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
       qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] }); // new booking shows on admin rosters
     },
   });
 }

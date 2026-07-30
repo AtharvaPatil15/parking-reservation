@@ -6,6 +6,7 @@ type LoginResponseData = components['schemas']['LoginResponseData'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
 type Booking = components['schemas']['Booking'];
+type AdminBooking = components['schemas']['AdminBooking'];
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type ConfigEntry = components['schemas']['ConfigEntry'];
@@ -110,6 +111,24 @@ function seedBookings(): Record<string, BookingDetail> {
 
 /** History list order (newest first). */
 const HISTORY_IDS = ['bk-1', 'bk-2', 'bk-3'] as const;
+
+/** Admin booking roster (GET /bookings) — who booked, for what date, across companies. */
+function seedAdminBookings(): AdminBooking[] {
+  const row = (
+    id: string, employeeName: string, employeeEmail: string, companyId: string, companyName: string,
+    bookingDate: string, status: AdminBooking['status'], slot: string | null, distance: number, people: number, score: number | null,
+  ): AdminBooking => ({
+    id, bookingDate, bookingType: 'PRIMARY', status, employeeName, employeeEmail, companyId, companyName,
+    travelDistanceKm: distance, carpoolPeople: people, allocationScore: score, allocatedSlotNumber: slot,
+    submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
+  });
+  return [
+    row('ab-1', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
+    row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
+    row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
+    row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
+  ];
+}
 
 function toSummary(d: BookingDetail): Booking {
   return {
@@ -305,6 +324,21 @@ const hero = [
     const all = HISTORY_IDS.map((id) => toSummary(bookingState[id]));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
+  }),
+
+  // Admin booking roster (CA/SA). Honours ?date, ?companyId, ?status filters + pagination.
+  http.get(`${baseURL}/bookings`, ({ request }) => {
+    const url = new URL(request.url);
+    const date = url.searchParams.get('date');
+    const companyId = url.searchParams.get('companyId');
+    const status = url.searchParams.get('status');
+    const { page, pageSize } = pageParams(request);
+    let rows = seedAdminBookings();
+    if (date) rows = rows.filter((r) => r.bookingDate === date);
+    if (companyId) rows = rows.filter((r) => r.companyId === companyId);
+    if (status) rows = rows.filter((r) => r.status === status);
+    const start = (page - 1) * pageSize;
+    return okPage(rows.slice(start, start + pageSize), page, pageSize, rows.length);
   }),
 
   // --- Allocation (super admin) ---

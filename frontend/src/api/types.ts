@@ -228,7 +228,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List bookings for admins (paged, newest first)
+         * @description Role COMPANY_ADMIN (scoped to their own company) or SUPER_ADMIN (all companies; optional `companyId` filter). Each row carries who booked, the date, status, and allocated slot. Filter by `date` and/or `status`.
+         */
+        get: operations["listBookings"];
         put?: never;
         /**
          * Submit a parking request for the next bookable weekday
@@ -944,6 +948,29 @@ export interface components {
             specialRequirement?: string | null;
             allocationScore?: number | null;
             /** @description Slot number if ALLOCATED, else null. */
+            allocatedSlotNumber?: string | null;
+            /** Format: date-time */
+            submittedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description A booking row for the admin dashboards — who booked, when, its status and slot. */
+        AdminBooking: {
+            id: string;
+            /** Format: date */
+            bookingDate: string;
+            bookingType: components["schemas"]["BookingType"];
+            status: components["schemas"]["BookingStatus"];
+            employeeName: string;
+            /** Format: email */
+            employeeEmail: string;
+            companyId: string;
+            companyName: string;
+            travelDistanceKm?: number | null;
+            /** @description Driver + declared members. */
+            carpoolPeople: number;
+            allocationScore?: number | null;
+            /** @description Slot number if ALLOCATED */
             allocatedSlotNumber?: string | null;
             /** Format: date-time */
             submittedAt?: string | null;
@@ -1805,6 +1832,43 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listBookings: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                /** @description Filter to a single booking date (YYYY-MM-DD). */
+                date?: string;
+                /** @description SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN. */
+                companyId?: string;
+                /** @description Optional filter by booking status. */
+                status?: components["schemas"]["BookingStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of bookings. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AdminBooking"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createBooking: {

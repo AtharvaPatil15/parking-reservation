@@ -8,7 +8,8 @@ import {
   isBeforePrimaryCutoff,
   parseCalendarDate,
 } from './bookings.time';
-import type { CreateBookingInput } from './bookings.schema';
+import type { PageArgs } from '../../lib/pagination';
+import type { CreateBookingInput, ListBookingsQuery } from './bookings.schema';
 
 const DEFAULT_PRIMARY_CUTOFF = '18:00';
 const DEFAULT_MAX_PEOPLE = 4;
@@ -163,4 +164,34 @@ export async function getBookingForPrincipal(principal: Principal, bookingId: st
     throw new NotFoundError('Booking not found');
   }
   return booking;
+}
+
+/**
+ * List bookings for an admin, newest first, with who/when/status/slot for each. Visibility:
+ * COMPANY_ADMIN is forced to their own company (the `companyId` filter is ignored); SUPER_ADMIN
+ * sees all companies and may narrow with `companyId`. Optional `date`/`status` filters.
+ */
+export async function listBookings(principal: Principal, filter: ListBookingsQuery, page: PageArgs) {
+  const where: Prisma.BookingRequestWhereInput = {};
+  // Tenant scoping: CA is locked to their own company; SA may optionally filter by one.
+  if (principal.role === 'COMPANY_ADMIN') where.companyId = principal.companyId;
+  else if (filter.companyId) where.companyId = filter.companyId;
+  if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
+  if (filter.status) where.status = filter.status;
+
+  const [rows, total] = await Promise.all([
+    prisma.bookingRequest.findMany({
+      where,
+      include: {
+        user: { select: { fullName: true, email: true } },
+        company: { select: { name: true } },
+        allocation: { include: { slot: { select: { slotNumber: true } } } },
+      },
+      orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
+      skip: page.skip,
+      take: page.take,
+    }),
+    prisma.bookingRequest.count({ where }),
+  ]);
+  return { rows, total };
 }

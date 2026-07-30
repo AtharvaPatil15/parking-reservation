@@ -6,6 +6,8 @@ export const queryKeys = {
   me: ['me'] as const,
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number) => ['me', 'bookings', page, pageSize] as const,
+  adminBookings: (date: string, companyId: string, page: number) =>
+    ['bookings', 'admin', date, companyId, page] as const,
 
   // Auth / registration
   activeCompanies: ['companies', 'active'] as const,
