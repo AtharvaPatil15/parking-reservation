@@ -660,6 +660,23 @@ export interface paths {
         patch: operations["updateSlot"];
         trace?: never;
     };
+    "/parking-areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List parking areas (for the slot-create area picker) */
+        get: operations["listParkingAreas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/companies/{id}/quota": {
         parameters: {
             query?: never;
@@ -1063,6 +1080,12 @@ export interface components {
         };
         AssignAdminRequest: {
             userId: string;
+        };
+        ParkingArea: {
+            id: string;
+            name: string;
+            floor?: string | null;
+            officeLocationId: string;
         };
         ParkingSlot: {
             id: string;
@@ -2751,6 +2774,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listParkingAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Parking areas. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["ParkingArea"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getCompanyQuota: {

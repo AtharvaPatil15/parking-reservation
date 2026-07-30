@@ -14,7 +14,7 @@ import configRoutes from './modules/config/config.routes';
 import authRoutes from './modules/auth/auth.routes';
 import companiesRoutes from './modules/companies/companies.routes';
 import usersRoutes from './modules/users/users.routes';
-import { slotsRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
+import { slotsRouter, parkingAreasRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
 import dashboardRoutes from './modules/dashboards/dashboards.routes';
 import bookingsRoutes from './modules/bookings/bookings.routes';
 import allocationRoutes from './modules/allocation/allocation.routes';
@@ -56,6 +56,7 @@ api.use('/companies', companiesRoutes); // CRUD + /active + /:id/users + /:id/ad
 api.use('/companies', companyScopedRouter); // /:id/quota + /:id/blocks
 api.use('/users', usersRoutes); // /:id/approval + /:id/status
 api.use('/slots', slotsRouter);
+api.use('/parking-areas', parkingAreasRouter); // GET — area picker for slot creation
 api.use('/blocks', blockItemRouter); // DELETE /:id
 api.use('/dashboard', dashboardRoutes);
 api.use('/bookings', bookingsRoutes);

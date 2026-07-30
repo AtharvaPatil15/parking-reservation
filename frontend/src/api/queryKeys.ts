@@ -17,6 +17,7 @@ export const queryKeys = {
   pendingAdmins: (page: number, pageSize: number) => ['users', 'pending-admins', page, pageSize] as const,
   companies: (page: number, pageSize: number) => ['companies', page, pageSize] as const,
   slots: (page: number, pageSize: number, status: string) => ['slots', page, pageSize, status] as const,
+  parkingAreas: ['parking-areas'] as const,
   companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,
 
   // Company-scoped (P5-11 drill-in + P5-12 company admin)

@@ -1,7 +1,7 @@
 import type { SlotStatus, SlotType, BlockReason } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
-import { isUniqueViolation } from '../../lib/prismaErrors';
+import { isUniqueViolation, isForeignKeyViolation } from '../../lib/prismaErrors';
 import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
@@ -26,8 +26,19 @@ export async function createSlot(input: {
     return await prisma.parkingSlot.create({ data: input });
   } catch (err) {
     if (isUniqueViolation(err)) throw new ConflictError('Slot number already exists in this area');
+    // A bad parkingAreaId is a client error, not a server fault — surface it as 400, not 500.
+    if (isForeignKeyViolation(err)) {
+      throw new ValidationError('Request validation failed', [
+        { field: 'parkingAreaId', message: 'Parking area not found — pick an existing area' },
+      ]);
+    }
     throw err;
   }
+}
+
+/** List parking areas (SUPER_ADMIN) — used to populate the slot-create area picker. */
+export async function listParkingAreas() {
+  return prisma.parkingArea.findMany({ orderBy: { name: 'asc' } });
 }
 
 export async function listSlots(opts: { status?: SlotStatus; parkingAreaId?: string } & PageArgs) {

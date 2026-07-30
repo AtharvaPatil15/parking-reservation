@@ -4,7 +4,7 @@ import {
   type Column,
 } from '../../components';
 import { useCompanies, useCreateCompany, useCompanyQuota, useSetCompanyQuota } from '../../api/hooks';
-import { ApiError } from '../../api/http';
+import { apiErrorText } from '../../api/http';
 import { nextBookableWeekday } from '../../lib/dates';
 import type { components } from '../../api/types';
 
@@ -33,7 +33,7 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
   const { toast } = useToast();
   const [slotCount, setSlotCount] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(nextBookableWeekday());
-  const error = setQuota.error instanceof ApiError ? setQuota.error.message : null;
+  const error = apiErrorText(setQuota.error);
   const count = Number(slotCount);
   const countInvalid = slotCount.trim() !== '' && (!Number.isInteger(count) || count < 0);
 
@@ -94,7 +94,7 @@ export function Companies() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [active, setActive] = useState<Company | null>(null);
-  const createError = create.error instanceof ApiError ? create.error.message : null;
+  const createError = apiErrorText(create.error);
 
   function onCreate() {
     if (!name.trim() || !code.trim()) return;

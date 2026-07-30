@@ -1,4 +1,4 @@
-import type { ParkingSlot, CompanySlotAllocation, SlotBlock, SlotStatus } from '@prisma/client';
+import type { ParkingSlot, CompanySlotAllocation, SlotBlock, SlotStatus, ParkingArea } from '@prisma/client';
 import { asyncHandler } from '../../lib/asyncHandler';
 import { sendSuccess } from '../../lib/response';
 import { parsePagination } from '../../lib/pagination';
@@ -37,9 +37,19 @@ const toBlock = (b: SlotBlock) => ({
   createdAt: b.createdAt.toISOString(),
 });
 
+const toArea = (a: ParkingArea) => ({
+  id: a.id,
+  name: a.name,
+  floor: a.floor ?? null,
+  officeLocationId: a.officeLocationId,
+});
+
 // Slots
 export const createSlot = asyncHandler(async (req, res) => {
   sendSuccess(res, toSlot(await service.createSlot(req.body)), 201);
+});
+export const listParkingAreas = asyncHandler(async (_req, res) => {
+  sendSuccess(res, (await service.listParkingAreas()).map(toArea));
 });
 export const listSlots = asyncHandler(async (req, res) => {
   const p = parsePagination(req.query as Record<string, unknown>);
