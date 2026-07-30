@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { roleHome } from '../lib/roles';
-import { RequireRole, AuthLoading } from '../lib/guards';
+import { RequireRole } from '../lib/guards';
 import { AppShell } from './AppShell';
 import { NotFound } from './NotFound';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -25,8 +25,7 @@ import { BookingStatus } from '../features/user/BookingStatus';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
-  const { isAuthenticated, user, isLoading } = useAuth();
-  if (isLoading) return <AuthLoading />;
+  const { isAuthenticated, user } = useAuth();
   return <Navigate to={isAuthenticated && user ? roleHome(user.role) : '/login'} replace />;
 }
 
