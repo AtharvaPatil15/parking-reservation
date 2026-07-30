@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { roleHome } from '../lib/roles';
-import { RequireRole } from '../lib/guards';
+import { RequireRole, RequireAuth } from '../lib/guards';
 import { AppShell } from './AppShell';
 import { NotFound } from './NotFound';
 import { LoginPage } from '../features/auth/LoginPage';
@@ -63,10 +63,17 @@ export function AppRouter() {
         <Route element={<AppShell />}>
           <Route path="/app" element={<UserShell />}>
             <Route index element={<UserDashboard />} />
-            <Route path="book" element={<BookingForm />} />
-            <Route path="booking/:id" element={<BookingStatus />} />
-            <Route path="history" element={<History />} />
           </Route>
+        </Route>
+      </Route>
+
+      {/* Booking is a cross-role capability — USER, COMPANY_ADMIN and SUPER_ADMIN can all book,
+          view a booking, and see their own history. */}
+      <Route element={<RequireAuth />}>
+        <Route element={<AppShell />}>
+          <Route path="/book" element={<BookingForm />} />
+          <Route path="/booking/:id" element={<BookingStatus />} />
+          <Route path="/my-bookings" element={<History />} />
         </Route>
       </Route>
 

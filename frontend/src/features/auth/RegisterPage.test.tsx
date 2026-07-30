@@ -25,7 +25,7 @@ async function fillValid(email = 'new@user.test') {
   await screen.findByRole('option', { name: 'Mock Co' });
   await userEvent.selectOptions(screen.getByLabelText(/company/i), 'mock-co');
   await userEvent.type(screen.getByLabelText(/^email$/i), email);
-  await userEvent.type(screen.getByLabelText(/contact number/i), '555-0100');
+  await userEvent.type(screen.getByLabelText(/contact number/i), '9000000123');
   await userEvent.type(screen.getByLabelText(/^address$/i), '1 Main St');
   await userEvent.type(screen.getByLabelText(/pin code/i), '560001');
   await userEvent.type(screen.getByLabelText(/^password$/i), 'password1');

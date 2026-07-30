@@ -12,10 +12,10 @@ export function UserShell() {
         <NavLink to="/app" end className={linkClass}>
           Dashboard
         </NavLink>
-        <NavLink to="/app/book" className={linkClass}>
+        <NavLink to="/book" className={linkClass}>
           Book a slot
         </NavLink>
-        <NavLink to="/app/history" className={linkClass}>
+        <NavLink to="/my-bookings" className={linkClass}>
           History
         </NavLink>
       </nav>

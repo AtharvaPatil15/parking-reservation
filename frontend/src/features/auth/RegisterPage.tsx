@@ -120,9 +120,9 @@ export function RegisterPage() {
                   {...register('companyId')}
                 />
                 <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
-                <Input label="Contact number" error={errors.contactNumber?.message} {...register('contactNumber')} />
+                <Input label="Contact number" type="tel" inputMode="numeric" placeholder="10-digit mobile" error={errors.contactNumber?.message} {...register('contactNumber')} />
                 <Input label="Address" error={errors.address?.message} {...register('address')} />
-                <Input label="PIN code" error={errors.pinCode?.message} {...register('pinCode')} />
+                <Input label="PIN code" inputMode="numeric" placeholder="6-digit PIN" error={errors.pinCode?.message} {...register('pinCode')} />
                 <Input
                   label="Home → office distance (km)"
                   type="number"

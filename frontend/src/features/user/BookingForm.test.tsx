@@ -12,10 +12,10 @@ function renderForm() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const Wrap = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/app/book']}>
+      <MemoryRouter initialEntries={['/book']}>
         <Routes>
-          <Route path="/app/book" element={children} />
-          <Route path="/app/booking/:id" element={<div>Status page</div>} />
+          <Route path="/book" element={children} />
+          <Route path="/booking/:id" element={<div>Status page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>

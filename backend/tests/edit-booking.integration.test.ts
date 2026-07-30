@@ -85,3 +85,28 @@ describe('GET /companies/quota-summary — assigned per company (SA)', () => {
     await request(app).get(`${API}/companies/quota-summary`).query({ date: DATE }).set(bearer(ca)).expect(403);
   });
 });
+
+describe('GET /me/bookings — own history', () => {
+  it('returns the current user’s bookings', async () => {
+    const aditi = await login('aditi@assent.example');
+    const id = await createBooking(aditi);
+    const res = await request(app).get(`${API}/me/bookings`).set(bearer(aditi));
+    expect(res.status).toBe(200);
+    expect((res.body.data as Array<{ id: string }>).map((b) => b.id)).toContain(id);
+  });
+});
+
+describe('POST /bookings — admins can also book', () => {
+  it('lets a COMPANY_ADMIN create a booking that shows in their own history', async () => {
+    const ca = await login('admin@assent.example');
+    const res = await request(app)
+      .post(`${API}/bookings`)
+      .set(bearer(ca))
+      .send({ bookingDate: DATE, carpoolPeople: 1 });
+    expect(res.status).toBe(201);
+
+    const hist = await request(app).get(`${API}/me/bookings`).set(bearer(ca));
+    expect(hist.status).toBe(200);
+    expect((hist.body.data as Array<{ id: string }>).map((b) => b.id)).toContain(res.body.data.id);
+  });
+});
