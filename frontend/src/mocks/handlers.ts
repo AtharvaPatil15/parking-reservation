@@ -579,10 +579,12 @@ const hero = [
   }),
   http.get(`${baseURL}/users/admin-requests/history`, ({ request }) => {
     const { page, pageSize } = pageParams(request);
-    // Processed company-admin requests (approval history): decided ACTIVE/REJECTED admins.
+    // Processed company-admin requests (approval history): decided ACTIVE/REJECTED admins,
+    // newest decision first (backend sorts by updatedAt desc) — sort before paginating.
     const all = Object.values(companyUserState)
       .flat()
-      .filter((u) => u.role === 'COMPANY_ADMIN' && (u.status === 'ACTIVE' || u.status === 'REJECTED'));
+      .filter((u) => u.role === 'COMPANY_ADMIN' && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
   }),
@@ -630,6 +632,10 @@ const hero = [
   http.post(`${baseURL}/parking-areas`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as { name?: string; floor?: string | null };
     if (!body.name?.trim()) return fail(400, 'VALIDATION_ERROR', 'name is required');
+    // Backend `createParkingAreaSchema` allows floor to be null or a non-empty string only.
+    if (typeof body.floor === 'string' && body.floor.trim() === '') {
+      return fail(400, 'VALIDATION_ERROR', 'floor must be null or a non-empty string');
+    }
     const area: ParkingArea = {
       id: nextId('area'), name: body.name.trim(), floor: body.floor ?? null, officeLocationId: 'office-1',
     };

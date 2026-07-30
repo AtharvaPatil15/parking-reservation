@@ -40,16 +40,16 @@ export function Slots() {
   const [slotNumber, setSlotNumber] = useState('');
   const [areaId, setAreaId] = useState('');
   const [slotType, setSlotType] = useState<SlotType>('STANDARD');
-  const [areaName_, setAreaName_] = useState('');
+  const [newAreaName, setNewAreaName] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const createError = apiErrorText(create.error);
   const createAreaError = apiErrorText(createArea.error);
 
   function onCreateArea() {
-    if (!areaName_.trim()) return;
+    if (!newAreaName.trim()) return;
     createArea.mutate(
-      { name: areaName_.trim() },
-      { onSuccess: () => { toast('Parking area created.', { tone: 'success' }); setAreaName_(''); } },
+      { name: newAreaName.trim() },
+      { onSuccess: () => { toast('Parking area created.', { tone: 'success' }); setNewAreaName(''); } },
     );
   }
 
@@ -133,9 +133,9 @@ export function Slots() {
       <Card title="Add parking area">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-56">
-            <Input label="Area name" value={areaName_} onChange={(e) => setAreaName_(e.target.value)} hint="e.g. Basement 4" />
+            <Input label="Area name" value={newAreaName} onChange={(e) => setNewAreaName(e.target.value)} hint="e.g. Basement 4" />
           </div>
-          <Button onClick={onCreateArea} loading={createArea.isPending} disabled={!areaName_.trim()}>
+          <Button onClick={onCreateArea} loading={createArea.isPending} disabled={!newAreaName.trim()}>
             Add area
           </Button>
         </div>
