@@ -185,6 +185,7 @@ function userProfile(
 
 /** Company users keyed by companyId (for approvals + company user lists). */
 function seedCompanyUsers(): Record<string, UserProfile[]> {
+  const acme = { id: 'co-acme', name: 'Acme Corp' };
   return {
     'mock-co': [
       userProfile('u-priya', 'Priya Rao', 'priya@mock.test', 'ACTIVE'),
@@ -193,9 +194,14 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
       userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
     ],
-    // A pending company-admin registration (F11) — surfaces in the Super Admin's admin-request queue.
+    // Acme users. Two ACTIVE members let cross-company carpooling be exercised: a
+    // mock-co user may bring an Acme employee, since carpool members can be any
+    // registered user. Blair is a pending company-admin registration (F11) that
+    // surfaces in the Super Admin's admin-request queue.
     'co-acme': [
-      userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', { id: 'co-acme', name: 'Acme Corp' }),
+      userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
+      userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
+      userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', acme),
     ],
   };
 }
@@ -264,6 +270,15 @@ const pageParams = (request: Request) => {
   return { page: Number(url.searchParams.get('page') ?? '1'), pageSize: Number(url.searchParams.get('pageSize') ?? '10') };
 };
 
+/**
+ * Every registered user's email, across all companies (case-insensitive). Carpool
+ * members must be existing users — but not necessarily same-company — so this spans
+ * the whole directory. Stands in for a backend user-lookup the frozen contract does
+ * not expose to the USER role.
+ */
+const directoryEmails = (): Set<string> =>
+  new Set(Object.values(companyUserState).flatMap((list) => list.map((u) => u.email.toLowerCase())));
+
 /** Coherent, deterministic handlers for the hero + admin flows (override the generated random ones). */
 const hero = [
   // --- Auth ---
@@ -320,7 +335,31 @@ const hero = [
 
   // --- User bookings ---
   http.post(`${baseURL}/bookings`, async ({ request }) => {
-    const b = (await request.json().catch(() => ({}))) as { bookingDate?: string; carpoolPeople?: number };
+    const b = (await request.json().catch(() => ({}))) as {
+      bookingDate?: string;
+      carpoolPeople?: number;
+      carpoolMembers?: { name?: string; employeeEmail?: string }[];
+    };
+    // Carpool members must be existing users (any company). Every member needs an
+    // email, and it must resolve to a registered user — reject both cases with
+    // per-member field details so the form can flag the exact row.
+    const dir = directoryEmails();
+    const details = (b.carpoolMembers ?? []).flatMap((m, i) => {
+      const email = m.employeeEmail?.trim();
+      if (!email) {
+        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
+      }
+      if (!dir.has(email.toLowerCase())) {
+        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
+      }
+      return [];
+    });
+    if (details.length > 0) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
+        { status: 400 },
+      );
+    }
     return ok<BookingCreatedData>(
       {
         id: 'mock-booking-1',

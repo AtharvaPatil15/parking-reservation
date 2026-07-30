@@ -25,7 +25,9 @@ export const bookingSchema = z
       .array(
         z.object({
           name: z.string().min(1, 'Name is required.'),
-          employeeEmail: z.string().email('Enter a valid email.').optional().or(z.literal('')),
+          // A carpool member is identified by their email; it must be a valid address and
+          // (checked server-side on submit) belong to a registered user — any company.
+          employeeEmail: z.string().min(1, 'Email is required.').email('Enter a valid email.'),
         }),
       )
       .optional(),

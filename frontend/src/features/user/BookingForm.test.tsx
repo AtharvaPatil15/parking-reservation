@@ -151,4 +151,30 @@ describe('BookingForm', () => {
     expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
     expect(screen.queryByText(/request submitted/i)).not.toBeInTheDocument();
   });
+
+  async function addMemberBooking(name: string, email: string) {
+    const date = await screen.findByLabelText(/^date$/i);
+    await userEvent.clear(date);
+    await userEvent.type(date, '2099-01-05');
+    const people = screen.getByLabelText(/carpool people/i);
+    await userEvent.clear(people);
+    await userEvent.type(people, '2');
+    await userEvent.click(screen.getByRole('button', { name: /add member/i }));
+    await userEvent.type(screen.getByLabelText(/member 1 name/i), name);
+    await userEvent.type(screen.getByLabelText(/member 1 email/i), email);
+    await userEvent.click(screen.getByRole('button', { name: /submit request/i }));
+  }
+
+  it('rejects a carpool member who is not a registered user', async () => {
+    renderForm();
+    await addMemberBooking('Ghost', 'ghost@nobody.test');
+    expect(await screen.findByText(/no registered user has this email/i)).toBeInTheDocument();
+    expect(screen.queryByText(/request submitted/i)).not.toBeInTheDocument();
+  });
+
+  it('accepts a registered member from another company (cross-company carpool)', async () => {
+    renderForm();
+    await addMemberBooking('Ivy', 'ivy@acme.test'); // seeded under co-acme, not the booker's mock-co
+    expect(await screen.findByText(/request submitted/i)).toBeInTheDocument();
+  });
 });

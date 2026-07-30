@@ -17,7 +17,7 @@ describe('bookingSchema carpool cap refinement', () => {
     const result = bookingSchema.safeParse({
       bookingDate: '2099-01-05',
       carpoolPeople: 1,
-      carpoolMembers: [{ name: 'X', employeeEmail: '' }],
+      carpoolMembers: [{ name: 'X', employeeEmail: 'x@acme.test' }],
     });
     expect(result.success).toBe(false);
   });
@@ -26,8 +26,17 @@ describe('bookingSchema carpool cap refinement', () => {
     const result = bookingSchema.safeParse({
       bookingDate: '2099-01-05',
       carpoolPeople: 2,
-      carpoolMembers: [{ name: 'X', employeeEmail: '' }],
+      carpoolMembers: [{ name: 'X', employeeEmail: 'x@acme.test' }],
     });
     expect(result.success).toBe(true);
+  });
+
+  it('requires an email for each carpool member', () => {
+    const result = bookingSchema.safeParse({
+      bookingDate: '2099-01-05',
+      carpoolPeople: 2,
+      carpoolMembers: [{ name: 'X', employeeEmail: '' }],
+    });
+    expect(result.success).toBe(false);
   });
 });

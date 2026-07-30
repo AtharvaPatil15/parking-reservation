@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Card, Input, LoadingState, Select, SuccessState } from '../../components';
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
@@ -18,6 +18,7 @@ export function BookingForm() {
     handleSubmit,
     control,
     watch,
+    setError,
     formState: { errors },
   } = useForm<BookingFormValues>({
     resolver: zodResolver(bookingSchema),
@@ -45,25 +46,41 @@ export function BookingForm() {
     );
   }
 
-  const errorMsg = createBooking.isError
-    ? createBooking.error instanceof ApiError
-      ? createBooking.error.status === 409
-        ? 'You already have a request for this date.'
-        : createBooking.error.code === 'WINDOW_CLOSED'
-          ? 'The booking window is closed for this date.'
-          : createBooking.error.message
-      : 'Something went wrong. Please try again.'
-    : null;
+  // A 400 with field `details` (e.g. an unknown carpool-member email) is shown inline on
+  // the offending field, so suppress the generic banner for it.
+  const err = createBooking.error;
+  const isFieldError = err instanceof ApiError && err.status === 400 && Boolean(err.details?.length);
+  const errorMsg =
+    createBooking.isError && !isFieldError
+      ? err instanceof ApiError
+        ? err.status === 409
+          ? 'You already have a request for this date.'
+          : err.code === 'WINDOW_CLOSED'
+            ? 'The booking window is closed for this date.'
+            : err.message
+        : 'Something went wrong. Please try again.'
+      : null;
 
   const onSubmit = handleSubmit((values) => {
-    createBooking.mutate({
-      bookingDate: values.bookingDate,
-      vehicleType: values.vehicleType ? values.vehicleType : undefined,
-      vehicleNumber: values.vehicleNumber || undefined,
-      carpoolPeople: Number(values.carpoolPeople),
-      specialRequirement: values.specialRequirement || undefined,
-      carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail || undefined })),
-    });
+    createBooking.mutate(
+      {
+        bookingDate: values.bookingDate,
+        vehicleType: values.vehicleType ? values.vehicleType : undefined,
+        vehicleNumber: values.vehicleNumber || undefined,
+        carpoolPeople: Number(values.carpoolPeople),
+        specialRequirement: values.specialRequirement || undefined,
+        // Email is required by the schema, so pass it through unchanged (no `|| undefined`).
+        carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail })),
+      },
+      {
+        onError: (e) => {
+          // Map server-side member validation (unknown emails) back onto each field.
+          if (e instanceof ApiError && e.status === 400 && e.details?.length) {
+            for (const d of e.details) setError(d.field as FieldPath<BookingFormValues>, { message: d.message });
+          }
+        },
+      },
+    );
   });
 
   return (
@@ -113,6 +130,9 @@ export function BookingForm() {
 
           <fieldset className="flex flex-col gap-3">
             <legend className="text-sm font-medium text-text">Carpool members (optional)</legend>
+            <p className="-mt-1 text-xs text-text-muted">
+              Each member must be a registered user (any company). Enter their work email.
+            </p>
             {fields.map((f, i) => (
               <div key={f.id} className="flex items-start gap-2">
                 <Input
