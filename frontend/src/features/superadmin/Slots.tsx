@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
@@ -40,6 +40,12 @@ export function Slots() {
 
   const total = slots.data?.meta.total ?? 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // If the current page falls past the end — e.g. the last row on the last page was just deleted —
+  // step back onto the last real page so the user isn't stranded on an empty view with no way back.
+  useEffect(() => {
+    if (slots.data && page > lastPage) setPage(lastPage);
+  }, [slots.data, page, lastPage]);
 
   function onCreateArea() {
     if (!newAreaName.trim()) return;

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  clearSession,
   refreshSession,
   registerTokenRefreshedHandler,
   registerUnauthorizedHandler,
@@ -108,7 +109,9 @@ export function AuthProvider({
     setSession(next);
   }, []);
   const logout = useCallback(() => {
-    setAccessToken(null);
+    // clearSession() (not setAccessToken(null)) so any in-flight refresh is invalidated and can't
+    // silently reinstate the token after the user has signed out.
+    clearSession();
     writeStoredSession(null);
     setSession(null);
   }, []);

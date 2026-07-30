@@ -65,7 +65,9 @@ export function BookingForm() {
     createBooking.mutate(
       {
         bookingDate: values.bookingDate,
-        vehicleType: 'CAR', // demo: car-only flow
+        // Demo simplification: the UI only offers car bookings. The API/enum still accepts BIKE/EV_CAR,
+        // so this is a client-side narrowing, not a contract change — the picker can be restored later.
+        vehicleType: 'CAR',
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
         specialRequirement: values.specialRequirement || undefined,
