@@ -3,7 +3,7 @@ import {
   Badge, Button, Card, EmptyState, ErrorState, LoadingState, Table, useToast,
   type Column,
 } from '../../components';
-import { usePendingAdmins, useApproveAdminRequest } from '../../api/hooks';
+import { usePendingAdmins, useAdminRequestHistory, useApproveAdminRequest } from '../../api/hooks';
 import type { components } from '../../api/types';
 
 type UserProfile = components['schemas']['UserProfile'];
@@ -11,9 +11,12 @@ type UserProfile = components['schemas']['UserProfile'];
 /**
  * Super Admin queue of pending company-admin registration requests (F11). Approving grants the
  * applicant the CompanyAdmin assignment for their (existing) company; rejecting marks them REJECTED.
+ * Processed requests move to the persisted "Approval history" (GET /users/admin-requests/history),
+ * so decisions stay visible after they leave the pending queue.
  */
 export function AdminApprovals() {
   const requests = usePendingAdmins();
+  const history = useAdminRequestHistory();
   const approval = useApproveAdminRequest();
   const { toast } = useToast();
   // Track the row currently mutating so only its buttons show a spinner.
@@ -51,6 +54,23 @@ export function AdminApprovals() {
     },
   ];
 
+  // Approval history: a processed request is APPROVED when its user is ACTIVE, else REJECTED.
+  const historyColumns: Column<UserProfile>[] = [
+    { key: 'name', header: 'Name', render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    { key: 'email', header: 'Email', render: (u) => u.email },
+    { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
+    {
+      key: 'decision', header: 'Decision', align: 'right',
+      render: (u) => (
+        <Badge tone={u.status === 'ACTIVE' ? 'success' : 'danger'}>
+          {u.status === 'ACTIVE' ? 'Approved' : 'Rejected'}
+        </Badge>
+      ),
+    },
+  ];
+
+  const historyItems = history.data?.items ?? [];
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -67,6 +87,18 @@ export function AdminApprovals() {
           <EmptyState title="No pending requests" description="New company-admin sign-ups will appear here." />
         ) : (
           <Table columns={columns} rows={requests.data.items} rowKey={(u) => u.id} />
+        )}
+      </Card>
+
+      <Card title="Approval history" description="Requests you've already approved or rejected." padded={false}>
+        {history.isLoading ? (
+          <LoadingState label="Loading history…" />
+        ) : history.isError ? (
+          <ErrorState title="Couldn't load history" />
+        ) : historyItems.length === 0 ? (
+          <EmptyState title="No decisions yet" description="Approved and rejected requests will be listed here." />
+        ) : (
+          <Table columns={historyColumns} rows={historyItems} rowKey={(u) => u.id} />
         )}
       </Card>
     </div>

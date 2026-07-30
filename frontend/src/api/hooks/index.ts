@@ -13,6 +13,7 @@ export { useMe, useMyBookings, useUserDashboard } from './user';
 export {
   useSuperAdminDashboard,
   usePendingAdmins,
+  useAdminRequestHistory,
   useApproveAdminRequest,
   useCompanies,
   useCreateCompany,
@@ -22,6 +23,7 @@ export {
   useUpdateSlot,
   useDeleteSlot,
   useParkingAreas,
+  useCreateParkingArea,
   useCompanyQuota,
   useSetCompanyQuota,
 } from './admin';

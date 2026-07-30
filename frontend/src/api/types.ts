@@ -603,6 +603,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/admin-requests/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List processed company-admin registration requests (approval history)
+         * @description Super Admin only. Returns company-admin users already decided (status ACTIVE or REJECTED) across all companies — the approval history (F11), newest decision first.
+         */
+        get: operations["listAdminRequestHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/approval": {
         parameters: {
             query?: never;
@@ -711,7 +731,11 @@ export interface paths {
         /** List parking areas (for the slot-create area picker) */
         get: operations["listParkingAreas"];
         put?: never;
-        post?: never;
+        /**
+         * Create a parking area (e.g. Basement 2)
+         * @description Super Admin only. The area is attached to the configured office location (resolved server-side).
+         */
+        post: operations["createParkingArea"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1146,6 +1170,10 @@ export interface components {
             name: string;
             floor?: string | null;
             officeLocationId: string;
+        };
+        CreateParkingAreaRequest: {
+            name: string;
+            floor?: string | null;
         };
         ParkingSlot: {
             id: string;
@@ -2715,6 +2743,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listAdminRequestHistory: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of processed company-admin requests */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["UserProfile"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     setUserApproval: {
         parameters: {
             query?: never;
@@ -2938,6 +2997,36 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createParkingArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParkingAreaRequest"];
+            };
+        };
+        responses: {
+            /** @description Parking area created. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["ParkingArea"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };

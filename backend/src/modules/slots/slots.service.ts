@@ -41,6 +41,18 @@ export async function listParkingAreas() {
   return prisma.parkingArea.findMany({ orderBy: { name: 'asc' } });
 }
 
+/**
+ * Create a parking area (SUPER_ADMIN) — e.g. "Basement 2". Single-office MVP: the area is
+ * attached to the (only) office location, resolved server-side, so the client sends just a name.
+ */
+export async function createParkingArea(input: { name: string; floor?: string | null }) {
+  const office = await prisma.officeLocation.findFirst({ orderBy: { createdAt: 'asc' } });
+  if (!office) throw new ValidationError('No office location is configured');
+  return prisma.parkingArea.create({
+    data: { name: input.name, floor: input.floor ?? null, officeLocationId: office.id },
+  });
+}
+
 export async function listSlots(opts: { status?: SlotStatus; parkingAreaId?: string } & PageArgs) {
   const where = {
     deletedAt: null,

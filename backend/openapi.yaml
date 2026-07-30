@@ -1117,6 +1117,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /users/admin-requests/history:
+    get:
+      tags: [Company Users]
+      operationId: listAdminRequestHistory
+      summary: List processed company-admin registration requests (approval history)
+      description: >
+        Super Admin only. Returns company-admin users already decided (status ACTIVE or REJECTED)
+        across all companies — the approval history (F11), newest decision first.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paged list of processed company-admin requests
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/UserProfile' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /users/{id}/approval:
     parameters:
       - name: id
@@ -1346,6 +1378,33 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/ParkingArea' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Slots & Quota]
+      operationId: createParkingArea
+      summary: Create a parking area (e.g. Basement 2)
+      description: Super Admin only. The area is attached to the configured office location (resolved server-side).
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateParkingAreaRequest' }
+      responses:
+        '201':
+          description: Parking area created.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParkingArea' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -2082,6 +2141,12 @@ components:
         name: { type: string }
         floor: { type: string, nullable: true }
         officeLocationId: { type: string }
+    CreateParkingAreaRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        floor: { type: string, nullable: true }
     ParkingSlot:
       type: object
       required: [id, slotNumber, parkingAreaId, slotType, status, hasEvCharging, isAccessible, createdAt, updatedAt]

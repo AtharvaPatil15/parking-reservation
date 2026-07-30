@@ -51,6 +51,9 @@ export const createSlot = asyncHandler(async (req, res) => {
 export const listParkingAreas = asyncHandler(async (_req, res) => {
   sendSuccess(res, (await service.listParkingAreas()).map(toArea));
 });
+export const createParkingArea = asyncHandler(async (req, res) => {
+  sendSuccess(res, toArea(await service.createParkingArea(req.body)), 201);
+});
 export const listSlots = asyncHandler(async (req, res) => {
   const p = parsePagination(req.query as Record<string, unknown>);
   const { rows, total } = await service.listSlots({

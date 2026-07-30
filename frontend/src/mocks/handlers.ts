@@ -262,6 +262,15 @@ function seedBlocks(): Record<string, SlotBlock[]> {
   };
 }
 
+/** Parking areas the super admin can allocate slots into (Basement 1/2/3), extendable via POST. */
+function seedParkingAreas(): ParkingArea[] {
+  return [
+    { id: 'area-1', name: 'Basement 1', floor: 'B1', officeLocationId: 'office-1' },
+    { id: 'area-2', name: 'Basement 2', floor: 'B2', officeLocationId: 'office-1' },
+    { id: 'area-3', name: 'Basement 3', floor: 'B3', officeLocationId: 'office-1' },
+  ];
+}
+
 // --- Mutable demo state (reset via resetMockData) ---
 let configState = seedConfig();
 let bookingState = seedBookings();
@@ -270,6 +279,7 @@ let companyUserState = seedCompanyUsers();
 let slotState = seedSlots();
 let quotaState = seedQuota();
 let blockState = seedBlocks();
+let parkingAreaState = seedParkingAreas();
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
@@ -282,6 +292,7 @@ export function resetMockData(): void {
   slotState = seedSlots();
   quotaState = seedQuota();
   blockState = seedBlocks();
+  parkingAreaState = seedParkingAreas();
   seq = 0;
 }
 
@@ -566,6 +577,17 @@ const hero = [
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
   }),
+  http.get(`${baseURL}/users/admin-requests/history`, ({ request }) => {
+    const { page, pageSize } = pageParams(request);
+    // Processed company-admin requests (approval history): decided ACTIVE/REJECTED admins,
+    // newest decision first (backend sorts by updatedAt desc) — sort before paginating.
+    const all = Object.values(companyUserState)
+      .flat()
+      .filter((u) => u.role === 'COMPANY_ADMIN' && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
+      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+    const start = (page - 1) * pageSize;
+    return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
+  }),
   http.get(`${baseURL}/companies/:id/users`, ({ params, request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
@@ -606,9 +628,20 @@ const hero = [
     const start = (page - 1) * pageSize;
     return okPage(slots.slice(start, start + pageSize), page, pageSize, slots.length);
   }),
-  http.get(`${baseURL}/parking-areas`, () =>
-    ok<ParkingArea[]>([{ id: 'area-1', name: 'Basement 1', floor: 'B1', officeLocationId: 'office-1' }]),
-  ),
+  http.get(`${baseURL}/parking-areas`, () => ok<ParkingArea[]>(parkingAreaState)),
+  http.post(`${baseURL}/parking-areas`, async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { name?: string; floor?: string | null };
+    if (!body.name?.trim()) return fail(400, 'VALIDATION_ERROR', 'name is required');
+    // Backend `createParkingAreaSchema` allows floor to be null or a non-empty string only.
+    if (typeof body.floor === 'string' && body.floor.trim() === '') {
+      return fail(400, 'VALIDATION_ERROR', 'floor must be null or a non-empty string');
+    }
+    const area: ParkingArea = {
+      id: nextId('area'), name: body.name.trim(), floor: body.floor ?? null, officeLocationId: 'office-1',
+    };
+    parkingAreaState = [...parkingAreaState, area];
+    return ok<ParkingArea>(area, 201);
+  }),
   http.post(`${baseURL}/slots`, async ({ request }) => {
     const body = (await request.json().catch(() => ({}))) as Partial<ParkingSlot> & { slotNumber?: string; parkingAreaId?: string };
     if (!body.slotNumber || !body.parkingAreaId) return fail(400, 'VALIDATION_ERROR', 'slotNumber and parkingAreaId are required');
