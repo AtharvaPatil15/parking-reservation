@@ -6,6 +6,7 @@ import {
   registerUnauthorizedHandler,
   setAccessToken,
 } from '../api/client';
+import { queryClient } from '../api/queryClient';
 import type { Role } from './roles';
 
 // Refresh this long before the access token's `exp` so a request never races an expired token.
@@ -104,6 +105,11 @@ export function AuthProvider({
   // child-first, i.e. after the destination page's data-fetch effect, which would race.
   // Persist to sessionStorage so a page refresh restores the session.
   const login = useCallback((next: AuthSession) => {
+    // Drop the previous user's cached queries before the new session's first fetch. Keys like
+    // ['dashboard','user'], ['me',...] and the company-admin roster aren't scoped to the signed-in
+    // identity, so without this the next user would read the last user's data (cross-tenant bleed).
+    // A hard refresh already starts with an empty in-memory cache; this covers the SPA login path.
+    queryClient.clear();
     setAccessToken(next.accessToken);
     writeStoredSession(next);
     setSession(next);
@@ -114,6 +120,8 @@ export function AuthProvider({
     clearSession();
     writeStoredSession(null);
     setSession(null);
+    // Leave no cached data behind for whoever logs in next.
+    queryClient.clear();
   }, []);
 
   const value = useMemo<AuthContextValue>(
