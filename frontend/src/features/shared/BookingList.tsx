@@ -21,7 +21,8 @@ const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
   EXPIRED: 'neutral',
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 20; // grouped rows shown per page (client-side)
+const FETCH_SIZE = 100; // server cap; fetch the whole filtered set so grouping isn't split across pages
 
 const STATUS_PRIORITY: Record<BookingStatus, number> = {
   ALLOCATED: 0,
@@ -79,11 +80,13 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   useEffect(() => setPage(1), [date]);
 
   const companies = useActiveCompanies();
+  // Fetch the whole filtered set in one page (up to the server cap). Grouping a server-sliced page
+  // would split a person's rows for a date across page boundaries (incomplete history + a count that
+  // mixes per-page and global totals); pagination below runs over the GROUPS instead, client-side.
   const bookings = useAdminBookings({
     date: date || undefined,
     companyId: showCompany ? companyId || undefined : undefined,
-    page,
-    pageSize: PAGE_SIZE,
+    pageSize: FETCH_SIZE,
   });
 
   const companyOptions: SelectOption[] = [
@@ -91,7 +94,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     ...(companies.data ?? []).map((c) => ({ value: c.id, label: c.name })),
   ];
 
-  const rows = groupBookingHistory(bookings.data?.items ?? []);
+  const allGroups = groupBookingHistory(bookings.data?.items ?? []);
 
   const columns: Column<BookingListRow>[] = [
     ...(showCompany
@@ -121,10 +124,17 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     { key: 'slot', header: 'Slot', align: 'right', className: 'tabular-nums', render: (b) => b.allocatedSlotNumber ?? '—' },
   ];
 
-  const meta = bookings.data?.meta;
-  const total = meta?.total ?? 0;
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const visibleCount = rows.length;
+  const totalBookings = bookings.data?.meta.total ?? 0;
+  const fetchedCount = bookings.data?.items.length ?? 0;
+  const truncated = totalBookings > fetchedCount; // more rows exist than a single fetch returned
+  const lastPage = Math.max(1, Math.ceil(allGroups.length / PAGE_SIZE));
+  const pageGroups = allGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // If groups shrink (filter change / refetch) and the current page is now past the end, step back
+  // onto the last real page so the user isn't stranded on an empty view.
+  useEffect(() => {
+    if (bookings.data && page > lastPage) setPage(lastPage);
+  }, [bookings.data, page, lastPage]);
 
   // Reset to page 1 whenever a filter changes (avoids landing on an out-of-range page).
   function onCompany(v: string) { setCompanyId(v); setPage(1); }
@@ -148,16 +158,18 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         <LoadingState label="Loading bookings…" />
       ) : bookings.isError ? (
         <ErrorState title="Couldn't load bookings" />
-      ) : !bookings.data || rows.length === 0 ? (
+      ) : !bookings.data || allGroups.length === 0 ? (
         <EmptyState title="No bookings" description={date ? `No bookings for ${date}.` : 'No bookings yet.'} />
       ) : (
         <>
-          <Table columns={columns} rows={rows} rowKey={(b) => b.id} className="mt-4" />
+          <Table columns={columns} rows={pageGroups} rowKey={(b) => b.id} className="mt-4" />
           <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
             <span>
-              {visibleCount === total
-                ? `${total} booking${total === 1 ? '' : 's'}`
-                : `${visibleCount} people / ${total} bookings`}
+              {truncated
+                ? `Showing the first ${fetchedCount} of ${totalBookings} bookings`
+                : allGroups.length === totalBookings
+                  ? `${totalBookings} booking${totalBookings === 1 ? '' : 's'}`
+                  : `${allGroups.length} ${allGroups.length === 1 ? 'person' : 'people'} · ${totalBookings} bookings`}
             </span>
             {lastPage > 1 && (
               <div className="flex items-center gap-3">
