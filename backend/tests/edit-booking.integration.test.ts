@@ -2,14 +2,15 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { API, bearer, login, resetTransactional } from './integration/helpers';
+import { API, bearer, login, resetTransactional, futureBookableDate } from './integration/helpers';
 
 /**
  * Edit booking (PATCH /bookings/{id}) + company quota-summary (GET /companies/quota-summary).
  * Uses the same window as the hero harness (DATE is a bookable weekday within the primary window).
  */
 
-const DATE = '2026-07-31'; // Friday; seeded Assent quota (8) is effective for it.
+// Computed forward so the primary window is always open; seeded Assent quota (8) applies from today.
+const DATE = futureBookableDate();
 
 beforeEach(async () => {
   await resetTransactional();

@@ -63,10 +63,19 @@ function toBookingDetail(b: BookingDetail) {
 
 /** openapi AdminBooking — a booking row for the admin dashboards (who / when / status / slot). */
 function toAdminBooking(b: AdminBookingRow) {
+  const allocationSource = b.allocation
+    ? b.allocation.isManualOverride
+      ? 'MANUAL_OVERRIDE'
+      : b.allocation.allocationRunId
+        ? b.allocation.allocationType
+        : 'RELEASED_SLOT'
+    : null;
+
   return {
     id: b.id,
     bookingDate: isoDate(b.bookingDate),
     bookingType: b.bookingType,
+    allocationSource,
     status: b.status,
     employeeName: b.user.fullName,
     employeeEmail: b.user.email,
@@ -105,6 +114,12 @@ export const createBooking = asyncHandler(async (req, res) => {
 export const updateBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.updateBooking(req.user.id, req.params.id, req.body);
+  sendSuccess(res, toBookingDetail(booking), 200);
+});
+
+export const releaseBooking = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const booking = await service.releaseBooking(req.user, req.params.id, req.body ?? {});
   sendSuccess(res, toBookingDetail(booking), 200);
 });
 

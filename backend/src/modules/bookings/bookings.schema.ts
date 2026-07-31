@@ -49,6 +49,14 @@ export const updateBookingSchema = z
   .refine((o) => Object.keys(o).length > 0, { message: 'At least one field is required' });
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
 
+const releaseBookingBodySchema = z.object({
+  reason: z.string().min(1).nullable().optional(),
+});
+
+/** Release an allocated slot (openapi `ReleaseBookingRequest`). Body is optional — no body becomes `{}`. */
+export const releaseBookingSchema = z.preprocess((body) => body ?? {}, releaseBookingBodySchema);
+export type ReleaseBookingInput = z.infer<typeof releaseBookingBodySchema>;
+
 /**
  * Admin booking-list query (GET /bookings). COMPANY_ADMIN is scoped to their own company in the
  * service; `companyId` is honoured only for SUPER_ADMIN. `date` filters by bookingDate.
