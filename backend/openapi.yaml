@@ -2009,11 +2009,16 @@ components:
     AdminBooking:
       type: object
       description: A booking row for the admin dashboards — who booked, when, its status and slot.
-      required: [id, bookingDate, bookingType, status, employeeName, employeeEmail, companyId, companyName, carpoolPeople, createdAt]
+      required: [id, bookingDate, bookingType, allocationSource, status, employeeName, employeeEmail, companyId, companyName, carpoolPeople, createdAt]
       properties:
         id: { type: string }
         bookingDate: { type: string, format: date }
         bookingType: { $ref: '#/components/schemas/BookingType' }
+        allocationSource:
+          type: string
+          nullable: true
+          enum: [PRIMARY, COMMON_POOL, RELEASED_SLOT, MANUAL_OVERRIDE]
+          description: Actual source of the allocated seat; null when no seat is assigned.
         status: { $ref: '#/components/schemas/BookingStatus' }
         employeeName: { type: string }
         employeeEmail: { type: string, format: email }

@@ -53,7 +53,9 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
     if (slotCount.trim() === '' || countInvalid) return;
     setQuota.mutate(
       { slotCount: count, effectiveFrom },
-      { onSuccess: () => { toast('Quota updated.', { tone: 'success' }); setSlotCount(''); } },
+      // Close the dialog on success; the mutation invalidates the summary so the "Assigned" column
+      // on the table behind it updates on its own.
+      { onSuccess: () => { toast('Quota updated.', { tone: 'success' }); onClose(); } },
     );
   }
 

@@ -8,6 +8,7 @@ import type { components } from '../../api/types';
 
 type AdminBooking = components['schemas']['AdminBooking'];
 type BookingStatus = components['schemas']['BookingStatus'];
+type BookingListRow = AdminBooking & { history: AdminBooking[] };
 
 const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
   DRAFT: 'neutral',
@@ -20,7 +21,49 @@ const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
   EXPIRED: 'neutral',
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 20; // grouped rows shown per page (client-side)
+const FETCH_SIZE = 100; // server cap; fetch the whole filtered set so grouping isn't split across pages
+
+const STATUS_PRIORITY: Record<BookingStatus, number> = {
+  ALLOCATED: 0,
+  WAITLISTED: 1,
+  SUBMITTED: 2,
+  DRAFT: 3,
+  RELEASED: 4,
+  EXPIRED: 5,
+  CANCELLED: 6,
+  REJECTED: 7,
+};
+
+function timeOf(row: AdminBooking) {
+  return Date.parse(row.createdAt ?? row.submittedAt ?? '') || 0;
+}
+
+function displayType(row: AdminBooking) {
+  return row.status === 'ALLOCATED' && row.allocationSource ? row.allocationSource : row.bookingType;
+}
+
+function displayTypeLabel(row: AdminBooking) {
+  return displayType(row).replace('_', ' ');
+}
+
+function groupBookingHistory(rows: AdminBooking[]): BookingListRow[] {
+  const groups = new Map<string, AdminBooking[]>();
+  rows.forEach((row) => {
+    const key = `${row.companyId}:${row.employeeEmail.toLowerCase()}:${row.bookingDate}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  });
+
+  return [...groups.values()].map((group) => {
+    const current = [...group].sort((a, b) => {
+      const status = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
+      if (status !== 0) return status;
+      return timeOf(b) - timeOf(a);
+    })[0];
+    const history = [...group].sort((a, b) => timeOf(a) - timeOf(b));
+    return { ...current, history };
+  });
+}
 
 /**
  * Booking roster for the admin dashboards — who booked, for what date, its status and slot.
@@ -37,11 +80,13 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   useEffect(() => setPage(1), [date]);
 
   const companies = useActiveCompanies();
+  // Fetch the whole filtered set in one page (up to the server cap). Grouping a server-sliced page
+  // would split a person's rows for a date across page boundaries (incomplete history + a count that
+  // mixes per-page and global totals); pagination below runs over the GROUPS instead, client-side.
   const bookings = useAdminBookings({
     date: date || undefined,
     companyId: showCompany ? companyId || undefined : undefined,
-    page,
-    pageSize: PAGE_SIZE,
+    pageSize: FETCH_SIZE,
   });
 
   const companyOptions: SelectOption[] = [
@@ -49,18 +94,29 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     ...(companies.data ?? []).map((c) => ({ value: c.id, label: c.name })),
   ];
 
-  const columns: Column<AdminBooking>[] = [
+  const allGroups = groupBookingHistory(bookings.data?.items ?? []);
+
+  const columns: Column<BookingListRow>[] = [
     ...(showCompany
-      ? [{ key: 'company', header: 'Company', render: (b: AdminBooking) => b.companyName }]
+      ? [{ key: 'company', header: 'Company', render: (b: BookingListRow) => b.companyName }]
       : []),
     { key: 'employee', header: 'Employee', render: (b) => (
       <div>
         <div className="font-medium">{b.employeeName}</div>
         <div className="text-xs text-text-muted">{b.employeeEmail}</div>
+        {b.history.length > 1 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {b.history.map((h) => (
+              <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
+                {displayTypeLabel(h)} {h.status}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     ) },
     { key: 'date', header: 'Date', className: 'tabular-nums', render: (b) => b.bookingDate },
-    { key: 'type', header: 'Type', render: (b) => <Badge tone="neutral">{b.bookingType}</Badge> },
+    { key: 'type', header: 'Type', render: (b) => <Badge tone="neutral">{displayTypeLabel(b)}</Badge> },
     { key: 'status', header: 'Status', render: (b) => <Badge tone={STATUS_TONE[b.status]}>{b.status}</Badge> },
     // Show the allocation score for every request — not only allocated ones — so admins
     // can see how waitlisted/unallocated bookings scored ('—' before scoring runs).
@@ -68,9 +124,17 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     { key: 'slot', header: 'Slot', align: 'right', className: 'tabular-nums', render: (b) => b.allocatedSlotNumber ?? '—' },
   ];
 
-  const meta = bookings.data?.meta;
-  const total = meta?.total ?? 0;
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalBookings = bookings.data?.meta.total ?? 0;
+  const fetchedCount = bookings.data?.items.length ?? 0;
+  const truncated = totalBookings > fetchedCount; // more rows exist than a single fetch returned
+  const lastPage = Math.max(1, Math.ceil(allGroups.length / PAGE_SIZE));
+  const pageGroups = allGroups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // If groups shrink (filter change / refetch) and the current page is now past the end, step back
+  // onto the last real page so the user isn't stranded on an empty view.
+  useEffect(() => {
+    if (bookings.data && page > lastPage) setPage(lastPage);
+  }, [bookings.data, page, lastPage]);
 
   // Reset to page 1 whenever a filter changes (avoids landing on an out-of-range page).
   function onCompany(v: string) { setCompanyId(v); setPage(1); }
@@ -94,13 +158,19 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         <LoadingState label="Loading bookings…" />
       ) : bookings.isError ? (
         <ErrorState title="Couldn't load bookings" />
-      ) : !bookings.data || bookings.data.items.length === 0 ? (
+      ) : !bookings.data || allGroups.length === 0 ? (
         <EmptyState title="No bookings" description={date ? `No bookings for ${date}.` : 'No bookings yet.'} />
       ) : (
         <>
-          <Table columns={columns} rows={bookings.data.items} rowKey={(b) => b.id} className="mt-4" />
+          <Table columns={columns} rows={pageGroups} rowKey={(b) => b.id} className="mt-4" />
           <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
-            <span>{total} booking{total === 1 ? '' : 's'}</span>
+            <span>
+              {truncated
+                ? `Showing the first ${fetchedCount} of ${totalBookings} bookings`
+                : allGroups.length === totalBookings
+                  ? `${totalBookings} booking${totalBookings === 1 ? '' : 's'}`
+                  : `${allGroups.length} ${allGroups.length === 1 ? 'person' : 'people'} · ${totalBookings} bookings`}
+            </span>
             {lastPage > 1 && (
               <div className="flex items-center gap-3">
                 <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>

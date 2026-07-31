@@ -2,6 +2,7 @@ import { act, render, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
+import { queryClient } from '../api/queryClient';
 import { server } from '../mocks/node';
 import { AuthProvider, useAuth, type AuthSession } from './auth';
 
@@ -85,6 +86,20 @@ describe('AuthProvider', () => {
     expect(seen).toBe('Bearer tok');
   });
 
+  it('clears the query cache on login and on logout (prevents cross-user data bleed)', () => {
+    // Keys like ['dashboard','user'] and ['me'] aren't scoped to the signed-in user, so a stale
+    // entry from a prior session must not survive into the next one.
+    queryClient.setQueryData(['dashboard', 'user'], { stale: 'prev-user' });
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    act(() => result.current.login(session));
+    expect(queryClient.getQueryData(['dashboard', 'user'])).toBeUndefined();
+
+    queryClient.setQueryData(['me'], { id: 'prev' });
+    act(() => result.current.logout());
+    expect(queryClient.getQueryData(['me'])).toBeUndefined();
+  });
+
   it('proactively refreshes the access token just before it expires (no reactive 401 needed)', async () => {
     vi.useFakeTimers();
     try {
@@ -106,11 +121,14 @@ describe('AuthProvider', () => {
           <AuthProvider initialSession={{ ...session, accessToken: makeJwt(exp) }}>{children}</AuthProvider>
         ),
       });
+      // A silent refresh is the SAME user — its cached data must NOT be wiped (only login/logout clear).
+      queryClient.setQueryData(['me'], { id: 'same-user' });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(31_000);
       });
       expect(refreshCalls).toBe(1);
       expect(result.current.isAuthenticated).toBe(true); // rotated silently — still signed in
+      expect(queryClient.getQueryData(['me'])).toEqual({ id: 'same-user' }); // cache preserved across refresh
     } finally {
       vi.useRealTimers();
     }

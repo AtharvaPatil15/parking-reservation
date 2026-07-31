@@ -22,6 +22,27 @@ export async function createSlot(input: {
   hasEvCharging?: boolean;
   isAccessible?: boolean;
 }) {
+  // The @@unique([parkingAreaId, slotNumber]) constraint spans soft-deleted rows, so re-adding a
+  // number that was deleted earlier would 409 against the dead row. Revive that row instead — it's
+  // the same physical slot coming back into service — and refresh createdAt so it resurfaces at the
+  // top of the newest-first list, exactly as a brand-new slot would.
+  const dead = await prisma.parkingSlot.findFirst({
+    where: { parkingAreaId: input.parkingAreaId, slotNumber: input.slotNumber, deletedAt: { not: null } },
+  });
+  if (dead) {
+    return prisma.parkingSlot.update({
+      where: { id: dead.id },
+      data: {
+        deletedAt: null,
+        status: 'AVAILABLE',
+        slotType: input.slotType ?? 'STANDARD',
+        hasEvCharging: input.hasEvCharging ?? false,
+        isAccessible: input.isAccessible ?? false,
+        createdAt: new Date(),
+      },
+    });
+  }
+
   try {
     return await prisma.parkingSlot.create({ data: input });
   } catch (err) {
