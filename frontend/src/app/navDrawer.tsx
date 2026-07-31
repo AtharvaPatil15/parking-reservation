@@ -34,10 +34,8 @@ export function useNavDrawerItems() {
 /** Registers a role shell's nav items for the duration it's mounted. */
 export function useRegisterNavDrawerItems(items: NavDrawerItem[]) {
   const { setItems } = useNavDrawerContext();
-  const key = items.map((item) => `${item.to}:${item.label}`).join('|');
   useEffect(() => {
     setItems(items);
     return () => setItems([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [items, setItems]);
 }
