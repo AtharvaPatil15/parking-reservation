@@ -6,6 +6,7 @@ import {
   registerUnauthorizedHandler,
   setAccessToken,
 } from '../api/client';
+import { queryClient } from '../api/queryClient';
 import type { Role } from './roles';
 
 // Refresh this long before the access token's `exp` so a request never races an expired token.
@@ -100,10 +101,13 @@ export function AuthProvider({
   });
 
   // Set the client token synchronously so the first authenticated request after login
-  // (e.g. the dashboard fetch) carries Authorization — the mirroring effect below runs
+  // (e.g. the dashboard fetch) carries Authorization - the mirroring effect below runs
   // child-first, i.e. after the destination page's data-fetch effect, which would race.
   // Persist to sessionStorage so a page refresh restores the session.
   const login = useCallback((next: AuthSession) => {
+    // User-scoped query keys are not all keyed by identity, so clear prior user's data before
+    // the next session's first fetch. Silent token refresh deliberately preserves cache.
+    queryClient.clear();
     setAccessToken(next.accessToken);
     writeStoredSession(next);
     setSession(next);
@@ -114,6 +118,7 @@ export function AuthProvider({
     clearSession();
     writeStoredSession(null);
     setSession(null);
+    queryClient.clear();
   }, []);
 
   const value = useMemo<AuthContextValue>(

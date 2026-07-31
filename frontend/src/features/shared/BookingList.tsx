@@ -8,7 +8,6 @@ import type { components } from '../../api/types';
 
 type AdminBooking = components['schemas']['AdminBooking'];
 type BookingStatus = components['schemas']['BookingStatus'];
-type BookingListRow = AdminBooking & { history: AdminBooking[] };
 
 const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
   DRAFT: 'neutral',
@@ -23,45 +22,12 @@ const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
 
 const PAGE_SIZE = 20;
 
-const STATUS_PRIORITY: Record<BookingStatus, number> = {
-  ALLOCATED: 0,
-  WAITLISTED: 1,
-  SUBMITTED: 2,
-  DRAFT: 3,
-  RELEASED: 4,
-  EXPIRED: 5,
-  CANCELLED: 6,
-  REJECTED: 7,
-};
-
-function timeOf(row: AdminBooking) {
-  return Date.parse(row.createdAt ?? row.submittedAt ?? '') || 0;
-}
-
 function displayType(row: AdminBooking) {
   return row.status === 'ALLOCATED' && row.allocationSource ? row.allocationSource : row.bookingType;
 }
 
 function displayTypeLabel(row: AdminBooking) {
   return displayType(row).replace('_', ' ');
-}
-
-function groupBookingHistory(rows: AdminBooking[]): BookingListRow[] {
-  const groups = new Map<string, AdminBooking[]>();
-  rows.forEach((row) => {
-    const key = `${row.companyId}:${row.employeeEmail.toLowerCase()}:${row.bookingDate}`;
-    groups.set(key, [...(groups.get(key) ?? []), row]);
-  });
-
-  return [...groups.values()].map((group) => {
-    const current = [...group].sort((a, b) => {
-      const status = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
-      if (status !== 0) return status;
-      return timeOf(b) - timeOf(a);
-    })[0];
-    const history = [...group].sort((a, b) => timeOf(a) - timeOf(b));
-    return { ...current, history };
-  });
 }
 
 /**
@@ -91,17 +57,17 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     ...(companies.data ?? []).map((c) => ({ value: c.id, label: c.name })),
   ];
 
-  const rows = groupBookingHistory(bookings.data?.items ?? []);
+  const rows = bookings.data?.items ?? [];
 
-  const columns: Column<BookingListRow>[] = [
+  const columns: Column<AdminBooking>[] = [
     ...(showCompany
-      ? [{ key: 'company', header: 'Company', render: (b: BookingListRow) => b.companyName }]
+      ? [{ key: 'company', header: 'Company', render: (b: AdminBooking) => b.companyName }]
       : []),
     { key: 'employee', header: 'Employee', render: (b) => (
       <div>
         <div className="font-medium">{b.employeeName}</div>
         <div className="text-xs text-text-muted">{b.employeeEmail}</div>
-        {b.history.length > 1 && (
+        {b.history && b.history.length > 1 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {b.history.map((h) => (
               <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
@@ -124,7 +90,6 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   const meta = bookings.data?.meta;
   const total = meta?.total ?? 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const visibleCount = rows.length;
 
   // Reset to page 1 whenever a filter changes (avoids landing on an out-of-range page).
   function onCompany(v: string) { setCompanyId(v); setPage(1); }
@@ -154,11 +119,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         <>
           <Table columns={columns} rows={rows} rowKey={(b) => b.id} className="mt-4" />
           <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
-            <span>
-              {visibleCount === total
-                ? `${total} booking${total === 1 ? '' : 's'}`
-                : `${visibleCount} people / ${total} bookings`}
-            </span>
+            <span>{total} booking{total === 1 ? '' : 's'}</span>
             {lastPage > 1 && (
               <div className="flex items-center gap-3">
                 <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>

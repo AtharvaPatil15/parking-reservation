@@ -3,6 +3,7 @@ import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { runPrimaryAllocation } from '../src/modules/allocation/allocation.service';
+import { invalidateConfig } from '../src/config/systemConfig';
 import { API, bearer, login, resetTransactional, futureBookableDate } from './integration/helpers';
 
 /**
@@ -186,6 +187,43 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(row.allocationSource).toBe('RELEASED_SLOT');
   });
 
+  it('updates the promoted booking score breakdown to the release-time score', async () => {
+    await capAssentQuotaTo(1);
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
+
+    const holder = await seedBooking(aditi.id, assentId, 30);
+    const waiting = await seedBooking(rahul.id, assentId, 10);
+    await runPrimaryAllocation(DATE);
+    expect(await statusOf(waiting.id)).toBe('WAITLISTED');
+
+    const originalMaxDistance = await prisma.systemConfiguration.findUniqueOrThrow({
+      where: { key: 'allocation.maxDistanceKm' },
+    });
+    try {
+      await prisma.systemConfiguration.update({
+        where: { key: 'allocation.maxDistanceKm' },
+        data: { value: '20' },
+      });
+      invalidateConfig();
+
+      const token = await login('aditi@assent.example');
+      await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
+
+      const admin = await login('superadmin@redbricks.example');
+      const detail = await request(app).get(`${API}/bookings/${waiting.id}`).set(bearer(admin)).expect(200);
+      expect(detail.body.data.allocationScore).toBe(30);
+      expect(detail.body.data.scoreBreakdown.finalScore).toBe(30);
+      expect(detail.body.data.scoreBreakdown.distanceScore).toBe(50);
+    } finally {
+      await prisma.systemConfiguration.update({
+        where: { key: 'allocation.maxDistanceKm' },
+        data: { value: originalMaxDistance.value },
+      });
+      invalidateConfig();
+    }
+  });
+
   it('prefers a lower-scoring OWN-company waitlister over a higher-scoring other company', async () => {
     await capAssentQuotaTo(1);
     const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
@@ -317,6 +355,12 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(await allocationCountForUser(otherUserId)).toBe(1);
     const alloc = await prisma.parkingAllocation.findUniqueOrThrow({ where: { bookingRequestId: otherCommonPool.id } });
     expect(alloc.allocationType).toBe('COMMON_POOL');
+
+    const admin = await login('superadmin@redbricks.example');
+    const list = await request(app).get(`${API}/bookings`).query({ date: DATE, pageSize: 100 }).set(bearer(admin)).expect(200);
+    const rows = list.body.data.filter((b: { employeeEmail: string }) => b.employeeEmail === OTHER_USER_EMAIL);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].history).toHaveLength(2);
   });
 
   it('leaves the slot free when nobody is waitlisted', async () => {

@@ -25,6 +25,16 @@ const DEFAULT_MAX_PEOPLE = 4;
 const DEFAULT_DISTANCE_WEIGHT = 0.6;
 const DEFAULT_CARPOOL_WEIGHT = 0.4;
 const DEFAULT_MAX_DISTANCE_KM = 40;
+const STATUS_PRIORITY: Record<string, number> = {
+  ALLOCATED: 0,
+  WAITLISTED: 1,
+  SUBMITTED: 2,
+  DRAFT: 3,
+  RELEASED: 4,
+  EXPIRED: 5,
+  CANCELLED: 6,
+  REJECTED: 7,
+};
 
 /** Authenticated principal (matches req.user). */
 export interface Principal {
@@ -33,9 +43,41 @@ export interface Principal {
   companyId: string;
 }
 
+type AdminBookingRow = Prisma.BookingRequestGetPayload<{
+  include: {
+    user: { select: { fullName: true; email: true } };
+    company: { select: { name: true } };
+    allocation: { include: { slot: { select: { slotNumber: true } } } };
+  };
+}>;
+
 const fail = (field: string, message: string): never => {
   throw new ValidationError('Request validation failed', [{ field, message }]);
 };
+
+const groupKey = (b: AdminBookingRow) => `${b.companyId}:${b.user.email.toLowerCase()}:${b.bookingDate.toISOString().slice(0, 10)}`;
+const rowTime = (b: AdminBookingRow) => (b.createdAt ?? b.submittedAt ?? new Date(0)).getTime();
+const currentHistoryRow = (rows: AdminBookingRow[]) =>
+  [...rows].sort((a, b) => {
+    const status = (STATUS_PRIORITY[a.status] ?? 99) - (STATUS_PRIORITY[b.status] ?? 99);
+    if (status !== 0) return status;
+    return rowTime(b) - rowTime(a);
+  })[0];
+
+async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, { isolationLevel: 'Serializable', timeout: 30_000 });
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034' || attempt === maxAttempts) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 /**
  * Create a submitted PRIMARY booking for the current user (P4-12).
@@ -304,7 +346,6 @@ export async function releaseBooking(
   }
 
   const { bookingDate, companyId: releasingCompanyId } = booking;
-  const freedSlotId = booking.allocation.slotId;
 
   const [dw, cw, maxD, maxP] = await Promise.all([
     getNumber('allocation.distanceWeight'),
@@ -315,10 +356,21 @@ export async function releaseBooking(
   const weights = { distanceWeight: dw ?? DEFAULT_DISTANCE_WEIGHT, carpoolWeight: cw ?? DEFAULT_CARPOOL_WEIGHT };
   const caps = { maxDistanceKm: maxD ?? DEFAULT_MAX_DISTANCE_KM, maxPeople: maxP ?? DEFAULT_MAX_PEOPLE };
 
-  await prisma.$transaction(
-    async (tx) => {
+  await withSerializableRetry(async (tx) => {
+      const liveBooking = await tx.bookingRequest.findUnique({
+        where: { id: bookingId },
+        include: { allocation: true },
+      });
+      if (!liveBooking || liveBooking.status !== 'ALLOCATED' || !liveBooking.allocation) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
+      const freedSlotId = liveBooking.allocation.slotId;
+
       // 1. Free the slot: drop the allocation and mark the request RELEASED.
-      await tx.parkingAllocation.delete({ where: { bookingRequestId: bookingId } });
+      const deletedAllocation = await tx.parkingAllocation.deleteMany({ where: { bookingRequestId: bookingId } });
+      if (deletedAllocation.count !== 1) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
       await tx.bookingRequest.update({
         where: { id: bookingId },
         data: {
@@ -435,6 +487,38 @@ export async function releaseBooking(
           allocationTime: now,
         },
       });
+      const existingBreakdown = await tx.allocationScoreBreakdown.findUnique({
+        where: { bookingRequestId: winner.bookingId },
+        select: { id: true, tieBreakerData: true },
+      });
+      if (existingBreakdown) {
+        await tx.allocationScoreBreakdown.update({
+          where: { id: existingBreakdown.id },
+          data: {
+            distanceScore: winner.breakdown.distanceScore,
+            carpoolScore: winner.breakdown.carpoolScore,
+            distanceWeight: winner.breakdown.distanceWeight,
+            carpoolWeight: winner.breakdown.carpoolWeight,
+            finalScore: winner.breakdown.finalScore,
+            travellerCount: winner.people,
+            tieBreakerData: {
+              ...(typeof existingBreakdown.tieBreakerData === 'object' && existingBreakdown.tieBreakerData !== null
+                ? existingBreakdown.tieBreakerData
+                : {}),
+              releaseReallocation: {
+                sourceBookingId: bookingId,
+                slotId: freedSlotId,
+                bookingType: winner.bookingType,
+                people: winner.people,
+                distanceKm: winner.distanceKm,
+                submittedAt: (winner.submittedAt instanceof Date ? winner.submittedAt : new Date(winner.submittedAt)).toISOString(),
+                allocationsPrev30d: winner.allocationsPrev30d,
+                computedAt: now.toISOString(),
+              },
+            },
+          },
+        });
+      }
       const superseded = await tx.bookingRequest.updateMany({
         where: {
           bookingDate,
@@ -465,9 +549,7 @@ export async function releaseBooking(
           },
         }),
       });
-    },
-    { isolationLevel: 'Serializable', timeout: 30_000 },
-  );
+    });
 
   return getBookingForPrincipal(principal, bookingId);
 }
@@ -509,19 +591,34 @@ export async function listBookings(principal: Principal, filter: ListBookingsQue
   if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
   if (filter.status) where.status = filter.status;
 
-  const [rows, total] = await Promise.all([
-    prisma.bookingRequest.findMany({
-      where,
-      include: {
-        user: { select: { fullName: true, email: true } },
-        company: { select: { name: true } },
-        allocation: { include: { slot: { select: { slotNumber: true } } } },
-      },
-      orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
-      skip: page.skip,
-      take: page.take,
-    }),
-    prisma.bookingRequest.count({ where }),
-  ]);
-  return { rows, total };
+  const rows = await prisma.bookingRequest.findMany({
+    where,
+    include: {
+      user: { select: { fullName: true, email: true } },
+      company: { select: { name: true } },
+      allocation: { include: { slot: { select: { slotNumber: true } } } },
+    },
+    orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const grouped = new Map<string, AdminBookingRow[]>();
+  for (const row of rows) {
+    grouped.set(groupKey(row), [...(grouped.get(groupKey(row)) ?? []), row]);
+  }
+
+  const bookingGroups = [...grouped.values()]
+    .map((history) => {
+      const current = currentHistoryRow(history);
+      return {
+        ...current,
+        history: [...history].sort((a, b) => rowTime(a) - rowTime(b)),
+      };
+    })
+    .sort((a, b) => {
+      const date = b.bookingDate.getTime() - a.bookingDate.getTime();
+      if (date !== 0) return date;
+      return rowTime(b) - rowTime(a);
+    });
+
+  return { rows: bookingGroups.slice(page.skip, page.skip + page.take), total: bookingGroups.length };
 }
