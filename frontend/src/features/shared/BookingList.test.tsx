@@ -22,4 +22,14 @@ describe('BookingList (admin roster)', () => {
     // An allocated row shows its score too.
     expect(screen.getByText('47.2')).toBeInTheDocument();
   });
+
+  it('shows release-promoted seats as released-slot allocations, not primary allocations', async () => {
+    renderList();
+
+    expect(await screen.findByText('D User')).toBeInTheDocument();
+    expect(screen.getAllByText('RELEASED SLOT').length).toBeGreaterThan(0);
+    expect(screen.getByText('RELEASED SLOT ALLOCATED')).toBeInTheDocument();
+    expect(screen.getByText('COMMON POOL WAITLISTED')).toBeInTheDocument();
+    expect(screen.queryByText('PRIMARY ALLOCATED')).not.toBeInTheDocument();
+  });
 });

@@ -1068,6 +1068,8 @@ export interface components {
             /** Format: date */
             bookingDate: string;
             bookingType: components["schemas"]["BookingType"];
+            /** @description Actual source of the allocated seat; null when no seat is assigned. */
+            allocationSource: "PRIMARY" | "COMMON_POOL" | "RELEASED_SLOT" | "MANUAL_OVERRIDE" | null;
             status: components["schemas"]["BookingStatus"];
             employeeName: string;
             /** Format: email */
