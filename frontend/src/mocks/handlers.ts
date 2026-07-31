@@ -153,13 +153,26 @@ function seedAdminBookings(): AdminBooking[] {
     bookingDate: string, status: AdminBooking['status'], slot: string | null, distance: number, people: number, score: number | null,
   ): AdminBooking => ({
     id, bookingDate, bookingType: 'PRIMARY', status, employeeName, employeeEmail, companyId, companyName,
+    allocationSource: status === 'ALLOCATED' ? 'PRIMARY' : null,
     travelDistanceKm: distance, carpoolPeople: people, allocationScore: score, allocatedSlotNumber: slot,
     submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
   });
+  const dPrimary = {
+    ...row('ab-5-primary', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-14', 1.5, 1, 1.5),
+    allocationSource: 'RELEASED_SLOT' as const,
+  };
+  const dCommonPool = {
+    ...row('ab-5-cp', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 1.5, 1, 1.5),
+    bookingType: 'COMMON_POOL' as const,
+  };
   return [
     row('ab-1', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
     row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
     row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
+    {
+      ...dPrimary,
+      history: [dPrimary, dCommonPool],
+    },
     row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
   ];
 }

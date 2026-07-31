@@ -1068,6 +1068,8 @@ export interface components {
             /** Format: date */
             bookingDate: string;
             bookingType: components["schemas"]["BookingType"];
+            /** @description Actual source of the allocated seat; null when no seat is assigned. */
+            allocationSource: "PRIMARY" | "COMMON_POOL" | "RELEASED_SLOT" | "MANUAL_OVERRIDE" | null;
             status: components["schemas"]["BookingStatus"];
             employeeName: string;
             /** Format: email */
@@ -1084,6 +1086,8 @@ export interface components {
             submittedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Same employee/date booking lifecycle rows, grouped before pagination. */
+            history?: components["schemas"]["AdminBooking"][];
         };
         /** @description One allocated seat and who holds it for the date (primary or common pool). */
         AllocationRosterItem: {

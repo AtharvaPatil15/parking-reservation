@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { API, bearer, login, resetTransactional } from './integration/helpers';
+import { API, bearer, login, resetTransactional, futureBookableDate } from './integration/helpers';
 
 /**
  * P4-19 — backend integration tests (Supertest + throwaway Postgres, provisioned by
@@ -10,7 +10,8 @@ import { API, bearer, login, resetTransactional } from './integration/helpers';
  * concurrency, and tenant isolation on booking reads.
  */
 
-const DATE = '2026-07-31'; // Friday; seeded quota (8) is effective for it.
+// Computed forward so the primary window is always open; seeded quota (8) is effective from today.
+const DATE = futureBookableDate();
 const dateUtc = new Date(`${DATE}T00:00:00.000Z`);
 
 beforeEach(async () => {

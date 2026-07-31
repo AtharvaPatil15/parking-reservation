@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
@@ -38,5 +38,18 @@ describe('Companies', () => {
     await userEvent.click(screen.getAllByRole('button', { name: /manage quota/i })[0]);
     expect(await screen.findByText(/^quota —/i)).toBeInTheDocument();
     expect(await screen.findByText(/20 slots/i)).toBeInTheDocument();
+  });
+
+  it('closes the quota dialog after setting a quota (no manual close needed)', async () => {
+    renderCompanies();
+    await screen.findByText('Mock Co');
+    await userEvent.click(screen.getAllByRole('button', { name: /manage quota/i })[0]);
+    expect(await screen.findByText(/^quota —/i)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/^slots$/i), '30');
+    await userEvent.click(screen.getByRole('button', { name: /set quota/i }));
+
+    // On success the dialog closes on its own; the invalidated summary refreshes the table behind it.
+    await waitFor(() => expect(screen.queryByText(/^quota —/i)).not.toBeInTheDocument());
   });
 });

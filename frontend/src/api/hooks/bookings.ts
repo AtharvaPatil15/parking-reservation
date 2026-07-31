@@ -89,6 +89,7 @@ export function useReleaseBooking() {
       qc.invalidateQueries({ queryKey: queryKeys.booking(id) });
       qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
       qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
     },
   });
 }

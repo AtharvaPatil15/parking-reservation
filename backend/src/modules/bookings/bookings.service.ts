@@ -7,12 +7,34 @@ import {
   isBookableWeekday,
   isBeforePrimaryCutoff,
   parseCalendarDate,
+  currentIstCalendarDate,
 } from './bookings.time';
+import { score, rankCandidates } from '../allocation/score';
+import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
-import type { CreateBookingInput, UpdateBookingInput, ListBookingsQuery } from './bookings.schema';
+import type {
+  CreateBookingInput,
+  UpdateBookingInput,
+  ListBookingsQuery,
+  ReleaseBookingInput,
+} from './bookings.schema';
 
 const DEFAULT_PRIMARY_CUTOFF = '18:00';
 const DEFAULT_MAX_PEOPLE = 4;
+// Mirror the allocation run's fallbacks so a release scores identically to the run (decisions §3).
+const DEFAULT_DISTANCE_WEIGHT = 0.6;
+const DEFAULT_CARPOOL_WEIGHT = 0.4;
+const DEFAULT_MAX_DISTANCE_KM = 40;
+const STATUS_PRIORITY: Record<string, number> = {
+  ALLOCATED: 0,
+  WAITLISTED: 1,
+  SUBMITTED: 2,
+  DRAFT: 3,
+  RELEASED: 4,
+  EXPIRED: 5,
+  CANCELLED: 6,
+  REJECTED: 7,
+};
 
 /** Authenticated principal (matches req.user). */
 export interface Principal {
@@ -21,9 +43,41 @@ export interface Principal {
   companyId: string;
 }
 
+type AdminBookingRow = Prisma.BookingRequestGetPayload<{
+  include: {
+    user: { select: { fullName: true; email: true } };
+    company: { select: { name: true } };
+    allocation: { include: { slot: { select: { slotNumber: true } } } };
+  };
+}>;
+
 const fail = (field: string, message: string): never => {
   throw new ValidationError('Request validation failed', [{ field, message }]);
 };
+
+const groupKey = (b: AdminBookingRow) => `${b.companyId}:${b.user.email.toLowerCase()}:${b.bookingDate.toISOString().slice(0, 10)}`;
+const rowTime = (b: AdminBookingRow) => (b.createdAt ?? b.submittedAt ?? new Date(0)).getTime();
+const currentHistoryRow = (rows: AdminBookingRow[]) =>
+  [...rows].sort((a, b) => {
+    const status = (STATUS_PRIORITY[a.status] ?? 99) - (STATUS_PRIORITY[b.status] ?? 99);
+    if (status !== 0) return status;
+    return rowTime(b) - rowTime(a);
+  })[0];
+
+async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, { isolationLevel: 'Serializable', timeout: 30_000 });
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034' || attempt === maxAttempts) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 /**
  * Create a submitted PRIMARY booking for the current user (P4-12).
@@ -252,6 +306,255 @@ export async function updateBooking(
 }
 
 /**
+ * Release an allocated slot and immediately hand it to the best waitlisted candidate (F3).
+ *
+ * Cascade (spec §F3, refined): the freed slot is offered to the *releasing user's own company*
+ * waitlist first — own-company waitlisters get right of first refusal regardless of score, because
+ * the slot came out of that company's quota. Only if nobody from that company is waitlisted does the
+ * slot cross the company boundary, and then it goes to the highest-ranked waitlisted request across
+ * all other companies (same scoring + tie-breakers as the allocation run). If nobody is waitlisted
+ * at all, the slot simply becomes free and the common-pool run will pick it up.
+ *
+ * The whole thing is one SERIALIZABLE transaction: the old allocation row is deleted and the new one
+ * created together, so the unique (slotId, bookingDate) constraint can never see a double-booking,
+ * and a concurrent release can't hand the same slot to two people.
+ */
+export async function releaseBooking(
+  principal: Principal,
+  bookingId: string,
+  input: ReleaseBookingInput = {},
+  now: Date = new Date(),
+) {
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id: bookingId },
+    include: { allocation: true },
+  });
+  // Hide existence from non-owners (consistent with GET/PATCH) — 404, not 403.
+  if (!booking) throw new NotFoundError('Booking not found');
+  if (principal.role === 'USER' && booking.userId !== principal.id) {
+    throw new NotFoundError('Booking not found');
+  }
+  if (principal.role === 'COMPANY_ADMIN' && booking.companyId !== principal.companyId) {
+    throw new NotFoundError('Booking not found');
+  }
+  if (booking.status !== 'ALLOCATED' || !booking.allocation) {
+    throw new ConflictError('Only an allocated booking can be released');
+  }
+  // A past date is already spent — there is nothing left to reallocate (KI-1).
+  if (booking.bookingDate.getTime() < currentIstCalendarDate(now).getTime()) {
+    throw new ConflictError('This booking date has passed and can no longer be released');
+  }
+
+  const { bookingDate, companyId: releasingCompanyId } = booking;
+
+  const [dw, cw, maxD, maxP] = await Promise.all([
+    getNumber('allocation.distanceWeight'),
+    getNumber('allocation.carpoolWeight'),
+    getNumber('allocation.maxDistanceKm'),
+    getNumber('carpool.maxPeople'),
+  ]);
+  const weights = { distanceWeight: dw ?? DEFAULT_DISTANCE_WEIGHT, carpoolWeight: cw ?? DEFAULT_CARPOOL_WEIGHT };
+  const caps = { maxDistanceKm: maxD ?? DEFAULT_MAX_DISTANCE_KM, maxPeople: maxP ?? DEFAULT_MAX_PEOPLE };
+
+  await withSerializableRetry(async (tx) => {
+      const liveBooking = await tx.bookingRequest.findUnique({
+        where: { id: bookingId },
+        include: { allocation: true },
+      });
+      if (!liveBooking || liveBooking.status !== 'ALLOCATED' || !liveBooking.allocation) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
+      const freedSlotId = liveBooking.allocation.slotId;
+
+      // 1. Free the slot: drop the allocation and mark the request RELEASED.
+      const deletedAllocation = await tx.parkingAllocation.deleteMany({ where: { bookingRequestId: bookingId } });
+      if (deletedAllocation.count !== 1) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
+      await tx.bookingRequest.update({
+        where: { id: bookingId },
+        data: {
+          status: 'RELEASED',
+          cancellationTime: now,
+          cancellationReason: input.reason ?? null,
+        },
+      });
+
+      // 2. Candidate pool: everyone still waitlisted for this date (either booking type),
+      // excluding users who already hold another allocation for the same day.
+      const allocatedUserIds = (
+        await tx.parkingAllocation.findMany({
+          where: { bookingDate },
+          select: { bookingRequest: { select: { userId: true } } },
+        })
+      ).map((a) => a.bookingRequest.userId);
+      const allocatedUserIdSet = [...new Set(allocatedUserIds)];
+      if (allocatedUserIdSet.length) {
+        await tx.bookingRequest.updateMany({
+          where: { bookingDate, status: 'WAITLISTED', userId: { in: allocatedUserIdSet } },
+          data: {
+            status: 'EXPIRED',
+            cancellationReason: 'Superseded by same-day allocation',
+          },
+        });
+      }
+      const waitlisted = await tx.bookingRequest.findMany({
+        where: {
+          bookingDate,
+          status: 'WAITLISTED',
+          id: { not: bookingId },
+          ...(allocatedUserIdSet.length ? { userId: { notIn: allocatedUserIdSet } } : {}),
+        },
+        include: { carpoolMembers: { where: { isScored: true }, select: { id: true } } },
+      });
+
+      // 3. Own-company first refusal; only if that tier is empty do we look cross-company.
+      const ownCompany = waitlisted.filter((w) => w.companyId === releasingCompanyId);
+      const rawTier = ownCompany.length > 0 ? ownCompany : waitlisted;
+      const preferredBookingType = ownCompany.length > 0 ? 'PRIMARY' : 'COMMON_POOL';
+      const tierByUser = new Map<string, (typeof rawTier)[number]>();
+      for (const w of rawTier) {
+        const existing = tierByUser.get(w.userId);
+        if (!existing || (existing.bookingType !== preferredBookingType && w.bookingType === preferredBookingType)) {
+          tierByUser.set(w.userId, w);
+        }
+      }
+      const tier = [...tierByUser.values()];
+      if (tier.length === 0) {
+        await tx.auditLog.create({
+          data: buildAuditData({
+            actionType: 'BOOKING_RELEASED',
+            entityType: 'BookingRequest',
+            entityId: bookingId,
+            oldValue: { status: 'ALLOCATED', slotId: freedSlotId },
+            newValue: { status: 'RELEASED', reallocatedTo: null, reason: input.reason ?? null },
+          }),
+        });
+        return;
+      }
+
+      // 4. Rank the chosen tier exactly as the allocation run does (score → tie-breakers 1–5).
+      const d30 = new Date(bookingDate);
+      d30.setUTCDate(d30.getUTCDate() - 30);
+      const prev30 = new Map<string, number>();
+      for (const userId of new Set(tier.map((w) => w.userId))) {
+        prev30.set(
+          userId,
+          await tx.parkingAllocation.count({
+            where: { bookingDate: { gte: d30, lt: bookingDate }, bookingRequest: { userId } },
+          }),
+        );
+      }
+
+      const candidates = tier.map((w) => {
+        // PRIMARY rows score only validated same-company members; COMMON_POOL rows carry that snapshot.
+        const scoredMemberCount = w.bookingType === 'PRIMARY' ? w.carpoolMembers.length : w.carpoolMemberCount;
+        const people = 1 + scoredMemberCount;
+        const distanceKm = w.travelDistanceKm != null ? Number(w.travelDistanceKm) : 0;
+        const breakdown = score({ distanceKm, people }, weights, caps);
+        return {
+          bookingId: w.id,
+          userId: w.userId,
+          companyId: w.companyId,
+          bookingType: w.bookingType,
+          breakdown,
+          finalScore: breakdown.finalScore,
+          people,
+          distanceKm,
+          submittedAt: w.submittedAt ?? w.createdAt,
+          allocationsPrev30d: prev30.get(w.userId) ?? 0,
+        };
+      });
+
+      const winner = rankCandidates(candidates)[0].candidate;
+
+      // 5. Hand the freed slot over. Staying inside the company keeps it a PRIMARY allocation;
+      //    crossing a company boundary makes it a COMMON_POOL one (the slot left its quota).
+      await tx.parkingAllocation.create({
+        data: {
+          bookingRequestId: winner.bookingId,
+          slotId: freedSlotId,
+          bookingDate,
+          companyId: winner.companyId,
+          allocationType: winner.companyId === releasingCompanyId ? 'PRIMARY' : 'COMMON_POOL',
+        },
+      });
+      await tx.bookingRequest.update({
+        where: { id: winner.bookingId },
+        data: {
+          status: 'ALLOCATED',
+          allocationScore: winner.breakdown.finalScore,
+          allocationTime: now,
+        },
+      });
+      const existingBreakdown = await tx.allocationScoreBreakdown.findUnique({
+        where: { bookingRequestId: winner.bookingId },
+        select: { id: true, tieBreakerData: true },
+      });
+      if (existingBreakdown) {
+        await tx.allocationScoreBreakdown.update({
+          where: { id: existingBreakdown.id },
+          data: {
+            distanceScore: winner.breakdown.distanceScore,
+            carpoolScore: winner.breakdown.carpoolScore,
+            distanceWeight: winner.breakdown.distanceWeight,
+            carpoolWeight: winner.breakdown.carpoolWeight,
+            finalScore: winner.breakdown.finalScore,
+            travellerCount: winner.people,
+            tieBreakerData: {
+              ...(typeof existingBreakdown.tieBreakerData === 'object' && existingBreakdown.tieBreakerData !== null
+                ? existingBreakdown.tieBreakerData
+                : {}),
+              releaseReallocation: {
+                sourceBookingId: bookingId,
+                slotId: freedSlotId,
+                bookingType: winner.bookingType,
+                people: winner.people,
+                distanceKm: winner.distanceKm,
+                submittedAt: (winner.submittedAt instanceof Date ? winner.submittedAt : new Date(winner.submittedAt)).toISOString(),
+                allocationsPrev30d: winner.allocationsPrev30d,
+                computedAt: now.toISOString(),
+              },
+            },
+          },
+        });
+      }
+      const superseded = await tx.bookingRequest.updateMany({
+        where: {
+          bookingDate,
+          userId: winner.userId,
+          status: 'WAITLISTED',
+          id: { not: winner.bookingId },
+        },
+        data: {
+          status: 'EXPIRED',
+          cancellationReason: 'Superseded by released slot allocation',
+        },
+      });
+
+      await tx.auditLog.create({
+        data: buildAuditData({
+          actionType: 'BOOKING_RELEASED',
+          entityType: 'BookingRequest',
+          entityId: bookingId,
+          oldValue: { status: 'ALLOCATED', slotId: freedSlotId },
+          newValue: {
+            status: 'RELEASED',
+            reason: input.reason ?? null,
+            reallocatedTo: winner.bookingId,
+            reallocatedCompanyId: winner.companyId,
+            sameCompany: winner.companyId === releasingCompanyId,
+            finalScore: winner.breakdown.finalScore,
+            supersededWaitlistCount: superseded.count,
+          },
+        }),
+      });
+    });
+
+  return getBookingForPrincipal(principal, bookingId);
+}
+
+/**
  * Fetch a booking with its carpool members, allocated slot, and score breakdown, enforcing
  * resource-level visibility: USER sees only their own; COMPANY_ADMIN only their company's;
  * SUPER_ADMIN any. Not-visible resolves to 404 (never leaks existence — openapi §/bookings/{id}).
@@ -288,19 +591,34 @@ export async function listBookings(principal: Principal, filter: ListBookingsQue
   if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
   if (filter.status) where.status = filter.status;
 
-  const [rows, total] = await Promise.all([
-    prisma.bookingRequest.findMany({
-      where,
-      include: {
-        user: { select: { fullName: true, email: true } },
-        company: { select: { name: true } },
-        allocation: { include: { slot: { select: { slotNumber: true } } } },
-      },
-      orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
-      skip: page.skip,
-      take: page.take,
-    }),
-    prisma.bookingRequest.count({ where }),
-  ]);
-  return { rows, total };
+  const rows = await prisma.bookingRequest.findMany({
+    where,
+    include: {
+      user: { select: { fullName: true, email: true } },
+      company: { select: { name: true } },
+      allocation: { include: { slot: { select: { slotNumber: true } } } },
+    },
+    orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const grouped = new Map<string, AdminBookingRow[]>();
+  for (const row of rows) {
+    grouped.set(groupKey(row), [...(grouped.get(groupKey(row)) ?? []), row]);
+  }
+
+  const bookingGroups = [...grouped.values()]
+    .map((history) => {
+      const current = currentHistoryRow(history);
+      return {
+        ...current,
+        history: [...history].sort((a, b) => rowTime(a) - rowTime(b)),
+      };
+    })
+    .sort((a, b) => {
+      const date = b.bookingDate.getTime() - a.bookingDate.getTime();
+      if (date !== 0) return date;
+      return rowTime(b) - rowTime(a);
+    });
+
+  return { rows: bookingGroups.slice(page.skip, page.skip + page.take), total: bookingGroups.length };
 }

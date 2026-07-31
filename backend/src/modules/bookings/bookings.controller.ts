@@ -10,6 +10,7 @@ const num = (v: unknown) => (v != null ? Number(v) : null);
 type CreatedBooking = Awaited<ReturnType<typeof service.createBooking>>;
 type BookingDetail = Awaited<ReturnType<typeof service.getBookingForPrincipal>>;
 type AdminBookingRow = Awaited<ReturnType<typeof service.listBookings>>['rows'][number];
+type AdminBookingHistoryRow = AdminBookingRow['history'][number];
 
 /** openapi BookingCreatedData. `carpoolPeople` = driver + declared members. */
 function toBookingCreated(b: CreatedBooking) {
@@ -62,11 +63,20 @@ function toBookingDetail(b: BookingDetail) {
 }
 
 /** openapi AdminBooking — a booking row for the admin dashboards (who / when / status / slot). */
-function toAdminBooking(b: AdminBookingRow) {
+function toAdminBooking(b: AdminBookingHistoryRow) {
+  const allocationSource = b.allocation
+    ? b.allocation.isManualOverride
+      ? 'MANUAL_OVERRIDE'
+      : b.allocation.allocationRunId
+        ? b.allocation.allocationType
+        : 'RELEASED_SLOT'
+    : null;
+
   return {
     id: b.id,
     bookingDate: isoDate(b.bookingDate),
     bookingType: b.bookingType,
+    allocationSource,
     status: b.status,
     employeeName: b.user.fullName,
     employeeEmail: b.user.email,
@@ -78,6 +88,13 @@ function toAdminBooking(b: AdminBookingRow) {
     allocatedSlotNumber: b.allocation?.slot?.slotNumber ?? null,
     submittedAt: b.submittedAt ? b.submittedAt.toISOString() : null,
     createdAt: b.createdAt.toISOString(),
+  };
+}
+
+function toAdminBookingRow(b: AdminBookingRow) {
+  return {
+    ...toAdminBooking(b),
+    history: b.history.map(toAdminBooking),
   };
 }
 
@@ -93,7 +110,7 @@ export const listBookings = asyncHandler(async (req, res) => {
     },
     p,
   );
-  sendSuccess(res, rows.map(toAdminBooking), 200, { page: p.page, pageSize: p.pageSize, total });
+  sendSuccess(res, rows.map(toAdminBookingRow), 200, { page: p.page, pageSize: p.pageSize, total });
 });
 
 export const createBooking = asyncHandler(async (req, res) => {
@@ -105,6 +122,12 @@ export const createBooking = asyncHandler(async (req, res) => {
 export const updateBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.updateBooking(req.user.id, req.params.id, req.body);
+  sendSuccess(res, toBookingDetail(booking), 200);
+});
+
+export const releaseBooking = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const booking = await service.releaseBooking(req.user, req.params.id, req.body ?? {});
   sendSuccess(res, toBookingDetail(booking), 200);
 });
 

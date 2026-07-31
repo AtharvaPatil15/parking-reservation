@@ -22,6 +22,14 @@ const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
 
 const PAGE_SIZE = 20;
 
+function displayType(row: AdminBooking) {
+  return row.status === 'ALLOCATED' && row.allocationSource ? row.allocationSource : row.bookingType;
+}
+
+function displayTypeLabel(row: AdminBooking) {
+  return displayType(row).replace('_', ' ');
+}
+
 /**
  * Booking roster for the admin dashboards — who booked, for what date, its status and slot.
  * `scope='company'` (Company Admin) is server-scoped to the caller's company; `scope='all'`
@@ -49,6 +57,8 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     ...(companies.data ?? []).map((c) => ({ value: c.id, label: c.name })),
   ];
 
+  const rows = bookings.data?.items ?? [];
+
   const columns: Column<AdminBooking>[] = [
     ...(showCompany
       ? [{ key: 'company', header: 'Company', render: (b: AdminBooking) => b.companyName }]
@@ -57,10 +67,19 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
       <div>
         <div className="font-medium">{b.employeeName}</div>
         <div className="text-xs text-text-muted">{b.employeeEmail}</div>
+        {b.history && b.history.length > 1 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {b.history.map((h) => (
+              <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
+                {displayTypeLabel(h)} {h.status}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     ) },
     { key: 'date', header: 'Date', className: 'tabular-nums', render: (b) => b.bookingDate },
-    { key: 'type', header: 'Type', render: (b) => <Badge tone="neutral">{b.bookingType}</Badge> },
+    { key: 'type', header: 'Type', render: (b) => <Badge tone="neutral">{displayTypeLabel(b)}</Badge> },
     { key: 'status', header: 'Status', render: (b) => <Badge tone={STATUS_TONE[b.status]}>{b.status}</Badge> },
     // Show the allocation score for every request — not only allocated ones — so admins
     // can see how waitlisted/unallocated bookings scored ('—' before scoring runs).
@@ -94,11 +113,11 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         <LoadingState label="Loading bookings…" />
       ) : bookings.isError ? (
         <ErrorState title="Couldn't load bookings" />
-      ) : !bookings.data || bookings.data.items.length === 0 ? (
+      ) : !bookings.data || rows.length === 0 ? (
         <EmptyState title="No bookings" description={date ? `No bookings for ${date}.` : 'No bookings yet.'} />
       ) : (
         <>
-          <Table columns={columns} rows={bookings.data.items} rowKey={(b) => b.id} className="mt-4" />
+          <Table columns={columns} rows={rows} rowKey={(b) => b.id} className="mt-4" />
           <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
             <span>{total} booking{total === 1 ? '' : 's'}</span>
             {lastPage > 1 && (
