@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Table, type Column } from '../../components';
 import {
   useAllocationBreakdown,
+  useAllocationRunForDate,
   useRunPrimaryAllocation,
   useRunCommonPoolAllocation,
 } from '../../api/hooks';
@@ -55,8 +56,22 @@ export function AllocationRun() {
   const [primaryRunId, setPrimaryRunId] = useState<string | null>(null);
   const [commonPoolRunId, setCommonPoolRunId] = useState<string | null>(null);
 
+  // Existing runs for the picked date — drives the "already done" lock and surfaces stored results on
+  // load (a run persists per date, so revisiting a date shows what was allocated without re-running).
+  const existingPrimary = useAllocationRunForDate(bookingDate, 'PRIMARY');
+  const existingCommonPool = useAllocationRunForDate(bookingDate, 'COMMON_POOL');
+
   const primary = useRunPrimaryAllocation();
   const commonPool = useRunCommonPoolAllocation();
+
+  // A new date has its own runs; drop the just-ran ids so a prior date's results don't linger.
+  useEffect(() => { setPrimaryRunId(null); setCommonPoolRunId(null); }, [bookingDate]);
+
+  const primaryDone = existingPrimary.data?.status === 'COMPLETED';
+  const commonPoolDone = existingCommonPool.data?.status === 'COMPLETED';
+  // Prefer the id we just ran (instant), else the stored run for this date.
+  const effectivePrimaryId = primaryRunId ?? existingPrimary.data?.id ?? null;
+  const effectiveCommonPoolId = commonPoolRunId ?? existingCommonPool.data?.id ?? null;
 
   function onRunPrimary() {
     primary.mutate({ bookingDate }, { onSuccess: (summary) => setPrimaryRunId(summary.id) });
@@ -85,32 +100,42 @@ export function AllocationRun() {
 
       {/* Step 1 — primary allocation */}
       <Card title="1 · Primary allocation" description="Rank each company's submitted requests and assign within its quota.">
-        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate}>
+        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate || primaryDone}>
           Run primary allocation
         </Button>
+        {primaryDone && (
+          <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
+            Primary allocation has already been done for {bookingDate}. The stored results are shown below.
+          </p>
+        )}
         {primaryError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {primaryError}
           </p>
         )}
       </Card>
-      <RunResults runId={primaryRunId} emptyHint="No requests were scored for this date." />
+      <RunResults runId={effectivePrimaryId} emptyHint="No requests were scored for this date." />
 
       {/* Step 2 — common pool */}
       <Card
         title="2 · Common pool"
         description="Enroll the users waitlisted by primary and share every company's unused slots across the whole building, top score first."
       >
-        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate}>
+        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate || commonPoolDone}>
           Start common pool
         </Button>
+        {commonPoolDone && (
+          <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
+            Common pool has already been done for {bookingDate}. The stored results are shown below.
+          </p>
+        )}
         {commonPoolError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {commonPoolError}
           </p>
         )}
       </Card>
-      <RunResults runId={commonPoolRunId} emptyHint="No waitlisted users or no spare slots for this date." />
+      <RunResults runId={effectiveCommonPoolId} emptyHint="No waitlisted users or no spare slots for this date." />
     </div>
   );
 }

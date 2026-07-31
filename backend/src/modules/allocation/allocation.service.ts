@@ -260,6 +260,29 @@ export async function getRunSummary(runId: string) {
 }
 
 /**
+ * Look up the single run for (runType, bookingDate), or null when none has been triggered yet. Lets
+ * the UI tell whether allocation has already been done for a date — and show its stored results —
+ * without starting a run. Mirrors getRunSummary's shape so the same controller mapper applies.
+ */
+export async function getRunByDate(runType: 'PRIMARY' | 'COMMON_POOL', bookingDateStr: string) {
+  if (!isValidCalendarDate(bookingDateStr)) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'date', message: 'Not a valid calendar date' },
+    ]);
+  }
+  const bookingDate = parseCalendarDate(bookingDateStr);
+  const run = await prisma.allocationRun.findUnique({
+    where: { runType_bookingDate: { runType, bookingDate } },
+  });
+  if (!run) return null;
+  const [totalRequests, allocatedCount] = await Promise.all([
+    prisma.allocationScoreBreakdown.count({ where: { allocationRunId: run.id } }),
+    prisma.parkingAllocation.count({ where: { allocationRunId: run.id } }),
+  ]);
+  return { run, totalRequests, allocatedCount, waitlistedCount: totalRequests - allocatedCount };
+}
+
+/**
  * Run (or idempotently re-run) COMMON-POOL allocation for a booking date. Returns the run id.
  *
  * The common pool is the cross-company redistribution of *unused* capacity after primary. Because

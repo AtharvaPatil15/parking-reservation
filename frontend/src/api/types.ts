@@ -398,6 +398,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/allocation/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the existing run for a booking date + type (null if not yet run)
+         * @description Role: SUPER_ADMIN. Lets the UI show stored results and disable a redundant re-run once allocation is done.
+         */
+        get: operations["getAllocationRunForDate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/allocation/runs/{id}": {
         parameters: {
             query?: never;
@@ -1068,7 +1088,10 @@ export interface components {
             /** Format: date */
             bookingDate: string;
             bookingType: components["schemas"]["BookingType"];
-            /** @description Actual source of the allocated seat; null when no seat is assigned. */
+            /**
+             * @description Actual source of the allocated seat; null when no seat is assigned.
+             * @enum {string|null}
+             */
             allocationSource: "PRIMARY" | "COMMON_POOL" | "RELEASED_SLOT" | "MANUAL_OVERRIDE" | null;
             status: components["schemas"]["BookingStatus"];
             employeeName: string;
@@ -2332,6 +2355,34 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    getAllocationRunForDate: {
+        parameters: {
+            query: {
+                date: string;
+                type: components["schemas"]["AllocationRunType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run for this date + type, or null if none has been triggered yet. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRunSummary"] | null;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getAllocationRun: {

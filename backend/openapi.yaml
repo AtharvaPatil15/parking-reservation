@@ -729,6 +729,41 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /allocation/runs:
+    get:
+      tags: [Allocation]
+      operationId: getAllocationRunForDate
+      summary: Get the existing run for a booking date + type (null if not yet run)
+      description: "Role: SUPER_ADMIN. Lets the UI show stored results and disable a redundant re-run once allocation is done."
+      x-maturity: DEMO
+      x-required-roles: [SUPER_ADMIN]
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: type
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/AllocationRunType' }
+      responses:
+        '200':
+          description: The run for this date + type, or null if none has been triggered yet.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        nullable: true
+                        allOf:
+                          - $ref: '#/components/schemas/AllocationRunSummary'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /allocation/runs/{id}:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'

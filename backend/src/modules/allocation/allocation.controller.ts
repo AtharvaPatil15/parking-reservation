@@ -98,6 +98,13 @@ export const getRun = asyncHandler(async (req, res) => {
   sendSuccess(res, toRunSummary(await service.getRunSummary(req.params.id)), 200);
 });
 
+/** GET /allocation/runs?date=&type= — the existing run for a date+type, or null if none yet. */
+export const getRunForDate = asyncHandler(async (req, res) => {
+  const { date, type } = req.query as { date: string; type: 'PRIMARY' | 'COMMON_POOL' };
+  const summary = await service.getRunByDate(type, date);
+  sendSuccess(res, summary ? toRunSummary(summary) : null, 200);
+});
+
 export const getBreakdown = asyncHandler(async (req, res) => {
   sendSuccess(res, toBreakdown(await service.getRunBreakdown(req.params.id)), 200);
 });

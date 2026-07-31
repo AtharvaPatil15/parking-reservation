@@ -12,6 +12,7 @@ type AllocationRosterItem = components['schemas']['AllocationRosterItem'];
 function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
   qc.invalidateQueries({ queryKey: ['allocations'] });
+  qc.invalidateQueries({ queryKey: ['allocationRun', 'byDate'] }); // flip the run to "done" for its date
   qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
   qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
 }
@@ -66,6 +67,19 @@ export function useAllocations(filter: AllocationsFilter = {}) {
           },
         }),
       ),
+  });
+}
+
+/**
+ * GET /allocation/runs?date=&type= — the existing run for a date+type, or null if not yet run.
+ * Lets the UI show stored results and disable a redundant re-run once allocation is done.
+ */
+export function useAllocationRunForDate(date: string, type: 'PRIMARY' | 'COMMON_POOL') {
+  return useQuery<AllocationRunSummary | null>({
+    queryKey: ['allocationRun', 'byDate', type, date],
+    queryFn: () =>
+      unwrap<AllocationRunSummary | null>(api.GET('/allocation/runs', { params: { query: { date, type } } })),
+    enabled: Boolean(date),
   });
 }
 

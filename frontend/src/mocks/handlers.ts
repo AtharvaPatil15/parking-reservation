@@ -490,6 +490,8 @@ const hero = [
   }),
 
   // --- Allocation (super admin) ---
+  // Existing-run lookup: null = not yet run for this date+type (tests needing a run override this).
+  http.get(`${baseURL}/allocation/runs`, () => ok<AllocationRunSummary | null>(null)),
   http.post(`${baseURL}/allocation/primary/run`, () =>
     ok<AllocationRunSummary>({
       id: 'run-demo', runType: 'PRIMARY', bookingDate: '2026-08-03', status: 'COMPLETED',

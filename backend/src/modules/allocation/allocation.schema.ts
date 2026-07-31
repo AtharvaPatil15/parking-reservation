@@ -20,3 +20,13 @@ export const listAllocationsQuery = z.object({
   type: z.enum(['PRIMARY', 'COMMON_POOL']).optional(),
 });
 export type ListAllocationsQuery = z.infer<typeof listAllocationsQuery>;
+
+/**
+ * Look up the existing run for a date + type (GET /allocation/runs) so the UI can show stored results
+ * and disable a redundant re-run once allocation has already been done.
+ */
+export const runLookupQuery = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'),
+  type: z.enum(['PRIMARY', 'COMMON_POOL']),
+});
+export type RunLookupQuery = z.infer<typeof runLookupQuery>;
