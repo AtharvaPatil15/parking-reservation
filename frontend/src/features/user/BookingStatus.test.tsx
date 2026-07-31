@@ -66,6 +66,28 @@ describe('BookingStatus', () => {
     expect(await screen.findByText(/couldn.t load booking/i)).toBeInTheDocument();
   });
 
+  it('lets you add a carpool member in the edit flow', async () => {
+    server.use(
+      http.get('*/api/v1/bookings/:id', ({ params }) =>
+        HttpResponse.json({ success: true, data: {
+          id: String(params.id), bookingDate: '2099-01-05', bookingType: 'PRIMARY',
+          status: 'SUBMITTED', carpoolMemberCount: 0, carpoolMembers: [],
+          createdAt: '2026-07-29T08:00:00.000Z',
+        } }),
+      ),
+    );
+    renderAt();
+    await userEvent.click(await screen.findByRole('button', { name: /edit booking/i }));
+    const people = screen.getByLabelText(/people \(incl/i);
+    await userEvent.clear(people);
+    await userEvent.type(people, '2');
+    await userEvent.click(screen.getByRole('button', { name: /add member/i }));
+    await userEvent.type(screen.getByLabelText(/member 1 name/i), 'Sam');
+    await userEvent.type(screen.getByLabelText(/member 1 email/i), 'sam@mock.test');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText(/booking updated/i)).toBeInTheDocument();
+  });
+
   it('notes when not scored yet', async () => {
     server.use(
       http.get('*/api/v1/bookings/:id', ({ params }) =>

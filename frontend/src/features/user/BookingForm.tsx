@@ -5,8 +5,13 @@ import { Button, Card, Input, LoadingState, SuccessState } from '../../component
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
+import { cn } from '../../lib/cn';
+import { BackLink } from '../shared/BackLink';
 import { bookingSchema, type BookingFormValues } from './bookingSchema';
 import { formatCountdown, nextBookableWeekday } from '../../lib/dates';
+
+// Escalate the cutoff timer to a warning tone inside the final 30 minutes.
+const FINAL_WINDOW_SECONDS = 30 * 60;
 
 export function BookingForm() {
   const me = useMe();
@@ -29,6 +34,7 @@ export function BookingForm() {
 
   const secondsLeft = useCountdown(dashboard.data?.cutoffCountdownSeconds);
   const windowClosed = secondsLeft != null && secondsLeft <= 0;
+  const cutoffUrgent = secondsLeft != null && secondsLeft > 0 && secondsLeft <= FINAL_WINDOW_SECONDS;
 
   if (me.isLoading || dashboard.isLoading) return <LoadingState label="Loading booking form…" />;
 
@@ -86,82 +92,108 @@ export function BookingForm() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Book a parking slot</h1>
-        <p className="text-text-muted">
-          Home → office: {me.data?.distanceKm != null ? `${me.data.distanceKm} km` : 'not set'} · used in scoring.
-        </p>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="space-y-3">
+        <BackLink />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">Book a parking slot</h1>
+            <p className="text-text-muted">
+              Home → office: {me.data?.distanceKm != null ? `${me.data.distanceKm} km` : 'not set'} · used in scoring.
+            </p>
+          </div>
+          {secondsLeft != null && (
+            <span
+              {...(windowClosed || cutoffUrgent ? { role: 'status' } : {})}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-control border px-3 py-1.5 text-sm',
+                windowClosed
+                  ? 'border-danger/30 bg-danger-subtle text-danger'
+                  : cutoffUrgent
+                    ? 'border-warning/30 bg-warning-subtle text-warning'
+                    : 'border-border bg-surface text-text-muted',
+              )}
+            >
+              {windowClosed ? (
+                'Booking window closed'
+              ) : (
+                <>Cutoff in <span className="font-medium tabular-nums">{formatCountdown(secondsLeft)}</span></>
+              )}
+            </span>
+          )}
+        </div>
       </div>
 
-      {secondsLeft != null && !windowClosed && (
-        <p className="text-sm text-text-muted">Cutoff in {formatCountdown(secondsLeft)}</p>
-      )}
-      {windowClosed && (
-        <p role="alert" className="text-sm text-danger">
-          Booking window closed for this date.
-        </p>
-      )}
-
       <Card>
-        <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+        <form className="space-y-5" onSubmit={onSubmit} noValidate>
           {errorMsg && (
             <p role="alert" className="rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
               {errorMsg}
             </p>
           )}
 
-          <Input label="Date" type="date" {...register('bookingDate')} error={errors.bookingDate?.message} />
-          <Input label="Car number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} hint="Optional" />
-          <Input
-            label="Carpool people"
-            type="number"
-            min={1}
-            max={4}
-            hint="Including you (1–4)."
-            {...register('carpoolPeople')}
-            error={errors.carpoolPeople?.message}
-          />
+          {/* Short fields paired into a 2-col grid so the form reads compactly.
+              Demo is car-only, so there's no vehicle-type picker (see mutate body). */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Date" type="date" {...register('bookingDate')} error={errors.bookingDate?.message} />
+            <Input label="Car number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} hint="Optional" />
+            <Input
+              label="Carpool people"
+              type="number"
+              min={1}
+              max={4}
+              hint="Including you (1–4)."
+              {...register('carpoolPeople')}
+              error={errors.carpoolPeople?.message}
+            />
+          </div>
 
-          <fieldset className="flex flex-col gap-3">
-            <legend className="text-sm font-medium text-text">Carpool members (optional)</legend>
-            <p className="-mt-1 text-xs text-text-muted">
-              Each member must be a registered user (any company). Enter their work email.
-            </p>
+          <fieldset className="space-y-3 border-t border-border pt-5">
+            <div className="space-y-1">
+              <legend className="text-sm font-medium text-text">Carpool members (optional)</legend>
+              <p className="text-xs text-text-muted">
+                Each member must be a registered user (any company). Enter their work email.
+              </p>
+            </div>
             {fields.map((f, i) => (
               <div key={f.id} className="flex items-start gap-2">
-                <Input
-                  aria-label={`Member ${i + 1} name`}
-                  placeholder="Name"
-                  {...register(`carpoolMembers.${i}.name`)}
-                  error={errors.carpoolMembers?.[i]?.name?.message}
-                />
-                <Input
-                  aria-label={`Member ${i + 1} email`}
-                  placeholder="Employee email"
-                  {...register(`carpoolMembers.${i}.employeeEmail`)}
-                  error={errors.carpoolMembers?.[i]?.employeeEmail?.message}
-                />
-                <Button type="button" variant="ghost" onClick={() => remove(i)}>
+                <div className="flex-1">
+                  <Input
+                    aria-label={`Member ${i + 1} name`}
+                    placeholder="Name"
+                    {...register(`carpoolMembers.${i}.name`)}
+                    error={errors.carpoolMembers?.[i]?.name?.message}
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    aria-label={`Member ${i + 1} email`}
+                    placeholder="Employee email"
+                    {...register(`carpoolMembers.${i}.employeeEmail`)}
+                    error={errors.carpoolMembers?.[i]?.employeeEmail?.message}
+                  />
+                </div>
+                <Button type="button" variant="ghost" size="sm" className="mt-0.5" onClick={() => remove(i)}>
                   Remove
                 </Button>
               </div>
             ))}
-            <div>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={fields.length >= carpoolPeople - 1}
-                onClick={() => append({ name: '', employeeEmail: '' })}
-              >
-                Add member
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={fields.length >= carpoolPeople - 1}
+              onClick={() => append({ name: '', employeeEmail: '' })}
+            >
+              Add member
+            </Button>
           </fieldset>
 
-          <Input label="Special requirement" {...register('specialRequirement')} error={errors.specialRequirement?.message} />
+          <div className="border-t border-border pt-5">
+            <Input label="Special requirement" {...register('specialRequirement')} error={errors.specialRequirement?.message} />
+          </div>
 
-          <Button type="submit" loading={createBooking.isPending} disabled={windowClosed}>
+          <Button type="submit" loading={createBooking.isPending} disabled={windowClosed} className="w-full">
             Submit request
           </Button>
         </form>
