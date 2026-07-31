@@ -1,24 +1,17 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { cn } from '../../lib/cn';
+import { Outlet } from 'react-router-dom';
+import { useRegisterNavDrawerItems } from '../../app/navDrawer';
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  cn('text-sm transition-colors', isActive ? 'font-medium text-text' : 'text-text-muted hover:text-text');
+const NAV = [
+  { to: '/app', label: 'Dashboard', end: true },
+  { to: '/book', label: 'Book a slot' },
+  { to: '/my-bookings', label: 'History' },
+];
 
-/** User-area layout: nav + routed content. */
+/** User-area layout: nav drawer (top bar hamburger) + routed content. */
 export function UserShell() {
+  useRegisterNavDrawerItems(NAV);
   return (
     <div className="space-y-6">
-      <nav className="flex gap-4 border-b border-border pb-3">
-        <NavLink to="/app" end className={linkClass}>
-          Dashboard
-        </NavLink>
-        <NavLink to="/book" className={linkClass}>
-          Book a slot
-        </NavLink>
-        <NavLink to="/my-bookings" className={linkClass}>
-          History
-        </NavLink>
-      </nav>
       <Outlet />
     </div>
   );
