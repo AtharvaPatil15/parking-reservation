@@ -5,13 +5,20 @@
 --   User                     — only the Super Admin row
 --   Company                  — only the SA's own company (User.companyId is NOT NULL)
 --   UserRole                 — only the SA -> SUPER_ADMIN grant
---   Role                     — all 3 rows; needed to create any user later
---   SystemConfiguration      — cutoffs / weights / caps read at runtime
+--   Role                     — all 4 rows (incl. SECURITY); needed to create any user later
+--   SystemConfiguration      — cutoffs / weights / caps / window config read at runtime
 --   OfficeLocation, ParkingArea, NotificationTemplate — inert scaffolding, see script B
 --
 -- DELETES: every user, company, admin grant, slot, quota, block, booking, carpool
 --          member, allocation, run, score breakdown, common-pool row, notification,
---          audit row and refresh token.
+--          audit row, refresh token, and (Phase 7) every registered vehicle + gate event.
+--
+-- NOTE (Phase 7): Vehicle and GateEvent are wiped too. Their FKs are ON DELETE SET NULL, so
+-- leaving them would not error — it would silently leave cars and gate visits pointing at
+-- deleted users/companies, which is worse than empty. There is no API to create a vehicle, so
+-- repopulate the registry with:
+--   npm run import:vehicles -- ./fixtures/vehicles.sample.csv
+-- The importer links owners by email, so the CSV's emails must match users that exist by then.
 --
 -- Idempotent: safe to run repeatedly. Transactional: all-or-nothing.
 --
@@ -56,7 +63,10 @@ TRUNCATE TABLE
   "CompanyAdmin",
   "Notification",
   "AuditLog",
-  "RefreshToken"
+  "RefreshToken",
+  -- Phase 7 — gate visits before the cars they reference.
+  "GateEvent",
+  "Vehicle"
 CASCADE;
 
 -- --- 2. Calendar rows scoped to tenants that are about to disappear ----------
@@ -101,6 +111,8 @@ UNION ALL SELECT 'AllocationRun',               count(*) FROM "AllocationRun"
 UNION ALL SELECT 'Notification',                count(*) FROM "Notification"
 UNION ALL SELECT 'AuditLog',                    count(*) FROM "AuditLog"
 UNION ALL SELECT 'RefreshToken',                count(*) FROM "RefreshToken"
+UNION ALL SELECT 'Vehicle',                     count(*) FROM "Vehicle"
+UNION ALL SELECT 'GateEvent',                   count(*) FROM "GateEvent"
 ORDER BY table_name;
 
 -- Confirm the surviving login.
