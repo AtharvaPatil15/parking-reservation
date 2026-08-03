@@ -1086,6 +1086,8 @@ export interface components {
             submittedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Same employee/date booking lifecycle rows, grouped before pagination. */
+            history?: components["schemas"]["AdminBooking"][];
         };
         /** @description One allocated seat and who holds it for the date (primary or common pool). */
         AllocationRosterItem: {

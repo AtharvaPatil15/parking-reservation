@@ -10,6 +10,7 @@ const num = (v: unknown) => (v != null ? Number(v) : null);
 type CreatedBooking = Awaited<ReturnType<typeof service.createBooking>>;
 type BookingDetail = Awaited<ReturnType<typeof service.getBookingForPrincipal>>;
 type AdminBookingRow = Awaited<ReturnType<typeof service.listBookings>>['rows'][number];
+type AdminBookingHistoryRow = AdminBookingRow['history'][number];
 
 /** openapi BookingCreatedData. `carpoolPeople` = driver + declared members. */
 function toBookingCreated(b: CreatedBooking) {
@@ -62,7 +63,7 @@ function toBookingDetail(b: BookingDetail) {
 }
 
 /** openapi AdminBooking — a booking row for the admin dashboards (who / when / status / slot). */
-function toAdminBooking(b: AdminBookingRow) {
+function toAdminBooking(b: AdminBookingHistoryRow) {
   const allocationSource = b.allocation
     ? b.allocation.isManualOverride
       ? 'MANUAL_OVERRIDE'
@@ -90,6 +91,13 @@ function toAdminBooking(b: AdminBookingRow) {
   };
 }
 
+function toAdminBookingRow(b: AdminBookingRow) {
+  return {
+    ...toAdminBooking(b),
+    history: b.history.map(toAdminBooking),
+  };
+}
+
 export const listBookings = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const p = parsePagination(req.query as Record<string, unknown>);
@@ -102,7 +110,7 @@ export const listBookings = asyncHandler(async (req, res) => {
     },
     p,
   );
-  sendSuccess(res, rows.map(toAdminBooking), 200, { page: p.page, pageSize: p.pageSize, total });
+  sendSuccess(res, rows.map(toAdminBookingRow), 200, { page: p.page, pageSize: p.pageSize, total });
 });
 
 export const createBooking = asyncHandler(async (req, res) => {
