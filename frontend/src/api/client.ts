@@ -4,6 +4,7 @@
  */
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './types';
+import type { AuthUser } from '../lib/auth';
 
 // Vite injects VITE_API_BASE_URL; fall back to the dev proxy path.
 const baseUrl =
@@ -53,7 +54,7 @@ export function registerUnauthorizedHandler(fn: UnauthorizedHandler | null): voi
   onUnauthorized = fn;
 }
 
-type TokenRefreshedHandler = (token: string) => void;
+type TokenRefreshedHandler = (token: string, user?: AuthUser) => void;
 let onTokenRefreshed: TokenRefreshedHandler | null = null;
 
 /** Register a callback fired with a freshly-rotated access token so the auth layer can persist it. */
@@ -72,13 +73,13 @@ async function doRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' });
     if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { accessToken?: string } };
+    const body = (await res.json()) as { data?: { accessToken?: string; user?: AuthUser } };
     const token = body?.data?.accessToken ?? null;
     // If logout ran while the refresh was in flight, drop the token — don't resurrect the session.
     if (gen !== sessionGeneration) return null;
     if (token) {
       setAccessToken(token);
-      onTokenRefreshed?.(token);
+      onTokenRefreshed?.(token, body.data?.user);
     }
     return token;
   } catch {

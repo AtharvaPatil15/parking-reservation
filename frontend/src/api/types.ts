@@ -180,7 +180,10 @@ export interface paths {
         /** List the current user's saved cars */
         get: operations["getMyVehicles"];
         put?: never;
-        /** Add a car to the current user's profile */
+        /**
+         * Add a car to the current user's profile
+         * @description Creates or reactivates an active vehicle-registry row for security lookup.
+         */
         post: operations["createMyVehicle"];
         delete?: never;
         options?: never;
@@ -192,9 +195,7 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         get?: never;
@@ -733,7 +734,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove a user */
+        /**
+         * Remove a user
+         * @description Soft-removes a user. Super Admin may remove company-admin and security users. Company Admin may remove non-privileged users from their own company.
+         */
         delete: operations["removeUser"];
         options?: never;
         head?: never;
@@ -1582,7 +1586,7 @@ export interface components {
         BookingWindow: {
             /**
              * Format: date-time
-             * @description When the next weekly batch runs.
+             * @description When the next automatic batch runs.
              */
             nextRunAt: string;
             /** @description Seconds until `nextRunAt`; 0 once passed. */
@@ -2217,7 +2221,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessEnvelope"] & {
-                        data?: components["schemas"]["AccessTokenData"];
+                        data?: components["schemas"]["LoginResponseData"];
                     };
                 };
             };

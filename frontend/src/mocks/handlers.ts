@@ -521,9 +521,19 @@ const hero = [
   }),
   // Rehydrate the access token from the persisted mock session (mirrors the real refresh-cookie flow).
   http.post(`${baseURL}/auth/refresh`, () => {
-    if (!readMockSession()) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
-    return ok<{ accessToken: string; tokenType: 'Bearer'; expiresIn: number }>({
-      accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900,
+    const stored = readMockSession();
+    if (!stored) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
+    return ok<LoginResponseData>({
+      accessToken: 'mock-access-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: {
+        id: stored.id,
+        fullName: stored.fullName,
+        role: stored.role,
+        companyId: stored.companyId,
+        companyName: stored.companyName,
+      },
     });
   }),
   http.post(`${baseURL}/auth/logout`, () => {

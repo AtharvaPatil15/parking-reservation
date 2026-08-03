@@ -165,7 +165,7 @@ paths:
                   - $ref: '#/components/schemas/SuccessEnvelope'
                   - type: object
                     properties:
-                      data: { $ref: '#/components/schemas/AccessTokenData' }
+                      data: { $ref: '#/components/schemas/LoginResponseData' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /auth/logout:
