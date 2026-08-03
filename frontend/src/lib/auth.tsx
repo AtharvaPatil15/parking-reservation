@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   clearSession,
   refreshSession,
@@ -11,6 +11,7 @@ import type { Role } from './roles';
 
 // Refresh this long before the access token's `exp` so a request never races an expired token.
 const REFRESH_SKEW_MS = 60_000;
+const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 
 /**
  * Read a JWT's `exp` claim (seconds) as epoch-ms, or null if the token isn't a decodable JWT (e.g.
@@ -28,6 +29,11 @@ function jwtExpiryMs(token: string): number | null {
   } catch {
     return null;
   }
+}
+
+function isExpiredJwt(token: string): boolean {
+  const expMs = jwtExpiryMs(token);
+  return expMs != null && expMs <= Date.now();
 }
 
 export interface AuthUser {
@@ -92,6 +98,11 @@ export function AuthProvider({
 }) {
   const [session, setSession] = useState<AuthSession | null>(() => {
     const initial = initialSession ?? readStoredSession();
+    if (initial && isExpiredJwt(initial.accessToken)) {
+      clearSession();
+      writeStoredSession(null);
+      return null;
+    }
     // Prime the client token synchronously during the first render — BEFORE children mount and
     // fire their data queries — so a cold-load (page refresh) request isn't sent token-less and
     // 401'd, which the unauthorized handler would treat as a logout. The mirroring effect below
@@ -141,9 +152,13 @@ export function AuthProvider({
   }, [session]);
 
   // A 401 that survives a silent refresh logs the user out (guards then redirect to /login).
-  useEffect(() => {
+  useLayoutEffect(() => {
     registerUnauthorizedHandler(logout);
-    return () => registerUnauthorizedHandler(null);
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, logout);
+    return () => {
+      registerUnauthorizedHandler(null);
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, logout);
+    };
   }, [logout]);
 
   // When the client silently rotates the access token, mirror it into the session + storage so

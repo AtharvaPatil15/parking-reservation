@@ -3,7 +3,7 @@ import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import { approvalSchema, userStatusSchema } from './users.schema';
-import { listPendingAdmins, listAdminRequestHistory, setApproval, setStatus } from './users.controller';
+import { listPendingAdmins, listAdminRequestHistory, removeUser, setApproval, setStatus } from './users.controller';
 
 const router = Router();
 
@@ -15,5 +15,6 @@ router.get('/admin-requests/history', authenticate, requireRole('SUPER_ADMIN'), 
 // SUPER_ADMIN (any) or COMPANY_ADMIN (own company — enforced in the service by companyId comparison).
 router.patch('/:id/approval', authenticate, requireRole('SUPER_ADMIN', 'COMPANY_ADMIN'), validate(approvalSchema), setApproval);
 router.patch('/:id/status', authenticate, requireRole('SUPER_ADMIN', 'COMPANY_ADMIN'), validate(userStatusSchema), setStatus);
+router.delete('/:id', authenticate, requireRole('SUPER_ADMIN', 'COMPANY_ADMIN'), removeUser);
 
 export default router;

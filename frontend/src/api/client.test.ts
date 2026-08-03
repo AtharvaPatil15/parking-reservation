@@ -58,6 +58,20 @@ describe('client 401 handling', () => {
     expect(onUnauth).toHaveBeenCalledTimes(1);
   });
 
+  it('clears persisted auth state when refresh cannot recover a 401', async () => {
+    sessionStorage.setItem('auth:session', JSON.stringify({ accessToken: 'stale-token', user: { id: '1' } }));
+    server.use(
+      http.post('*/api/v1/auth/refresh', () =>
+        HttpResponse.json({ success: false, error: { code: 'UNAUTHENTICATED', message: 'no cookie' } }, { status: 401 }),
+      ),
+      http.get('*/api/v1/config', () =>
+        HttpResponse.json({ success: false, error: { code: 'UNAUTHENTICATED', message: 'Missing bearer token' } }, { status: 401 }),
+      ),
+    );
+    await api.GET('/config', {});
+    expect(sessionStorage.getItem('auth:session')).toBeNull();
+  });
+
   it('does NOT fire the handler on a 401 from an /auth/ endpoint (login failure is a form error)', async () => {
     const onUnauth = vi.fn();
     registerUnauthorizedHandler(onUnauth);

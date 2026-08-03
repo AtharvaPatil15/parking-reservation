@@ -31,6 +31,22 @@ export function clearSession(): void {
 
 type UnauthorizedHandler = () => void;
 let onUnauthorized: UnauthorizedHandler | null = null;
+const AUTH_SESSION_KEY = 'auth:session';
+const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
+
+function notifyUnauthorized(): void {
+  accessToken = null;
+  sessionGeneration += 1;
+  try {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  onUnauthorized?.();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+  }
+}
 
 /** Register a callback fired when an authenticated request stays 401 after a refresh attempt fails. */
 export function registerUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
@@ -111,7 +127,7 @@ const authMiddleware: Middleware = {
     // we treat the session as over.
     const token = await refreshAccessToken();
     if (!token) {
-      onUnauthorized?.();
+      notifyUnauthorized();
       return response;
     }
     // Rebuild the retry from the pre-dispatch clone (method + headers + body intact). The stored
@@ -134,7 +150,7 @@ const authMiddleware: Middleware = {
     // If the replay STILL 401s, the session is genuinely dead (e.g. the account was disabled). Surface
     // it as a logout rather than handing the caller a silent, broken 401 while the app looks signed-in.
     if (retryResponse.status === 401) {
-      onUnauthorized?.();
+      notifyUnauthorized();
     }
     return retryResponse;
   },

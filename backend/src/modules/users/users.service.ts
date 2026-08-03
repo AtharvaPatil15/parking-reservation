@@ -34,6 +34,10 @@ async function loadTargetUser(actor: Actor, userId: string) {
  */
 const PRIVILEGED_ROLE_NAMES = ['COMPANY_ADMIN', 'SECURITY'];
 
+function hasRole(user: Awaited<ReturnType<typeof loadTargetUser>>, role: Role | 'COMPANY_ADMIN' | 'SECURITY' | 'USER') {
+  return user.roles.some((r) => r.role.name === role);
+}
+
 /**
  * List PENDING privileged registrations (COMPANY_ADMIN or SECURITY) across all companies — the Super
  * Admin's approval queue (F11 + Phase 7 D15). Route-guarded SUPER_ADMIN-only, so no tenant scoping
@@ -160,6 +164,53 @@ export async function setStatus(actor: Actor, userId: string, status: UserStatus
     }),
   ]);
   return prisma.user.findFirstOrThrow({ where: { id: userId }, include: userInclude });
+}
+
+export async function removeUser(actor: Actor, userId: string) {
+  const user = await loadTargetUser(actor, userId);
+  if (user.id === actor.id) {
+    throw new ValidationError('You cannot remove your own account');
+  }
+
+  const targetIsCompanyAdmin = hasRole(user, 'COMPANY_ADMIN');
+  const targetIsSecurity = hasRole(user, 'SECURITY');
+
+  if (actor.role === 'SUPER_ADMIN') {
+    if (!targetIsCompanyAdmin && !targetIsSecurity) {
+      throw new ForbiddenError('Super admin can remove company-admin and security users from this screen');
+    }
+  } else {
+    if (targetIsCompanyAdmin || targetIsSecurity) {
+      throw new ForbiddenError('Only the super admin can remove company-admin or security users');
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+    prisma.companyAdmin.deleteMany({ where: { userId } }),
+    prisma.vehicle.updateMany({
+      where: { userId },
+      data: { isActive: false },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { status: 'INACTIVE', deletedAt: new Date() },
+    }),
+    prisma.auditLog.create({
+      data: buildAuditData({
+        actionType: 'USER_REMOVED',
+        entityType: 'User',
+        entityId: userId,
+        oldValue: { status: user.status, role: user.roles[0]?.role.name ?? null, companyId: user.companyId },
+        newValue: { deletedAt: true, removedBy: actor.role },
+      }),
+    }),
+  ]);
+
+  return { message: 'User removed' };
 }
 
 export type { Actor };

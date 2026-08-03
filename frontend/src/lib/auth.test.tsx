@@ -64,6 +64,16 @@ describe('AuthProvider', () => {
     expect(result.current.accessToken).toBe('tok');
   });
 
+  it('does not restore a persisted session whose JWT is already expired', () => {
+    sessionStorage.setItem(
+      'auth:session',
+      JSON.stringify({ ...session, accessToken: makeJwt(Math.floor(Date.now() / 1000) - 1) }),
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(sessionStorage.getItem('auth:session')).toBeNull();
+  });
+
   it('persists the session to storage on login and clears it on logout', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
     act(() => result.current.login(session));

@@ -97,6 +97,20 @@ export function useApproveAdminRequest() {
   });
 }
 
+/** DELETE /users/{id} - remove a privileged company-admin/security user from SA lists. */
+export function useRemovePrivilegedUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      unwrap<{ message: string }>(api.DELETE('/users/{id}', { params: { path: { id: userId } } })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] });
+      qc.invalidateQueries({ queryKey: ['users', 'admin-requests', 'history'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
 /** GET /slots — paged slot list, optionally filtered by status. */
 export function useSlots(page = 1, pageSize = 10, status?: components['schemas']['SlotStatus']) {
   return useQuery<{ items: ParkingSlot[]; meta: PageMeta }>({

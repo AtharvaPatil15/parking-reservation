@@ -51,6 +51,19 @@ export function useSetUserApproval(companyId: string | undefined) {
   });
 }
 
+/** DELETE /users/{id} - remove a non-privileged member from this company. */
+export function useRemoveCompanyUser(companyId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      unwrap<{ message: string }>(api.DELETE('/users/{id}', { params: { path: { id: userId } } })),
+    onSuccess: () => {
+      if (companyId) qc.invalidateQueries({ queryKey: ['companies', companyId, 'users'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
 /** GET /companies/{id}/blocks — paged quota blocks. */
 export function useBlocks(companyId: string | undefined, page = 1, pageSize = 10) {
   return useQuery<{ items: SlotBlock[]; meta: PageMeta }>({
