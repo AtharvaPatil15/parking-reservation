@@ -14,7 +14,8 @@ type WeeklyRunPreview = components['schemas']['WeeklyRunPreview'];
 function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
   qc.invalidateQueries({ queryKey: ['allocations'] });
-  qc.invalidateQueries({ queryKey: ['allocationRun', 'byDate'] }); // flip the run to "done" for its date
+  // Whole prefix: flips the run to "done" for its date AND refreshes the stored breakdown.
+  qc.invalidateQueries({ queryKey: ['allocationRun'] });
   qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
   qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
   // Phase 7: a run closes its band's dates for requests, so the grid and the band preview both move.
@@ -101,7 +102,7 @@ export function useAllocations(filter: AllocationsFilter = {}) {
  */
 export function useAllocationRunForDate(date: string, type: 'PRIMARY' | 'COMMON_POOL') {
   return useQuery<AllocationRunSummary | null>({
-    queryKey: ['allocationRun', 'byDate', type, date],
+    queryKey: queryKeys.allocationRunForDate(date, type),
     queryFn: () =>
       unwrap<AllocationRunSummary | null>(api.GET('/allocation/runs', { params: { query: { date, type } } })),
     enabled: Boolean(date),

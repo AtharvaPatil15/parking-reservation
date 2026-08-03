@@ -731,6 +731,9 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  # Merge note: PR #33 added an equivalent `/allocation/runs/by-date?bookingDate=&runType=`. Kept this
+  # one — same behaviour, already covered by allocation-run-lookup.integration.test.ts and present in
+  # the generated client types (the by-date variant needed an `as unknown as` cast to call).
   /allocation/runs:
     get:
       tags: [Allocation]
@@ -763,6 +766,7 @@ paths:
                         nullable: true
                         allOf:
                           - $ref: '#/components/schemas/AllocationRunSummary'
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -2359,10 +2363,28 @@ components:
         companyName: { type: string }
         travelDistanceKm: { type: number, nullable: true }
         carpoolPeople: { type: integer, minimum: 1, description: Driver + declared members. }
+        carpoolMembers:
+          type: array
+          description: Declared passengers carried by the driver.
+          items:
+            type: object
+            required: [id, name, sameCompany, isScored]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              employeeEmail: { type: string, format: email, nullable: true }
+              contactNumber: { type: string, nullable: true }
+              pickupLocation: { type: string, nullable: true }
+              sameCompany: { type: boolean }
+              isScored: { type: boolean }
         allocationScore: { type: number, nullable: true }
         allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
+        history:
+          type: array
+          description: Same employee/date booking lifecycle rows, grouped before pagination.
+          items: { $ref: '#/components/schemas/AdminBooking' }
 
     AllocationRosterItem:
       type: object
@@ -2976,6 +2998,7 @@ components:
         bookingId: { type: string }
         userId: { type: string }
         user: { type: string, description: User full name (display). }
+        companyName: { type: string, nullable: true, description: Company name (display). }
         distanceKm: { type: number, nullable: true }
         people: { type: integer }
         distanceScore: { type: number }

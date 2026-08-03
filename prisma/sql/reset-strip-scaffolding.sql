@@ -2,13 +2,18 @@
 -- OPTIONAL add-on — run AFTER reset-keep-superadmin.sql.
 --
 -- Strips the remaining non-login scaffolding for a truly bare database:
---   OfficeLocation, ParkingArea, NotificationTemplate,
---   Holiday, WorkingDayConfiguration
+--   ParkingArea, NotificationTemplate, Holiday, WorkingDayConfiguration
+--
+-- Deliberately KEEPS exactly one OfficeLocation (and creates one if the table is
+-- empty). There is no API to create an office location — `POST /parking-areas`
+-- calls officeLocation.findFirst() and returns
+--   400 VALIDATION_ERROR "No office location is configured"
+-- when none exists (slots.service.ts createParkingArea). Truncating the table
+-- therefore bricks slot setup with no in-app way to recover.
 --
 -- WARNING — read before running:
---   * Removing every OfficeLocation/ParkingArea leaves the Super Admin with no
---     area to attach slots to, so "Add slot" has an empty area picker until you
---     create one through the UI or API.
+--   * Removing every ParkingArea leaves the "Add slot" area picker empty until
+--     the SA adds an area — but that IS reachable from the UI, so it's a safe wipe.
 --   * Dropping NotificationTemplate rows disables templated notifications.
 --   * This does NOT touch Role or SystemConfiguration. Deleting those breaks
 --     login and the booking-window logic respectively — restore them with
@@ -22,11 +27,21 @@ BEGIN;
 
 TRUNCATE TABLE
   "ParkingArea",
-  "OfficeLocation",
   "NotificationTemplate",
   "Holiday",
   "WorkingDayConfiguration"
 CASCADE;
+
+-- Collapse to a single office location: drop all but the oldest...
+DELETE FROM "OfficeLocation"
+WHERE id <> (SELECT id FROM "OfficeLocation" ORDER BY "createdAt" ASC LIMIT 1);
+
+-- ...and bootstrap one if the table was already empty, so POST /parking-areas
+-- can never hit "No office location is configured".
+INSERT INTO "OfficeLocation" (id, name, address, timezone, "createdAt", "updatedAt")
+SELECT 'seed-office-1', 'Redbricks Tower, Baner', 'Baner, Pune, Maharashtra',
+       'Asia/Kolkata', now(), now()
+WHERE NOT EXISTS (SELECT 1 FROM "OfficeLocation");
 
 COMMIT;
 

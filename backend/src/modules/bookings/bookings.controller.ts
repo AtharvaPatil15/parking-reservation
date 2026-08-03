@@ -18,6 +18,7 @@ const num = (v: unknown) => (v != null ? Number(v) : null);
 type CreatedBooking = Awaited<ReturnType<typeof service.createBooking>>;
 type BookingDetail = Awaited<ReturnType<typeof service.getBookingForPrincipal>>;
 type AdminBookingRow = Awaited<ReturnType<typeof service.listBookings>>['rows'][number];
+type AdminBookingHistoryRow = AdminBookingRow['history'][number];
 
 /** openapi BookingCreatedData. `carpoolPeople` = driver + declared members. */
 function toBookingCreated(b: CreatedBooking) {
@@ -70,7 +71,7 @@ function toBookingDetail(b: BookingDetail) {
 }
 
 /** openapi AdminBooking — a booking row for the admin dashboards (who / when / status / slot). */
-function toAdminBooking(b: AdminBookingRow) {
+function toAdminBooking(b: AdminBookingHistoryRow) {
   const allocationSource = b.allocation
     ? b.allocation.isManualOverride
       ? 'MANUAL_OVERRIDE'
@@ -91,10 +92,26 @@ function toAdminBooking(b: AdminBookingRow) {
     companyName: b.company.name,
     travelDistanceKm: num(b.travelDistanceKm),
     carpoolPeople: b.carpoolMemberCount + 1,
+    carpoolMembers: b.carpoolMembers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      employeeEmail: m.employeeEmail ?? null,
+      contactNumber: m.contactNumber ?? null,
+      pickupLocation: m.pickupLocation ?? null,
+      sameCompany: m.sameCompany,
+      isScored: m.isScored,
+    })),
     allocationScore: num(b.allocationScore),
     allocatedSlotNumber: b.allocation?.slot?.slotNumber ?? null,
     submittedAt: b.submittedAt ? b.submittedAt.toISOString() : null,
     createdAt: b.createdAt.toISOString(),
+  };
+}
+
+function toAdminBookingRow(b: AdminBookingRow) {
+  return {
+    ...toAdminBooking(b),
+    history: b.history.map(toAdminBooking),
   };
 }
 
@@ -110,7 +127,7 @@ export const listBookings = asyncHandler(async (req, res) => {
     },
     p,
   );
-  sendSuccess(res, rows.map(toAdminBooking), 200, { page: p.page, pageSize: p.pageSize, total });
+  sendSuccess(res, rows.map(toAdminBookingRow), 200, { page: p.page, pageSize: p.pageSize, total });
 });
 
 /**

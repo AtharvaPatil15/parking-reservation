@@ -13,7 +13,7 @@ import {
   SlotGridLegend,
 } from '../../components';
 import { useAvailability, useCreateBooking, useMe } from '../../api/hooks';
-import { ApiError } from '../../api/http';
+import { ApiError, apiErrorText } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
 import { cn } from '../../lib/cn';
 import { BackLink } from '../shared/BackLink';
@@ -124,10 +124,11 @@ export function BookingForm() {
         ? err.code === 'CAPACITY_FULL'
           ? `${err.message} The grid below has been refreshed.`
           : err.code === 'WINDOW_CLOSED'
+            // Keep the server's wording: it names the earliest date the user *can* pick.
             ? err.message
             : err.status === 409
               ? 'You already have a request for this date.'
-              : err.message
+              : (apiErrorText(err) ?? err.message)
         : 'Something went wrong. Please try again.'
       : null;
 

@@ -61,9 +61,11 @@ describe('AllocationRun', () => {
     renderRun();
     // Stored breakdown loads without clicking anything.
     expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
-    expect(screen.getByText(/already been done/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /run primary allocation/i })).toBeDisabled();
-    // Common pool wasn't run, so its button stays enabled.
+    expect(screen.getByText(/already been done for 2026-/i)).toBeInTheDocument();
+    // The locked button relabels itself, so the disabled state is legible without reading the note.
+    expect(screen.getByRole('button', { name: /primary allocation already done/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^run primary allocation$/i })).not.toBeInTheDocument();
+    // Common pool wasn't run, so its button stays enabled and keeps its action label.
     expect(screen.getByRole('button', { name: /start common pool/i })).not.toBeDisabled();
   });
 

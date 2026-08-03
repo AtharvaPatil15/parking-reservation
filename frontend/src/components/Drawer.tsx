@@ -11,17 +11,31 @@ export interface DrawerProps {
   footer?: ReactNode;
   /** Which edge the panel slides in from. */
   side?: 'right' | 'left';
+  /**
+   * `nav` — narrow menu panel for the top-bar hamburger (tight padding, link list).
+   * `sheet` — wide panel for a form with its own actions (roomy padding, footer row).
+   */
+  variant?: 'sheet' | 'nav';
 }
 
 /**
- * Right-side sheet, sharing `Modal`'s accessibility behaviour (portal, Escape, backdrop click, body
- * scroll lock, focus move + restore) but laid out as a full-height edge panel.
+ * Edge-anchored slide-out panel, sharing `Modal`'s accessibility behaviour (portal, Escape, backdrop
+ * click, body scroll lock, focus move + restore) but laid out full-height against one side.
  *
- * Separate from `Modal` because the gate screens (Phase 7 §5) are used one-handed on a tablet at a
- * barrier: a tall edge panel keeps the single input and the resolved driver details in one column,
- * where a centred dialog would reflow awkwardly.
+ * Two presets rather than two components: the app-shell navigation drawer and the security gate sheet
+ * differ only in width and padding, and duplicating the focus/scroll/Escape handling to express that
+ * would mean two places to get accessibility wrong.
  */
-export function Drawer({ open, onClose, title, description, children, footer, side = 'right' }: DrawerProps) {
+export function Drawer({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  side = 'right',
+  variant = 'sheet',
+}: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -49,6 +63,8 @@ export function Drawer({ open, onClose, title, description, children, footer, si
 
   if (!open) return null;
 
+  const isNav = variant === 'nav';
+
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={onClose} />
@@ -58,14 +74,17 @@ export function Drawer({ open, onClose, title, description, children, footer, si
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
+        // An untitled nav panel still needs a name for screen readers.
+        aria-label={!title && isNav ? 'Navigation' : undefined}
         tabIndex={-1}
         className={cn(
-          'absolute inset-y-0 flex w-full max-w-md flex-col border-border bg-surface shadow-pop outline-none',
+          'absolute inset-y-0 flex flex-col border-border bg-surface shadow-pop outline-none',
+          isNav ? 'w-64 max-w-[80vw]' : 'w-full max-w-md',
           side === 'right' ? 'right-0 border-l' : 'left-0 border-r',
         )}
       >
         {(title || description) && (
-          <div className="space-y-1 border-b border-border px-6 py-4">
+          <div className={cn('space-y-1 border-b border-border', isNav ? 'px-4 py-4' : 'px-6 py-4')}>
             {title && (
               <h2 id={titleId} className="text-base font-semibold tracking-tight text-text">
                 {title}
@@ -78,8 +97,8 @@ export function Drawer({ open, onClose, title, description, children, footer, si
             )}
           </div>
         )}
-        {/* The body scrolls, so a long result list never pushes the submit button off-screen. */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        {/* The body scrolls, so a long list never pushes the footer actions off-screen. */}
+        <div className={cn('flex-1 overflow-y-auto', isNav ? 'p-2' : 'px-6 py-5')}>{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
       </div>
     </div>,

@@ -13,6 +13,7 @@ allocationRouter.post('/common-pool/run', authenticate, requireRole('SUPER_ADMIN
 allocationRouter.post('/weekly/run', authenticate, requireRole('SUPER_ADMIN'), c.runWeekly);
 allocationRouter.get('/weekly', authenticate, requireRole('SUPER_ADMIN'), c.weeklyPreview);
 // Lookup by date+type (registered before /runs/:id so the literal path wins). Null when not yet run.
+// Merge note: PR #33's `/runs/by-date` did the same job and was dropped in favour of this one.
 allocationRouter.get('/runs', authenticate, requireRole('SUPER_ADMIN'), validate(runLookupQuery, 'query'), c.getRunForDate);
 allocationRouter.get('/runs/:id', authenticate, requireRole('SUPER_ADMIN'), c.getRun);
 allocationRouter.get('/runs/:id/breakdown', authenticate, requireRole('SUPER_ADMIN'), c.getBreakdown);

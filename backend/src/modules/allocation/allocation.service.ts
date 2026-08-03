@@ -719,6 +719,7 @@ export async function getRunBreakdown(runId: string) {
           userId: true,
           travelDistanceKm: true,
           user: { select: { fullName: true } },
+          company: { select: { name: true } },
           allocation: { select: { slot: { select: { slotNumber: true } } } },
         },
       },

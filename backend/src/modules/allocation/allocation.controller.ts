@@ -58,6 +58,7 @@ function toBreakdown({ run, rows }: Breakdown) {
       bookingId: r.bookingRequest.id,
       userId: r.bookingRequest.userId,
       user: r.bookingRequest.user.fullName,
+      companyName: r.bookingRequest.company.name,
       distanceKm: num(r.bookingRequest.travelDistanceKm),
       people: r.travellerCount,
       distanceScore: Number(r.distanceScore),

@@ -171,19 +171,32 @@ function seedAdminBookings(): AdminBooking[] {
     id, bookingDate, bookingType: 'PRIMARY', status, employeeName, employeeEmail, companyId, companyName,
     allocationSource: status === 'ALLOCATED' ? 'PRIMARY' : null,
     travelDistanceKm: distance, carpoolPeople: people, allocationScore: score, allocatedSlotNumber: slot,
+    carpoolMembers: Array.from({ length: Math.max(0, people - 1) }, (_v, i) => ({
+      id: `${id}-member-${i + 1}`,
+      name: `Passenger ${i + 1}`,
+      employeeEmail: `passenger${i + 1}@mock.test`,
+      contactNumber: `999000000${i + 1}`,
+      pickupLocation: `Pickup ${i + 1}`,
+      sameCompany: true,
+      isScored: true,
+    })),
     submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
   });
+  const dPrimary = {
+    ...row('ab-5-primary', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-14', 1.5, 1, 1.5),
+    allocationSource: 'RELEASED_SLOT' as const,
+  };
+  const dCommonPool = {
+    ...row('ab-5-cp', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 1.5, 1, 1.5),
+    bookingType: 'COMMON_POOL' as const,
+  };
   return [
     row('ab-1', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
     row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
     row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
     {
-      ...row('ab-5-primary', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-14', 1.5, 1, 1.5),
-      allocationSource: 'RELEASED_SLOT',
-    },
-    {
-      ...row('ab-5-cp', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 1.5, 1, 1.5),
-      bookingType: 'COMMON_POOL',
+      ...dPrimary,
+      history: [dPrimary, dCommonPool],
     },
     row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
   ];
@@ -660,14 +673,15 @@ const hero = [
       idempotencyKey: 'demo-cp', attemptCount: 1, totalRequests: 2, allocatedCount: 2, waitlistedCount: 0,
     }),
   ),
+  http.get(`${baseURL}/allocation/runs/by-date`, () => ok<AllocationRunSummary | null>(null)),
   http.get(`${baseURL}/allocation/runs/:id/breakdown`, ({ params }) =>
     ok<AllocationBreakdown>({
       runId: String(params.id), bookingDate: '2026-08-03', status: 'COMPLETED',
       weights: { distanceWeight: 0.6, carpoolWeight: 0.4 },
       results: [
-        { rank: 1, bookingId: 'b1', userId: 'u1', user: 'Priya Rao', distanceKm: 2.4, people: 3, distanceScore: 12, carpoolScore: 100, finalScore: 47.2, outcome: 'ALLOCATED', slotNumber: 'A-12' },
-        { rank: 2, bookingId: 'b2', userId: 'u2', user: 'Sam Lee', distanceKm: 5.1, people: 2, distanceScore: 25.5, carpoolScore: 50, finalScore: 35.3, outcome: 'ALLOCATED', slotNumber: 'A-13' },
-        { rank: 3, bookingId: 'b3', userId: 'u3', user: 'Lee Chen', distanceKm: 8.7, people: 1, distanceScore: 43.5, carpoolScore: 0, finalScore: 26.1, outcome: 'WAITLISTED', slotNumber: null },
+        { rank: 1, bookingId: 'b1', userId: 'u1', user: 'Priya Rao', companyName: 'Mock Co', distanceKm: 2.4, people: 3, distanceScore: 12, carpoolScore: 100, finalScore: 47.2, outcome: 'ALLOCATED', slotNumber: 'A-12' },
+        { rank: 2, bookingId: 'b2', userId: 'u2', user: 'Sam Lee', companyName: 'Mock Co', distanceKm: 5.1, people: 2, distanceScore: 25.5, carpoolScore: 50, finalScore: 35.3, outcome: 'ALLOCATED', slotNumber: 'A-13' },
+        { rank: 3, bookingId: 'b3', userId: 'u3', user: 'Lee Chen', companyName: 'Northwind', distanceKm: 8.7, people: 1, distanceScore: 43.5, carpoolScore: 0, finalScore: 26.1, outcome: 'WAITLISTED', slotNumber: null },
       ],
     }),
   ),

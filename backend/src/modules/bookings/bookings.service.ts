@@ -28,6 +28,16 @@ const DEFAULT_MAX_PEOPLE = 4;
 const DEFAULT_DISTANCE_WEIGHT = 0.6;
 const DEFAULT_CARPOOL_WEIGHT = 0.4;
 const DEFAULT_MAX_DISTANCE_KM = 40;
+const STATUS_PRIORITY: Record<string, number> = {
+  ALLOCATED: 0,
+  WAITLISTED: 1,
+  SUBMITTED: 2,
+  DRAFT: 3,
+  RELEASED: 4,
+  EXPIRED: 5,
+  CANCELLED: 6,
+  REJECTED: 7,
+};
 
 /** Authenticated principal (matches req.user). */
 export interface Principal {
@@ -53,9 +63,42 @@ function assertCanSeeBooking(principal: Principal, booking: { userId: string; co
   if (booking.userId !== principal.id) throw new NotFoundError('Booking not found');
 }
 
+type AdminBookingRow = Prisma.BookingRequestGetPayload<{
+  include: {
+    user: { select: { fullName: true; email: true } };
+    company: { select: { name: true } };
+    carpoolMembers: true;
+    allocation: { include: { slot: { select: { slotNumber: true } } } };
+  };
+}>;
+
 const fail = (field: string, message: string): never => {
   throw new ValidationError('Request validation failed', [{ field, message }]);
 };
+
+const groupKey = (b: AdminBookingRow) => `${b.companyId}:${b.user.email.toLowerCase()}:${b.bookingDate.toISOString().slice(0, 10)}`;
+const rowTime = (b: AdminBookingRow) => (b.createdAt ?? b.submittedAt ?? new Date(0)).getTime();
+const currentHistoryRow = (rows: AdminBookingRow[]) =>
+  [...rows].sort((a, b) => {
+    const status = (STATUS_PRIORITY[a.status] ?? 99) - (STATUS_PRIORITY[b.status] ?? 99);
+    if (status !== 0) return status;
+    return rowTime(b) - rowTime(a);
+  })[0];
+
+async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await prisma.$transaction(work, { isolationLevel: 'Serializable', timeout: 30_000 });
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2034' || attempt === maxAttempts) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
 
 /**
  * Create a submitted PRIMARY booking for the current user (P4-12, reworked for Phase 7).
@@ -77,6 +120,12 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
     throw new WindowClosedError(windowCheck.message);
   }
+
+  // 2. Car-only POC: reject anything else, and persist the field explicitly even when a client omits it.
+  if (input.vehicleType && input.vehicleType !== 'CAR') {
+    fail('vehicleType', 'Only normal car bookings are supported right now');
+  }
+  input.vehicleType = 'CAR';
 
   // 3. Carpool headcount cap (D8) and member/seat consistency.
   const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
@@ -133,8 +182,11 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
   // oversubscribing the date and forcing the weekly run to reject one of them — exactly what this
   // phase exists to prevent. There is no unique constraint that can act as a backstop for a *count*,
   // so the isolation level is doing the real work here.
+  //
+  // Wrapped in `withSerializableRetry` so a lost write race is retried server-side rather than shown
+  // to the user: losing the race does not mean the date is full, only that this read was stale.
   try {
-    return await prisma.$transaction(
+    return await withSerializableRetry(
       async (tx) => {
         // Once a date's run has completed it is decided and closed, whatever the window says.
         const decided = await tx.allocationRun.findFirst({
@@ -219,7 +271,6 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
           },
         });
       },
-      { isolationLevel: 'Serializable', timeout: 15_000 },
     );
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -231,8 +282,8 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
       }
       throw new ConflictError('You already have a PRIMARY booking for this date');
     }
-    // P2034 — the SERIALIZABLE capacity check lost a write race. The loser's read is stale, so it
-    // must not be admitted; surface it as a retryable 409 rather than a 500.
+    // P2034 — the capacity check kept losing the write race even after the retries above. The read is
+    // stale so the request must not be admitted; surface a retryable 409 rather than a 500.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
       throw new CapacityFullError(
         'Another request for this date landed at the same moment — please refresh the slot grid and try again',
@@ -336,7 +387,12 @@ export async function updateBooking(
   }
 
   const data: Prisma.BookingRequestUpdateInput = {};
-  if (input.vehicleType !== undefined) data.vehicleType = input.vehicleType ?? null;
+  if (input.vehicleType !== undefined) {
+    if (input.vehicleType !== 'CAR') {
+      fail('vehicleType', 'Only normal car bookings are supported right now');
+    }
+    data.vehicleType = 'CAR';
+  }
   if (input.vehicleNumber !== undefined) data.vehicleNumber = input.vehicleNumber ?? null;
   if (input.specialRequirement !== undefined) data.specialRequirement = input.specialRequirement ?? null;
   if (input.carpoolPeople != null) data.carpoolMemberCount = nextPeople - 1;
@@ -395,7 +451,6 @@ export async function releaseBooking(
   }
 
   const { bookingDate, companyId: releasingCompanyId } = booking;
-  const freedSlotId = booking.allocation.slotId;
 
   const [dw, cw, maxD, maxP] = await Promise.all([
     getNumber('allocation.distanceWeight'),
@@ -406,10 +461,21 @@ export async function releaseBooking(
   const weights = { distanceWeight: dw ?? DEFAULT_DISTANCE_WEIGHT, carpoolWeight: cw ?? DEFAULT_CARPOOL_WEIGHT };
   const caps = { maxDistanceKm: maxD ?? DEFAULT_MAX_DISTANCE_KM, maxPeople: maxP ?? DEFAULT_MAX_PEOPLE };
 
-  await prisma.$transaction(
-    async (tx) => {
+  await withSerializableRetry(async (tx) => {
+      const liveBooking = await tx.bookingRequest.findUnique({
+        where: { id: bookingId },
+        include: { allocation: true },
+      });
+      if (!liveBooking || liveBooking.status !== 'ALLOCATED' || !liveBooking.allocation) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
+      const freedSlotId = liveBooking.allocation.slotId;
+
       // 1. Free the slot: drop the allocation and mark the request RELEASED.
-      await tx.parkingAllocation.delete({ where: { bookingRequestId: bookingId } });
+      const deletedAllocation = await tx.parkingAllocation.deleteMany({ where: { bookingRequestId: bookingId } });
+      if (deletedAllocation.count !== 1) {
+        throw new ConflictError('Only an allocated booking can be released');
+      }
       await tx.bookingRequest.update({
         where: { id: bookingId },
         data: {
@@ -526,6 +592,38 @@ export async function releaseBooking(
           allocationTime: now,
         },
       });
+      const existingBreakdown = await tx.allocationScoreBreakdown.findUnique({
+        where: { bookingRequestId: winner.bookingId },
+        select: { id: true, tieBreakerData: true },
+      });
+      if (existingBreakdown) {
+        await tx.allocationScoreBreakdown.update({
+          where: { id: existingBreakdown.id },
+          data: {
+            distanceScore: winner.breakdown.distanceScore,
+            carpoolScore: winner.breakdown.carpoolScore,
+            distanceWeight: winner.breakdown.distanceWeight,
+            carpoolWeight: winner.breakdown.carpoolWeight,
+            finalScore: winner.breakdown.finalScore,
+            travellerCount: winner.people,
+            tieBreakerData: {
+              ...(typeof existingBreakdown.tieBreakerData === 'object' && existingBreakdown.tieBreakerData !== null
+                ? existingBreakdown.tieBreakerData
+                : {}),
+              releaseReallocation: {
+                sourceBookingId: bookingId,
+                slotId: freedSlotId,
+                bookingType: winner.bookingType,
+                people: winner.people,
+                distanceKm: winner.distanceKm,
+                submittedAt: (winner.submittedAt instanceof Date ? winner.submittedAt : new Date(winner.submittedAt)).toISOString(),
+                allocationsPrev30d: winner.allocationsPrev30d,
+                computedAt: now.toISOString(),
+              },
+            },
+          },
+        });
+      }
       const superseded = await tx.bookingRequest.updateMany({
         where: {
           bookingDate,
@@ -556,9 +654,7 @@ export async function releaseBooking(
           },
         }),
       });
-    },
-    { isolationLevel: 'Serializable', timeout: 30_000 },
-  );
+    });
 
   return getBookingForPrincipal(principal, bookingId);
 }
@@ -600,19 +696,35 @@ export async function listBookings(principal: Principal, filter: ListBookingsQue
   if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
   if (filter.status) where.status = filter.status;
 
-  const [rows, total] = await Promise.all([
-    prisma.bookingRequest.findMany({
-      where,
-      include: {
-        user: { select: { fullName: true, email: true } },
-        company: { select: { name: true } },
-        allocation: { include: { slot: { select: { slotNumber: true } } } },
-      },
-      orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
-      skip: page.skip,
-      take: page.take,
-    }),
-    prisma.bookingRequest.count({ where }),
-  ]);
-  return { rows, total };
+  const rows = await prisma.bookingRequest.findMany({
+    where,
+    include: {
+      user: { select: { fullName: true, email: true } },
+      company: { select: { name: true } },
+      carpoolMembers: true,
+      allocation: { include: { slot: { select: { slotNumber: true } } } },
+    },
+    orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],
+  });
+
+  const grouped = new Map<string, AdminBookingRow[]>();
+  for (const row of rows) {
+    grouped.set(groupKey(row), [...(grouped.get(groupKey(row)) ?? []), row]);
+  }
+
+  const bookingGroups = [...grouped.values()]
+    .map((history) => {
+      const current = currentHistoryRow(history);
+      return {
+        ...current,
+        history: [...history].sort((a, b) => rowTime(a) - rowTime(b)),
+      };
+    })
+    .sort((a, b) => {
+      const date = b.bookingDate.getTime() - a.bookingDate.getTime();
+      if (date !== 0) return date;
+      return rowTime(b) - rowTime(a);
+    });
+
+  return { rows: bookingGroups.slice(page.skip, page.skip + page.take), total: bookingGroups.length };
 }

@@ -10,10 +10,11 @@ import { nextBookableWeekday } from '../../lib/dates';
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
 
-type AllocationResultRow = components['schemas']['AllocationResultRow'];
+type AllocationResultRow = components['schemas']['AllocationResultRow'] & { companyName?: string | null };
 
 const columns: Column<AllocationResultRow>[] = [
   { key: 'rank', header: 'Rank', render: (r) => <span className={r.rank === 1 ? 'font-semibold text-accent' : ''}>{r.rank}</span> },
+  { key: 'company', header: 'Company', render: (r) => r.companyName ?? '-' },
   { key: 'user', header: 'User', render: (r) => r.user ?? r.userId ?? '—' },
   { key: 'distance', header: 'Distance', align: 'right', className: 'tabular-nums', render: (r) => (r.distanceKm != null ? `${r.distanceKm} km` : '—') },
   { key: 'people', header: 'People', align: 'right', className: 'tabular-nums', render: (r) => r.people },
@@ -101,7 +102,7 @@ export function AllocationRun() {
       {/* Step 1 — primary allocation */}
       <Card title="1 · Primary allocation" description="Rank each company's submitted requests and assign within its quota.">
         <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate || primaryDone}>
-          Run primary allocation
+          {primaryDone ? 'Primary allocation already done' : 'Run primary allocation'}
         </Button>
         {primaryDone && (
           <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
@@ -122,7 +123,7 @@ export function AllocationRun() {
         description="Enroll the users waitlisted by primary and share every company's unused slots across the whole building, top score first."
       >
         <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate || commonPoolDone}>
-          Start common pool
+          {commonPoolDone ? 'Common pool already done' : 'Start common pool'}
         </Button>
         {commonPoolDone && (
           <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">

@@ -68,11 +68,12 @@ describe('LoginPage', () => {
     expect(screen.queryByText('Admin area')).not.toBeInTheDocument();
   });
 
-  it('returns to the guarded "from" path after login', async () => {
+  it('ignores the guarded "from" path and routes to the user home after login', async () => {
     renderLogin({ pathname: '/login', state: { from: { pathname: '/app/deep' } } });
     await userEvent.type(screen.getByLabelText(/email/i), 'user@acme.test');
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    expect(await screen.findByText('Deep user page')).toBeInTheDocument();
+    expect(await screen.findByText('User area')).toBeInTheDocument();
+    expect(screen.queryByText('Deep user page')).not.toBeInTheDocument();
   });
 });
