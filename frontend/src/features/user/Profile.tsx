@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Button, Card, ErrorState, Input, LoadingState, Select, useToast } from '../../components';
 import { useCreateMyVehicle, useMe, useMyVehicles, useRemoveMyVehicle, useUpdateMe } from '../../api/hooks';
 import { ApiError, apiErrorText } from '../../api/http';
+import { BackLink } from '../shared/BackLink';
 import type { components } from '../../api/types';
 
 type VehicleSummary = components['schemas']['VehicleSummary'];
@@ -101,9 +102,12 @@ export function Profile() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
+      <div className="space-y-3">
+        <BackLink label="Back to home" />
+        <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
         <p className="text-text-muted">Manage your details and the cars security can identify at the gate.</p>
+        </div>
       </div>
 
       <Card title="Personal information">
