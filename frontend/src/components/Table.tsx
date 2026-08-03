@@ -26,8 +26,12 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
   const alignClass = (align?: 'left' | 'right') => (align === 'right' ? 'text-right' : 'text-left');
 
   return (
-    <div className={cn('overflow-x-auto', className)}>
-      <table className="w-full text-left text-sm">
+    // On a narrow screen a wide column set scrolls sideways rather than crushing
+    // every cell to unreadable width. `min-w` keeps columns legible while
+    // scrolling; `scroll-shadow` (styles/index.css) fades the edge only while
+    // there is more to reveal, so hidden columns are discoverable.
+    <div className={cn('scroll-shadow overflow-x-auto', className)}>
+      <table className="w-full min-w-[560px] text-left text-sm">
         {/* Headers are monospace and letterspaced — the system reads them as
             spec-sheet column labels rather than as prose. */}
         <thead className="font-mono text-3xs uppercase tracking-[0.11em] text-text-muted">

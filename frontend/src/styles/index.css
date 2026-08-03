@@ -47,6 +47,24 @@
     background: rgb(var(--primary) / 0.3);
   }
 
+  /* A horizontally-scrolling region (wide data tables on a narrow screen) fades
+     at whichever edge still has content, so hidden columns announce themselves.
+     `local` background-attachment is what makes the fade track the scroll. */
+  .scroll-shadow {
+    background:
+      linear-gradient(to right, rgb(var(--canvas)) 30%, transparent),
+      linear-gradient(to right, transparent, rgb(var(--canvas)) 70%) 100% 0,
+      radial-gradient(farthest-side at 0 50%, rgb(var(--text) / 0.13), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgb(var(--text) / 0.13), transparent) 100% 0;
+    background-repeat: no-repeat;
+    background-size:
+      40px 100%,
+      40px 100%,
+      13px 100%,
+      13px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+
   /* Native date/time pickers ship a dark-on-light glyph that reads as a foreign
      object on the steel ground — and disappears entirely in dark mode. Tint it
      to the muted ink instead, and let it take the accent on hover. */

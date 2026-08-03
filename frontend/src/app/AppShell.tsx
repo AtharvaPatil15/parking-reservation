@@ -42,9 +42,13 @@ function ShellFrame({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <CrumbStrip onOpenNav={navItems.length > 0 ? () => setDrawerOpen(true) : undefined} />
-        {/* Full-bleed: the content region fills the frame beside the rail rather
-            than sitting in a centred column, so panels reach the viewport edge. */}
-        <main className="w-full flex-1 px-6 py-6 lg:px-[26px]">{children}</main>
+        {/* The content region fills the frame beside the rail, but stops growing at
+            the width the design was drawn for (1280 total − the 248px rail). Past
+            that the column stays put rather than stretching tables and panels to an
+            unreadable measure on a wide monitor; below it, it is fluid. */}
+        <main className="mx-auto w-full max-w-[1032px] flex-1 px-5 py-6 sm:px-6 lg:px-[26px]">
+          {children}
+        </main>
       </div>
 
       {/* Below lg the same rail rides in the drawer, so there is one nav to maintain. */}
@@ -78,30 +82,34 @@ function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
     .sort((a, b) => b.to.length - a.to.length)[0]?.label;
 
   return (
-    <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-border bg-surface-2 px-6 lg:px-11">
-      <div className="flex min-w-0 items-center gap-3">
-        {onOpenNav && (
-          <button
-            type="button"
-            onClick={onOpenNav}
-            aria-label="Open navigation menu"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface hover:text-text lg:hidden"
-          >
-            <MenuIcon />
-          </button>
-        )}
-        <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap">
-          {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
-          {section && <span className="text-text-muted/70"> / {section}</span>}
-        </span>
-      </div>
-      <div className="flex shrink-0 items-center gap-3">
-        {user?.companyName && (
-          <span className="hidden font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap sm:inline">
-            {user.companyName}
+    // The bar spans the frame (it is chrome), but its contents track the same
+    // centred column as the content below so the two never look misaligned.
+    <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center border-b border-border bg-surface-2">
+      <div className="mx-auto flex w-full max-w-[1032px] items-center justify-between gap-4 px-5 sm:px-6 lg:px-[26px]">
+        <div className="flex min-w-0 items-center gap-3">
+          {onOpenNav && (
+            <button
+              type="button"
+              onClick={onOpenNav}
+              aria-label="Open navigation menu"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface hover:text-text lg:hidden"
+            >
+              <MenuIcon />
+            </button>
+          )}
+          <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap">
+            {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
+            {section && <span className="text-text-muted/70"> / {section}</span>}
           </span>
-        )}
-        <ThemeToggle />
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {user?.companyName && (
+            <span className="hidden font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap sm:inline">
+              {user.companyName}
+            </span>
+          )}
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
@@ -110,7 +118,12 @@ function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
 function MenuIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M4 6h16M4 12h16M4 18h16"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
