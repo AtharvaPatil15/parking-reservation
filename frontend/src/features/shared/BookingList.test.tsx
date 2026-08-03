@@ -44,5 +44,7 @@ describe('BookingList (admin roster)', () => {
     expect(screen.getByText('Passengers')).toBeInTheDocument();
     expect(screen.getByText('Passenger 1')).toBeInTheDocument();
     expect(screen.getByText('passenger1@mock.test')).toBeInTheDocument();
+    expect(screen.getByText('Contact: 9990000001')).toBeInTheDocument();
+    expect(screen.getByText('Pickup: Pickup 1')).toBeInTheDocument();
   });
 });

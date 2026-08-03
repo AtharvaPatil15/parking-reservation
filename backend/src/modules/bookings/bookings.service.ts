@@ -290,7 +290,12 @@ export async function updateBooking(
   }
 
   const data: Prisma.BookingRequestUpdateInput = {};
-  if (input.vehicleType !== undefined) data.vehicleType = input.vehicleType ?? null;
+  if (input.vehicleType !== undefined) {
+    if (input.vehicleType !== 'CAR') {
+      fail('vehicleType', 'Only normal car bookings are supported right now');
+    }
+    data.vehicleType = 'CAR';
+  }
   if (input.vehicleNumber !== undefined) data.vehicleNumber = input.vehicleNumber ?? null;
   if (input.specialRequirement !== undefined) data.specialRequirement = input.specialRequirement ?? null;
   if (input.carpoolPeople != null) data.carpoolMemberCount = nextPeople - 1;

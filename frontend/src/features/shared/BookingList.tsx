@@ -127,6 +127,12 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
                         <div key={m.id} className="rounded-control bg-surface-2 px-3 py-2 text-sm">
                           <div className="font-medium">{m.name}</div>
                           <div className="text-xs text-text-muted">{m.employeeEmail ?? 'No email'}</div>
+                          {(m.contactNumber || m.pickupLocation) && (
+                            <div className="mt-1 space-y-0.5 text-xs text-text-muted">
+                              <div>Contact: {m.contactNumber ?? '-'}</div>
+                              <div>Pickup: {m.pickupLocation ?? '-'}</div>
+                            </div>
+                          )}
                           <div className="mt-1 flex flex-wrap gap-1">
                             <Badge tone={m.sameCompany ? 'success' : 'neutral'}>{m.sameCompany ? 'Same company' : 'Not matched'}</Badge>
                             <Badge tone={m.isScored ? 'primary' : 'neutral'}>{m.isScored ? 'Scored' : 'Not scored'}</Badge>
