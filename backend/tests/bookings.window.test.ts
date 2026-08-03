@@ -102,6 +102,15 @@ describe('requestable window (D9 + D11)', () => {
       }
     }
   });
+
+  it('locks the closing band at 19:00 IST on the run day', () => {
+    const beforeClose = new Date('2026-08-09T13:29:59.000Z');
+    const atClose = new Date('2026-08-09T13:30:00.000Z');
+
+    expect(checkRequestable('2026-08-12', beforeClose, SUNDAY_CFG)).toEqual({ ok: true });
+    expect(checkRequestable('2026-08-12', atClose, SUNDAY_CFG)).toMatchObject({ ok: false, code: 'TOO_SOON' });
+    expect(toIsoDate(earliestRequestableDate(atClose, SUNDAY_CFG))).toBe('2026-08-19');
+  });
 });
 
 describe('checkRequestable', () => {
@@ -214,6 +223,8 @@ describe('bookingWindowSummary', () => {
     const s = bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG);
     expect(s).toMatchObject({
       nextRunAt: '2026-08-09T14:30:00.000Z',
+      requestCloseAt: '2026-08-09T13:30:00.000Z',
+      resultsRunAt: '2026-08-09T14:30:00.000Z',
       runDay: 'SUNDAY',
       runTime: '20:00',
       windowWeeks: 2,
@@ -223,6 +234,7 @@ describe('bookingWindowSummary', () => {
     });
     // Mon 10:00 IST → Sun 20:00 IST is 6 days 10 hours.
     expect(s.nextRunCountdownSeconds).toBe(6 * 86400 + 10 * 3600);
+    expect(s.requestCloseCountdownSeconds).toBe(6 * 86400 + 9 * 3600);
     expect(s.requestableDates).toHaveLength(4);
   });
 });

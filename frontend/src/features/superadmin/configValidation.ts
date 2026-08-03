@@ -21,6 +21,7 @@ const TIMING_LABELS: Record<string, string> = {
   'booking.commonPoolResultsBy': 'Common-pool results by',
   // Phase 7 — spelled out because the humanized fallback ("Window weeks") loses the meaning.
   'booking.windowWeeks': 'Booking window (weeks ahead)',
+  'booking.allocationRunFrequency': 'Automatic allocation interval',
   'booking.allocationRunDay': 'Weekly allocation run day',
   'booking.allocationRunTime': 'Weekly allocation run time',
   'booking.approvalLeadDays': 'Decision lead time (days)',
@@ -68,7 +69,12 @@ export function validateConfigValue(key: string, valueType: string, v: string): 
       if (v !== '2' && v !== '4') return 'Must be 2 or 4 weeks';
       break;
     case 'booking.allocationRunDay':
-      if (v !== 'SATURDAY' && v !== 'SUNDAY') return 'Must be SATURDAY or SUNDAY';
+      if (!['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].includes(v)) {
+        return 'Must be a weekday';
+      }
+      break;
+    case 'booking.allocationRunFrequency':
+      if (v !== 'WEEKLY' && v !== 'BIWEEKLY' && v !== 'MONTHLY') return 'Must be weekly, biweekly, or monthly';
       break;
     case 'booking.approvalLeadDays': {
       const n = Number(v);
@@ -91,8 +97,18 @@ export const ENUM_CONFIG_OPTIONS: Record<string, Array<{ value: string; label: s
     { value: '4', label: '4 weeks' },
   ],
   'booking.allocationRunDay': [
+    { value: 'MONDAY', label: 'Monday' },
+    { value: 'TUESDAY', label: 'Tuesday' },
+    { value: 'WEDNESDAY', label: 'Wednesday' },
+    { value: 'THURSDAY', label: 'Thursday' },
+    { value: 'FRIDAY', label: 'Friday' },
     { value: 'SATURDAY', label: 'Saturday' },
     { value: 'SUNDAY', label: 'Sunday' },
+  ],
+  'booking.allocationRunFrequency': [
+    { value: 'WEEKLY', label: 'Weekly' },
+    { value: 'BIWEEKLY', label: 'Biweekly' },
+    { value: 'MONTHLY', label: 'Monthly' },
   ],
 };
 

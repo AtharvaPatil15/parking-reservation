@@ -27,6 +27,7 @@ describe('UserDashboard', () => {
     renderDash();
     expect(await screen.findByText(/2026-08-03/)).toBeInTheDocument();
     expect(screen.getByText('ALLOCATED')).toBeInTheDocument();
+    expect(screen.getByText(/next allocation run/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /book a slot/i })).toBeInTheDocument();
   });
 

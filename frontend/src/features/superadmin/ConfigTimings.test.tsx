@@ -17,18 +17,30 @@ function renderConfig() {
 }
 
 describe('ConfigTimings', () => {
-  it('renders window-time and weight fields from the config', async () => {
+  it('renders allocation schedule and weight fields from the config', async () => {
     renderConfig();
-    expect(await screen.findByLabelText(/primary window closes/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/automatic allocation run interval/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/weekly allocation run day/i)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Monday' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Friday' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/weekly allocation run time/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/weight of the distance sub-score/i)).toBeInTheDocument();
+    expect(screen.getByText(/next 5 runs/i)).toBeInTheDocument();
   });
 
   it('does not expose the raw config keys (function names) to the user', async () => {
     renderConfig();
-    await screen.findByLabelText(/primary window closes/i);
-    expect(screen.queryByText('booking.primaryCutoff')).not.toBeInTheDocument();
+    await screen.findByLabelText(/automatic allocation run interval/i);
+    expect(screen.queryByText('booking.allocationRunFrequency')).not.toBeInTheDocument();
     expect(screen.queryByText('allocation.distanceWeight')).not.toBeInTheDocument();
     expect(screen.queryByText('carpool.maxPeople')).not.toBeInTheDocument();
+  });
+
+  it('does not show the old booking-window time card', async () => {
+    renderConfig();
+    await screen.findByLabelText(/automatic allocation run interval/i);
+    expect(screen.queryByText(/^booking windows$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/primary window closes/i)).not.toBeInTheDocument();
   });
 
   it('flags an out-of-range weight inline', async () => {
@@ -36,16 +48,6 @@ describe('ConfigTimings', () => {
     const weight = await screen.findByLabelText(/weight of the distance sub-score/i);
     fireEvent.change(weight, { target: { value: '2' } });
     expect(await screen.findByText(/between 0 and 1/i)).toBeInTheDocument();
-  });
-
-  it('flags out-of-order booking times', async () => {
-    renderConfig();
-    const resultsBy = await screen.findByLabelText(/primary results published by/i);
-    // Move "results by" before the cutoff (13:00) → violates the ordering rule.
-    fireEvent.change(resultsBy, { target: { value: '12:00' } });
-    // The rule is flagged inline on each timing field. Longer timeout: the full
-    // parallel suite is CPU-heavy and the default 1s poll can lapse under load.
-    expect((await screen.findAllByText(/out of order/i, {}, { timeout: 4000 })).length).toBeGreaterThan(0);
   });
 
   it('saves a valid change and toasts', async () => {

@@ -1506,6 +1506,10 @@ export interface components {
             /** @description Absent when the user has no upcoming booking. */
             upcomingBooking?: components["schemas"]["Booking"];
             cutoffCountdownSeconds?: number | null;
+            /** Format: date-time */
+            nextAllocationRunAt?: string;
+            nextAllocationRunCountdownSeconds?: number;
+            nextAllocationRuns?: string[];
             previousBookingsCount?: number;
         };
         /** @description The rolling request window and the weekly run it closes at (Phase 7 §3). Everything the client needs to say "book between X and Y; results published on Z". */
@@ -1517,8 +1521,22 @@ export interface components {
             nextRunAt: string;
             /** @description Seconds until `nextRunAt`; 0 once passed. */
             nextRunCountdownSeconds: number;
+            /**
+             * Format: date-time
+             * @description When requests close for the next processed band.
+             */
+            requestCloseAt: string;
+            /** @description Seconds until `requestCloseAt`; 0 once passed. */
+            requestCloseCountdownSeconds: number;
+            /**
+             * Format: date-time
+             * @description Run that publishes results for the open request band.
+             */
+            resultsRunAt: string;
             /** @enum {string} */
-            runDay: "SATURDAY" | "SUNDAY";
+            runDay: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            /** @enum {string} */
+            runFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
             /** @description HH:MM IST. */
             runTime: string;
             /** @enum {integer} */
@@ -1531,6 +1549,8 @@ export interface components {
             latestDate: string;
             /** @description Bookable weekdays currently open for requests. */
             requestableDates: string[];
+            /** @description Next five automatic allocation run instants. */
+            nextRuns: string[];
         };
         /**
          * @description MINE = the caller's own reservation, TAKEN = someone else's, BLOCKED = withheld by an admin, AVAILABLE = free. Render AVAILABLE green and everything else grey.

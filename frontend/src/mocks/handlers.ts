@@ -93,6 +93,7 @@ function seedConfig(): ConfigEntry[] {
     { key: 'password.minLength', value: '8', valueType: 'NUMBER', description: 'Minimum password length' },
     // Phase 7 — rolling window + weekly weekend run.
     { key: 'booking.windowWeeks', value: '2', valueType: 'NUMBER', description: 'How many weeks ahead booking is open (2 or 4)' },
+    { key: 'booking.allocationRunFrequency', value: 'WEEKLY', valueType: 'STRING', description: 'Automatic allocation run interval' },
     { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Weekly allocation run day' },
     { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Weekly allocation run time (IST)' },
     { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'Days a date is decided ahead of itself' },
@@ -365,13 +366,21 @@ function mockWindow(now = new Date()): BookingWindow {
   return {
     nextRunAt: nextRun.toISOString(),
     nextRunCountdownSeconds: Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000)),
+    requestCloseAt: new Date(nextRun.getFullYear(), nextRun.getMonth(), nextRun.getDate(), 19, 0, 0, 0).toISOString(),
+    requestCloseCountdownSeconds: Math.max(
+      0,
+      Math.floor((new Date(nextRun.getFullYear(), nextRun.getMonth(), nextRun.getDate(), 19, 0, 0, 0).getTime() - now.getTime()) / 1000),
+    ),
+    resultsRunAt: nextRun.toISOString(),
     runDay: 'SUNDAY',
+    runFrequency: 'WEEKLY',
     runTime: '20:00',
     windowWeeks: WINDOW_WEEKS,
     approvalLeadDays: LEAD_DAYS,
     earliestDate: isoOf(earliest),
     latestDate: isoOf(latest),
     requestableDates: dates,
+    nextRuns: Array.from({ length: 5 }, (_, i) => addDaysTo(nextRun, i * 7).toISOString()),
   };
 }
 
@@ -649,6 +658,9 @@ const hero = [
     ok<UserDashboard>({
       upcomingBooking: toSummary(bookingState['mock-booking-1']),
       cutoffCountdownSeconds: 3600,
+      nextAllocationRunAt: mockWindow().nextRunAt,
+      nextAllocationRunCountdownSeconds: mockWindow().nextRunCountdownSeconds,
+      nextAllocationRuns: mockWindow().nextRuns,
       previousBookingsCount: 2,
     }),
   ),

@@ -25,14 +25,18 @@ import {
 
 const IST_OFFSET_MS = IST_OFFSET_MINUTES * 60 * 1000;
 const MS_DAY = 24 * 60 * 60 * 1000;
+const REQUEST_CLOSE_TIME = '19:00';
 
-export type RunDay = 'SATURDAY' | 'SUNDAY';
+export type RunDay = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+export type RunFrequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
 
 export interface WindowConfig {
   /** How many weeks ahead requests are accepted (D9). */
   windowWeeks: number;
   /** Weekday the weekly allocation batch runs on (D10). */
   runDay: RunDay;
+  /** How often the automatic allocation batch runs. */
+  runFrequency: RunFrequency;
   /** `HH:MM` IST the batch fires at on `runDay` (D10). */
   runTime: string;
   /** Minimum days between a date's decision and the date itself (D11). */
@@ -43,6 +47,7 @@ export interface WindowConfig {
 export const DEFAULT_WINDOW_CONFIG: WindowConfig = {
   windowWeeks: 2,
   runDay: 'SUNDAY',
+  runFrequency: 'WEEKLY',
   runTime: '20:00',
   approvalLeadDays: 3,
 };
@@ -61,7 +66,15 @@ function parseHhMm(time: string): [number, number] {
 
 /** 0 = Sunday … 6 = Saturday, matching `Date#getUTCDay`. */
 function runDayIndex(runDay: RunDay): number {
-  return runDay === 'SUNDAY' ? 0 : 6;
+  return {
+    SUNDAY: 0,
+    MONDAY: 1,
+    TUESDAY: 2,
+    WEDNESDAY: 3,
+    THURSDAY: 4,
+    FRIDAY: 5,
+    SATURDAY: 6,
+  }[runDay];
 }
 
 /**
@@ -70,6 +83,22 @@ function runDayIndex(runDay: RunDay): number {
  * land in a band that is mid-flight.
  */
 export function nextAllocationRunAt(now: Date, cfg: WindowConfig): Date {
+  const weekly = nextWeeklyAllocationRunAt(now, cfg);
+  if (cfg.runFrequency === 'WEEKLY') return weekly;
+
+  const anchor = new Date('2026-08-09T14:30:00.000Z');
+  if (cfg.runFrequency === 'BIWEEKLY') {
+    let run = nextWeeklyAllocationRunAt(new Date(anchor.getTime() - 1), cfg);
+    while (run.getTime() <= now.getTime()) run = addDays(runCalendarDate(run), 14);
+    const [hh, mm] = parseHhMm(cfg.runTime);
+    const istRun = new Date(run.getTime() + IST_OFFSET_MS);
+    return new Date(Date.UTC(istRun.getUTCFullYear(), istRun.getUTCMonth(), istRun.getUTCDate(), hh, mm) - IST_OFFSET_MS);
+  }
+
+  return nextMonthlyAllocationRunAt(now, cfg);
+}
+
+function nextWeeklyAllocationRunAt(now: Date, cfg: WindowConfig): Date {
   const [hh, mm] = parseHhMm(cfg.runTime);
   // Shifting into IST makes the UTC getters read as IST wall-clock fields.
   const ist = new Date(now.getTime() + IST_OFFSET_MS);
@@ -80,6 +109,34 @@ export function nextAllocationRunAt(now: Date, cfg: WindowConfig): Date {
   return new Date((candidate <= ist.getTime() ? at(7) : candidate) - IST_OFFSET_MS);
 }
 
+function nextMonthlyAllocationRunAt(now: Date, cfg: WindowConfig): Date {
+  const [hh, mm] = parseHhMm(cfg.runTime);
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  const targetDay = runDayIndex(cfg.runDay);
+  for (let monthOffset = 0; monthOffset < 24; monthOffset++) {
+    const monthStart = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() + monthOffset, 1, hh, mm);
+    const first = new Date(monthStart);
+    const delta = (targetDay - first.getUTCDay() + 7) % 7;
+    const candidateIstMs = monthStart + delta * MS_DAY;
+    if (candidateIstMs > ist.getTime()) return new Date(candidateIstMs - IST_OFFSET_MS);
+  }
+  throw new RangeError('Could not resolve next monthly allocation run');
+}
+
+function istInstantOnDate(date: Date, hhmm: string): Date {
+  const [hh, mm] = parseHhMm(hhmm);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), hh, mm) - IST_OFFSET_MS);
+}
+
+function requestCloseAtForRun(runInstant: Date): Date {
+  return istInstantOnDate(runCalendarDate(runInstant), REQUEST_CLOSE_TIME);
+}
+
+function requestWindowRunAt(now: Date, cfg: WindowConfig): Date {
+  const run = nextAllocationRunAt(now, cfg);
+  return now.getTime() >= requestCloseAtForRun(run).getTime() ? nextAllocationRunAt(run, cfg) : run;
+}
+
 /** The IST calendar date (UTC-midnight) a run instant falls on. */
 export function runCalendarDate(runInstant: Date): Date {
   return currentIstCalendarDate(runInstant);
@@ -87,7 +144,7 @@ export function runCalendarDate(runInstant: Date): Date {
 
 /** First date a user may request right now: the next run's date + the lead time (D11). */
 export function earliestRequestableDate(now: Date, cfg: WindowConfig): Date {
-  return addDays(runCalendarDate(nextAllocationRunAt(now, cfg)), cfg.approvalLeadDays);
+  return addDays(runCalendarDate(requestWindowRunAt(now, cfg)), cfg.approvalLeadDays);
 }
 
 /** Last date a user may request right now: today + the configured horizon (D9). */
@@ -171,6 +228,17 @@ export function allocationBand(runInstant: Date, cfg: WindowConfig): AllocationB
   };
 }
 
+export function nextAllocationRuns(now: Date, cfg: WindowConfig, count = 5): string[] {
+  const runs: string[] = [];
+  let cursor = now;
+  for (let i = 0; i < count; i++) {
+    const next = nextAllocationRunAt(cursor, cfg);
+    runs.push(next.toISOString());
+    cursor = next;
+  }
+  return runs;
+}
+
 /**
  * The band the *upcoming* scheduled run owns — what a manual "run the weekly batch" click should
  * process.
@@ -191,27 +259,39 @@ export function upcomingAllocationBand(now: Date, cfg: WindowConfig): Allocation
 export interface BookingWindowSummary {
   nextRunAt: string;
   nextRunCountdownSeconds: number;
+  requestCloseAt: string;
+  requestCloseCountdownSeconds: number;
+  resultsRunAt: string;
   runDay: RunDay;
+  runFrequency: RunFrequency;
   runTime: string;
   windowWeeks: number;
   approvalLeadDays: number;
   earliestDate: string;
   latestDate: string;
   requestableDates: string[];
+  nextRuns: string[];
 }
 
 /** Everything the client needs to render "book between X and Y; results on Z" in one payload. */
 export function bookingWindowSummary(now: Date, cfg: WindowConfig): BookingWindowSummary {
   const nextRun = nextAllocationRunAt(now, cfg);
+  const windowRun = requestWindowRunAt(now, cfg);
+  const requestClose = requestCloseAtForRun(windowRun);
   return {
     nextRunAt: nextRun.toISOString(),
     nextRunCountdownSeconds: Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000)),
+    requestCloseAt: requestClose.toISOString(),
+    requestCloseCountdownSeconds: Math.max(0, Math.floor((requestClose.getTime() - now.getTime()) / 1000)),
+    resultsRunAt: windowRun.toISOString(),
     runDay: cfg.runDay,
+    runFrequency: cfg.runFrequency,
     runTime: cfg.runTime,
     windowWeeks: cfg.windowWeeks,
     approvalLeadDays: cfg.approvalLeadDays,
     earliestDate: toIsoDate(earliestRequestableDate(now, cfg)),
     latestDate: toIsoDate(latestRequestableDate(now, cfg)),
     requestableDates: requestableDates(now, cfg),
+    nextRuns: nextAllocationRuns(now, cfg, 5),
   };
 }
