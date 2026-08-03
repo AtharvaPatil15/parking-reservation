@@ -1194,22 +1194,25 @@ export interface components {
         LoginResponseData: components["schemas"]["AccessTokenData"] & {
             user: components["schemas"]["AuthUser"];
         };
+        /** @description `companyId`, `address` and `pinCode` are required for EMPLOYEE and COMPANY_ADMIN but are NOT collected from a SECURITY applicant (Phase 7 D15) — a gate operator has no tenant to pick and no commute to record, so the server assigns the building company and stores no home address. Sending them as a SECURITY applicant is not an error; they are ignored. */
         RegisterRequest: {
             fullName: string;
-            /** @description Must reference an ACTIVE company. */
-            companyId: string;
+            /** @description Must reference an ACTIVE company. Required unless `registrationType` is SECURITY. */
+            companyId?: string;
             /** Format: email */
             email: string;
             contactNumber: string;
-            address: string;
-            pinCode: string;
+            /** @description Required unless `registrationType` is SECURITY. */
+            address?: string;
+            /** @description Required unless `registrationType` is SECURITY. */
+            pinCode?: string;
             /**
              * @description Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin. COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the Super Admin; approval also grants the CompanyAdmin assignment (F11). SECURITY → a building gate operator (Phase 7 D15), approved by the Super Admin only; approval simply activates the account. Registers against the building company.
              * @default EMPLOYEE
              * @enum {string}
              */
             registrationType: "EMPLOYEE" | "COMPANY_ADMIN" | "SECURITY";
-            /** @description Manually-entered home→office distance in km (D6). Optional at registration. */
+            /** @description Manually-entered home→office distance in km (D6). Optional at registration, and ignored for a SECURITY applicant (a guard is never allocated a slot, so is never scored). */
             distanceKm?: number | null;
             /** Format: password */
             password: string;

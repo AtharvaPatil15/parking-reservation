@@ -512,21 +512,37 @@ const hero = [
   ),
   http.post(`${baseURL}/auth/register`, async ({ request }) => {
     const b = (await request.json().catch(() => ({}))) as Partial<RegisterRequest>;
-    if (!b.fullName || !b.companyId || !b.email || !b.password) {
+    const isSecurity = b.registrationType === 'SECURITY';
+    // A SECURITY applicant (Phase 7 D15) picks no company — the server assigns the building one — so
+    // companyId is only required of everyone else.
+    if (!b.fullName || !b.email || !b.password || (!isSecurity && !b.companyId)) {
       return fail(400, 'VALIDATION_ERROR', 'Missing required fields');
     }
     if (b.password !== b.confirmPassword) return fail(400, 'VALIDATION_ERROR', 'Passwords do not match');
     const exists = Object.values(companyUserState).some((list) => list.some((u) => u.email === b.email));
     if (exists) return fail(409, 'CONFLICT', 'An account with this email already exists');
-    const company = companyState.find((c) => c.id === b.companyId && c.status === 'ACTIVE');
+    // Mirrors auth.service: match the building company by code. The mock fixture has no REDBRICKS row,
+    // so the first ACTIVE company stands in for it.
+    const company = isSecurity
+      ? (companyState.find((c) => c.code === 'REDBRICKS' && c.status === 'ACTIVE') ??
+        companyState.find((c) => c.status === 'ACTIVE'))
+      : companyState.find((c) => c.id === b.companyId && c.status === 'ACTIVE');
     if (!company) return fail(400, 'VALIDATION_ERROR', 'Company must be active');
     // Create as PENDING and add to the company's user list. A COMPANY_ADMIN request (F11) gets the
-    // COMPANY_ADMIN role so it surfaces in the Super Admin's admin-request queue instead.
-    const role: RoleName = b.registrationType === 'COMPANY_ADMIN' ? 'COMPANY_ADMIN' : 'USER';
+    // COMPANY_ADMIN role so it surfaces in the Super Admin's admin-request queue instead; a SECURITY
+    // request lands in the same queue (both are super-admin approved).
+    const role: RoleName = isSecurity
+      ? 'SECURITY'
+      : b.registrationType === 'COMPANY_ADMIN'
+        ? 'COMPANY_ADMIN'
+        : 'USER';
     const user: UserProfile = {
       ...userProfile(nextId('u'), b.fullName, b.email, 'PENDING', role, { id: company.id, name: company.name }),
-      contactNumber: b.contactNumber ?? '—', address: b.address ?? '—', pinCode: b.pinCode ?? '—',
-      distanceKm: b.distanceKm ?? null,
+      contactNumber: b.contactNumber ?? '—',
+      // Not collected for a guard, matching the server (which stores an empty string).
+      address: isSecurity ? '' : (b.address ?? '—'),
+      pinCode: isSecurity ? '' : (b.pinCode ?? '—'),
+      distanceKm: isSecurity ? null : (b.distanceKm ?? null),
     };
     companyUserState[company.id] = [...(companyUserState[company.id] ?? []), user];
     return ok<UserProfile>(user, 201);
