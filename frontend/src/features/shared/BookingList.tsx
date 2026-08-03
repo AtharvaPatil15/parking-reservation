@@ -40,6 +40,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   const showCompany = scope === 'all';
   const [companyId, setCompanyId] = useState('');
   const [page, setPage] = useState(1);
+  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
 
   // The date is driven by the dashboard-level picker; reset paging when it changes.
   useEffect(() => setPage(1), [date]);
@@ -58,6 +59,15 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   ];
 
   const rows = bookings.data?.items ?? [];
+
+  function detailLine(label: string, value: string | number | null | undefined) {
+    return (
+      <div>
+        <dt className="text-xs uppercase text-text-muted">{label}</dt>
+        <dd className="mt-0.5 font-medium">{value ?? '-'}</dd>
+      </div>
+    );
+  }
 
   const columns: Column<AdminBooking>[] = [
     ...(showCompany
@@ -85,6 +95,59 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
     // how waitlisted/unallocated bookings scored ('-' before scoring runs).
     { key: 'score', header: 'Score', align: 'right', className: 'tabular-nums', render: (b) => (b.allocationScore != null ? b.allocationScore.toFixed(1) : '-') },
     { key: 'slot', header: 'Slot', align: 'right', className: 'tabular-nums', render: (b) => b.allocatedSlotNumber ?? '-' },
+    {
+      key: 'details',
+      header: '',
+      align: 'right',
+      render: (b) => {
+        const isOpen = openBookingId === b.id;
+        const members = b.carpoolMembers ?? [];
+        return (
+          <div className="flex flex-col items-end">
+            <Button variant="secondary" size="sm" onClick={() => setOpenBookingId(isOpen ? null : b.id)}>
+              {isOpen ? 'Hide' : 'Details'}
+            </Button>
+            {isOpen && (
+              <div className="mt-2 w-[28rem] rounded-card border border-border bg-surface p-4 text-left shadow-lg">
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  {detailLine('People carried', b.carpoolPeople)}
+                  {detailLine('Passengers', Math.max(0, b.carpoolPeople - 1))}
+                  {detailLine('Distance', b.travelDistanceKm != null ? `${b.travelDistanceKm} km` : null)}
+                  {detailLine('Vehicle slot', b.allocatedSlotNumber)}
+                  {detailLine('Submitted', b.submittedAt ? new Date(b.submittedAt).toLocaleString() : null)}
+                  {detailLine('Created', new Date(b.createdAt).toLocaleString())}
+                </dl>
+                <div className="mt-4 border-t border-border pt-3">
+                  <p className="text-xs font-medium uppercase text-text-muted">Passenger details</p>
+                  {members.length === 0 ? (
+                    <p className="mt-2 text-sm text-text-muted">Driver only.</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {members.map((m) => (
+                        <div key={m.id} className="rounded-control bg-surface-2 px-3 py-2 text-sm">
+                          <div className="font-medium">{m.name}</div>
+                          <div className="text-xs text-text-muted">{m.employeeEmail ?? 'No email'}</div>
+                          {(m.contactNumber || m.pickupLocation) && (
+                            <div className="mt-1 space-y-0.5 text-xs text-text-muted">
+                              <div>Contact: {m.contactNumber ?? '-'}</div>
+                              <div>Pickup: {m.pickupLocation ?? '-'}</div>
+                            </div>
+                          )}
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <Badge tone={m.sameCompany ? 'success' : 'neutral'}>{m.sameCompany ? 'Same company' : 'Not matched'}</Badge>
+                            <Badge tone={m.isScored ? 'primary' : 'neutral'}>{m.isScored ? 'Scored' : 'Not scored'}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
   ];
 
   const total = bookings.data?.meta.total ?? 0;

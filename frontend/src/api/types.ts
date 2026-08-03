@@ -1079,6 +1079,17 @@ export interface components {
             travelDistanceKm?: number | null;
             /** @description Driver + declared members. */
             carpoolPeople: number;
+            /** @description Declared passengers carried by the driver. */
+            carpoolMembers?: {
+                id: string;
+                name: string;
+                /** Format: email */
+                employeeEmail?: string | null;
+                contactNumber?: string | null;
+                pickupLocation?: string | null;
+                sameCompany: boolean;
+                isScored: boolean;
+            }[];
             allocationScore?: number | null;
             /** @description Slot number if ALLOCATED */
             allocatedSlotNumber?: string | null;
@@ -1396,6 +1407,8 @@ export interface components {
             userId?: string;
             /** @description User full name (display). */
             user?: string;
+            /** @description Company name (display). */
+            companyName?: string | null;
             distanceKm?: number | null;
             people: number;
             distanceScore: number;

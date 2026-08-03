@@ -259,6 +259,20 @@ export async function getRunSummary(runId: string) {
   return { run, totalRequests, allocatedCount, waitlistedCount: totalRequests - allocatedCount };
 }
 
+/** Find an allocation run by date/type so clients can disable a date once it has completed. */
+export async function getRunSummaryByDate(runType: 'PRIMARY' | 'COMMON_POOL', bookingDateStr: string) {
+  if (!isValidCalendarDate(bookingDateStr)) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'bookingDate', message: 'Not a valid calendar date' },
+    ]);
+  }
+  const run = await prisma.allocationRun.findUnique({
+    where: { runType_bookingDate: { runType, bookingDate: parseCalendarDate(bookingDateStr) } },
+  });
+  if (!run) return null;
+  return getRunSummary(run.id);
+}
+
 /**
  * Run (or idempotently re-run) COMMON-POOL allocation for a booking date. Returns the run id.
  *
@@ -561,6 +575,7 @@ export async function getRunBreakdown(runId: string) {
           userId: true,
           travelDistanceKm: true,
           user: { select: { fullName: true } },
+          company: { select: { name: true } },
           allocation: { select: { slot: { select: { slotNumber: true } } } },
         },
       },

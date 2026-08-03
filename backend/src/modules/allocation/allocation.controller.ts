@@ -58,6 +58,7 @@ function toBreakdown({ run, rows }: Breakdown) {
       bookingId: r.bookingRequest.id,
       userId: r.bookingRequest.userId,
       user: r.bookingRequest.user.fullName,
+      companyName: r.bookingRequest.company.name,
       distanceKm: num(r.bookingRequest.travelDistanceKm),
       people: r.travellerCount,
       distanceScore: Number(r.distanceScore),
@@ -96,6 +97,14 @@ export const listAllocations = asyncHandler(async (req, res) => {
 
 export const getRun = asyncHandler(async (req, res) => {
   sendSuccess(res, toRunSummary(await service.getRunSummary(req.params.id)), 200);
+});
+
+export const getRunByDate = asyncHandler(async (req, res) => {
+  const summary = await service.getRunSummaryByDate(
+    req.query.runType as 'PRIMARY' | 'COMMON_POOL',
+    req.query.bookingDate as string,
+  );
+  sendSuccess(res, summary ? toRunSummary(summary) : null, 200);
 });
 
 export const getBreakdown = asyncHandler(async (req, res) => {

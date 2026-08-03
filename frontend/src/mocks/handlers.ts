@@ -155,6 +155,15 @@ function seedAdminBookings(): AdminBooking[] {
     id, bookingDate, bookingType: 'PRIMARY', status, employeeName, employeeEmail, companyId, companyName,
     allocationSource: status === 'ALLOCATED' ? 'PRIMARY' : null,
     travelDistanceKm: distance, carpoolPeople: people, allocationScore: score, allocatedSlotNumber: slot,
+    carpoolMembers: Array.from({ length: Math.max(0, people - 1) }, (_v, i) => ({
+      id: `${id}-member-${i + 1}`,
+      name: `Passenger ${i + 1}`,
+      employeeEmail: `passenger${i + 1}@mock.test`,
+      contactNumber: `999000000${i + 1}`,
+      pickupLocation: `Pickup ${i + 1}`,
+      sameCompany: true,
+      isScored: true,
+    })),
     submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
   });
   const dPrimary = {
@@ -506,14 +515,15 @@ const hero = [
       idempotencyKey: 'demo-cp', attemptCount: 1, totalRequests: 2, allocatedCount: 2, waitlistedCount: 0,
     }),
   ),
+  http.get(`${baseURL}/allocation/runs/by-date`, () => ok<AllocationRunSummary | null>(null)),
   http.get(`${baseURL}/allocation/runs/:id/breakdown`, ({ params }) =>
     ok<AllocationBreakdown>({
       runId: String(params.id), bookingDate: '2026-08-03', status: 'COMPLETED',
       weights: { distanceWeight: 0.6, carpoolWeight: 0.4 },
       results: [
-        { rank: 1, bookingId: 'b1', userId: 'u1', user: 'Priya Rao', distanceKm: 2.4, people: 3, distanceScore: 12, carpoolScore: 100, finalScore: 47.2, outcome: 'ALLOCATED', slotNumber: 'A-12' },
-        { rank: 2, bookingId: 'b2', userId: 'u2', user: 'Sam Lee', distanceKm: 5.1, people: 2, distanceScore: 25.5, carpoolScore: 50, finalScore: 35.3, outcome: 'ALLOCATED', slotNumber: 'A-13' },
-        { rank: 3, bookingId: 'b3', userId: 'u3', user: 'Lee Chen', distanceKm: 8.7, people: 1, distanceScore: 43.5, carpoolScore: 0, finalScore: 26.1, outcome: 'WAITLISTED', slotNumber: null },
+        { rank: 1, bookingId: 'b1', userId: 'u1', user: 'Priya Rao', companyName: 'Mock Co', distanceKm: 2.4, people: 3, distanceScore: 12, carpoolScore: 100, finalScore: 47.2, outcome: 'ALLOCATED', slotNumber: 'A-12' },
+        { rank: 2, bookingId: 'b2', userId: 'u2', user: 'Sam Lee', companyName: 'Mock Co', distanceKm: 5.1, people: 2, distanceScore: 25.5, carpoolScore: 50, finalScore: 35.3, outcome: 'ALLOCATED', slotNumber: 'A-13' },
+        { rank: 3, bookingId: 'b3', userId: 'u3', user: 'Lee Chen', companyName: 'Northwind', distanceKm: 8.7, people: 1, distanceScore: 43.5, carpoolScore: 0, finalScore: 26.1, outcome: 'WAITLISTED', slotNumber: null },
       ],
     }),
   ),

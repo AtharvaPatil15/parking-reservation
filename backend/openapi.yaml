@@ -729,6 +729,41 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /allocation/runs/by-date:
+    get:
+      tags: [Allocation]
+      operationId: getAllocationRunByDate
+      summary: Get an allocation run by date and type
+      description: "Role: SUPER_ADMIN. Returns the completed/in-progress run for a booking date and run type, or null if none exists."
+      x-maturity: DEMO
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: bookingDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: runType
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/AllocationRunType' }
+      responses:
+        '200':
+          description: Allocation run summary or null
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        nullable: true
+                        allOf:
+                          - $ref: '#/components/schemas/AllocationRunSummary'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /allocation/runs/{id}:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'
@@ -2026,6 +2061,20 @@ components:
         companyName: { type: string }
         travelDistanceKm: { type: number, nullable: true }
         carpoolPeople: { type: integer, minimum: 1, description: Driver + declared members. }
+        carpoolMembers:
+          type: array
+          description: Declared passengers carried by the driver.
+          items:
+            type: object
+            required: [id, name, sameCompany, isScored]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              employeeEmail: { type: string, format: email, nullable: true }
+              contactNumber: { type: string, nullable: true }
+              pickupLocation: { type: string, nullable: true }
+              sameCompany: { type: boolean }
+              isScored: { type: boolean }
         allocationScore: { type: number, nullable: true }
         allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
@@ -2434,6 +2483,7 @@ components:
         bookingId: { type: string }
         userId: { type: string }
         user: { type: string, description: User full name (display). }
+        companyName: { type: string, nullable: true, description: Company name (display). }
         distanceKm: { type: number, nullable: true }
         people: { type: integer }
         distanceScore: { type: number }

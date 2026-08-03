@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Table, type Column } from '../../components';
 import {
   useAllocationBreakdown,
+  useAllocationRunStatus,
   useRunPrimaryAllocation,
   useRunCommonPoolAllocation,
 } from '../../api/hooks';
@@ -9,10 +10,11 @@ import { nextBookableWeekday } from '../../lib/dates';
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
 
-type AllocationResultRow = components['schemas']['AllocationResultRow'];
+type AllocationResultRow = components['schemas']['AllocationResultRow'] & { companyName?: string | null };
 
 const columns: Column<AllocationResultRow>[] = [
   { key: 'rank', header: 'Rank', render: (r) => <span className={r.rank === 1 ? 'font-semibold text-accent' : ''}>{r.rank}</span> },
+  { key: 'company', header: 'Company', render: (r) => r.companyName ?? '-' },
   { key: 'user', header: 'User', render: (r) => r.user ?? r.userId ?? '—' },
   { key: 'distance', header: 'Distance', align: 'right', className: 'tabular-nums', render: (r) => (r.distanceKm != null ? `${r.distanceKm} km` : '—') },
   { key: 'people', header: 'People', align: 'right', className: 'tabular-nums', render: (r) => r.people },
@@ -57,6 +59,19 @@ export function AllocationRun() {
 
   const primary = useRunPrimaryAllocation();
   const commonPool = useRunCommonPoolAllocation();
+  const primaryStatus = useAllocationRunStatus(bookingDate, 'PRIMARY');
+  const commonPoolStatus = useAllocationRunStatus(bookingDate, 'COMMON_POOL');
+
+  const primaryCompleted = primaryStatus.data?.status === 'COMPLETED';
+  const commonPoolCompleted = commonPoolStatus.data?.status === 'COMPLETED';
+
+  useEffect(() => {
+    setPrimaryRunId(primaryStatus.data?.id ?? null);
+  }, [primaryStatus.data?.id]);
+
+  useEffect(() => {
+    setCommonPoolRunId(commonPoolStatus.data?.id ?? null);
+  }, [commonPoolStatus.data?.id]);
 
   function onRunPrimary() {
     primary.mutate({ bookingDate }, { onSuccess: (summary) => setPrimaryRunId(summary.id) });
@@ -85,9 +100,10 @@ export function AllocationRun() {
 
       {/* Step 1 — primary allocation */}
       <Card title="1 · Primary allocation" description="Rank each company's submitted requests and assign within its quota.">
-        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate}>
-          Run primary allocation
+        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate || primaryCompleted}>
+          {primaryCompleted ? 'Primary allocation already done' : 'Run primary allocation'}
         </Button>
+        {primaryCompleted && <p className="mt-3 text-sm text-text-muted">Allocation has already been done for this date.</p>}
         {primaryError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {primaryError}
@@ -101,9 +117,10 @@ export function AllocationRun() {
         title="2 · Common pool"
         description="Enroll the users waitlisted by primary and share every company's unused slots across the whole building, top score first."
       >
-        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate}>
-          Start common pool
+        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate || commonPoolCompleted}>
+          {commonPoolCompleted ? 'Common pool already done' : 'Start common pool'}
         </Button>
+        {commonPoolCompleted && <p className="mt-3 text-sm text-text-muted">Common-pool allocation has already been done for this date.</p>}
         {commonPoolError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {commonPoolError}

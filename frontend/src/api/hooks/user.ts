@@ -22,10 +22,15 @@ export function useUserDashboard() {
 }
 
 /** GET /me/bookings — paged history for the current user. */
-export function useMyBookings(page = 1, pageSize = 10) {
+export function useMyBookings(page = 1, pageSize = 10, status = '') {
   return useQuery({
-    queryKey: queryKeys.myBookings(page, pageSize),
-    queryFn: () => unwrapPage<Booking>(api.GET('/me/bookings', { params: { query: { page, pageSize } } })),
+    queryKey: queryKeys.myBookings(page, pageSize, status),
+    queryFn: () =>
+      unwrapPage<Booking>(
+        api.GET('/me/bookings', {
+          params: { query: { page, pageSize, ...(status ? { status: status as Booking['status'] } : {}) } },
+        }),
+      ),
     placeholderData: (prev) => prev,
   });
 }
