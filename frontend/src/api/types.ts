@@ -1506,6 +1506,7 @@ export interface components {
             /** @description Absent when the user has no upcoming booking. */
             upcomingBooking?: components["schemas"]["Booking"];
             cutoffCountdownSeconds?: number | null;
+            /** Format: date-time */
             nextAllocationRunAt?: string;
             nextAllocationRunCountdownSeconds?: number;
             nextAllocationRuns?: string[];
@@ -1520,10 +1521,17 @@ export interface components {
             nextRunAt: string;
             /** @description Seconds until `nextRunAt`; 0 once passed. */
             nextRunCountdownSeconds: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description When requests close for the next processed band.
+             */
             requestCloseAt: string;
+            /** @description Seconds until `requestCloseAt`; 0 once passed. */
             requestCloseCountdownSeconds: number;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Run that publishes results for the open request band.
+             */
             resultsRunAt: string;
             /** @enum {string} */
             runDay: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";

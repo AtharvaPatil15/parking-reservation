@@ -6,8 +6,11 @@ export { Card, type CardProps } from './Card';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Table, type TableProps, type Column } from './Table';
 export { Modal, type ModalProps } from './Modal';
+export { Drawer, type DrawerProps } from './Drawer';
+export { SlotGrid, SlotGridLegend, type SlotGridProps } from './SlotGrid';
 export { ToastProvider, useToast, type ToastOptions, type ToastTone } from './Toast';
 export { Spinner } from './Spinner';
+export { Pager, type PagerProps } from './Pager';
 export {
   LoadingState,
   EmptyState,

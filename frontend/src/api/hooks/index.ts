@@ -1,12 +1,33 @@
 export { useLogin, useLogout, useRegister, useActiveCompanies } from './auth';
 export { useCreateBooking, useUpdateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
 export type { AdminBookingsFilter } from './bookings';
-export { useRunPrimaryAllocation, useAllocationBreakdown } from './allocation';
+export {
+  useRunPrimaryAllocation,
+  useRunCommonPoolAllocation,
+  useAllocationBreakdown,
+  useAllocationRunForDate,
+  useAllocations,
+  useWeeklyRunPreview,
+  useRunWeeklyAllocation,
+} from './allocation';
+export type { AllocationsFilter } from './allocation';
+export { useAvailability } from './availability';
+export type { AvailabilityRange } from './availability';
+export {
+  useVehicleSearch,
+  useVehicleLookup,
+  useGateCheckIn,
+  useGateCheckOut,
+  useGateEvents,
+  useUnbookedEntries,
+} from './gate';
+export type { GateEventsFilter, UnbookedFilter } from './gate';
 export { useConfig, useUpdateConfig } from './config';
 export { useMe, useMyBookings, useUserDashboard } from './user';
 export {
   useSuperAdminDashboard,
   usePendingAdmins,
+  useAdminRequestHistory,
   useApproveAdminRequest,
   useCompanies,
   useCreateCompany,
@@ -16,6 +37,7 @@ export {
   useUpdateSlot,
   useDeleteSlot,
   useParkingAreas,
+  useCreateParkingArea,
   useCompanyQuota,
   useSetCompanyQuota,
 } from './admin';

@@ -7,6 +7,8 @@ import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 
 const toDate = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
+const MS_DAY = 24 * 60 * 60 * 1000;
+const LONG_RANGE_VALIDATION_DAYS = 366;
 
 async function assertCompanyExists(companyId: string) {
   const company = await prisma.company.findFirst({ where: { id: companyId, deletedAt: null } });
@@ -22,6 +24,27 @@ export async function createSlot(input: {
   hasEvCharging?: boolean;
   isAccessible?: boolean;
 }) {
+  // The @@unique([parkingAreaId, slotNumber]) constraint spans soft-deleted rows, so re-adding a
+  // number that was deleted earlier would 409 against the dead row. Revive that row instead — it's
+  // the same physical slot coming back into service — and refresh createdAt so it resurfaces at the
+  // top of the newest-first list, exactly as a brand-new slot would.
+  const dead = await prisma.parkingSlot.findFirst({
+    where: { parkingAreaId: input.parkingAreaId, slotNumber: input.slotNumber, deletedAt: { not: null } },
+  });
+  if (dead) {
+    return prisma.parkingSlot.update({
+      where: { id: dead.id },
+      data: {
+        deletedAt: null,
+        status: 'AVAILABLE',
+        slotType: input.slotType ?? 'STANDARD',
+        hasEvCharging: input.hasEvCharging ?? false,
+        isAccessible: input.isAccessible ?? false,
+        createdAt: new Date(),
+      },
+    });
+  }
+
   try {
     return await prisma.parkingSlot.create({ data: input });
   } catch (err) {
@@ -41,6 +64,18 @@ export async function listParkingAreas() {
   return prisma.parkingArea.findMany({ orderBy: { name: 'asc' } });
 }
 
+/**
+ * Create a parking area (SUPER_ADMIN) — e.g. "Basement 2". Single-office MVP: the area is
+ * attached to the (only) office location, resolved server-side, so the client sends just a name.
+ */
+export async function createParkingArea(input: { name: string; floor?: string | null }) {
+  const office = await prisma.officeLocation.findFirst({ orderBy: { createdAt: 'asc' } });
+  if (!office) throw new ValidationError('No office location is configured');
+  return prisma.parkingArea.create({
+    data: { name: input.name, floor: input.floor ?? null, officeLocationId: office.id },
+  });
+}
+
 export async function listSlots(opts: { status?: SlotStatus; parkingAreaId?: string } & PageArgs) {
   const where = {
     deletedAt: null,
@@ -48,7 +83,14 @@ export async function listSlots(opts: { status?: SlotStatus; parkingAreaId?: str
     ...(opts.parkingAreaId ? { parkingAreaId: opts.parkingAreaId } : {}),
   };
   const [rows, total] = await Promise.all([
-    prisma.parkingSlot.findMany({ where, orderBy: { slotNumber: 'asc' }, skip: opts.skip, take: opts.take }),
+    // Newest first so a just-created slot lands at the top of page 1 — the SA sees what they
+    // just added without hunting for it in slot-number order (secondary sort keeps it stable).
+    prisma.parkingSlot.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { slotNumber: 'asc' }],
+      skip: opts.skip,
+      take: opts.take,
+    }),
     prisma.parkingSlot.count({ where }),
   ]);
   return { rows, total };
@@ -172,10 +214,13 @@ export async function createBlock(
   // already-blocked + this new count must not exceed that day's effective quota.
   const start = toDate(input.startDate);
   const end = toDate(input.endDate);
-  const MS_DAY = 24 * 60 * 60 * 1000;
   const dayCount = Math.floor((end.getTime() - start.getTime()) / MS_DAY) + 1;
-  for (let i = 0; i < dayCount; i++) {
-    const day = new Date(start.getTime() + i * MS_DAY);
+  const daysToCheck =
+    dayCount > LONG_RANGE_VALIDATION_DAYS
+      ? [start, end]
+      : Array.from({ length: dayCount }, (_v, i) => new Date(start.getTime() + i * MS_DAY));
+
+  for (const day of daysToCheck) {
     const [quota, alreadyBlocked] = await Promise.all([
       getEffectiveQuota(companyId, day),
       getBlockedCount(companyId, day),

@@ -17,8 +17,9 @@ import usersRoutes from './modules/users/users.routes';
 import { slotsRouter, parkingAreasRouter, companyScopedRouter, blockItemRouter } from './modules/slots/slots.routes';
 import dashboardRoutes from './modules/dashboards/dashboards.routes';
 import meRoutes from './modules/me/me.routes';
-import bookingsRoutes from './modules/bookings/bookings.routes';
-import allocationRoutes from './modules/allocation/allocation.routes';
+import bookingsRoutes, { availabilityRouter } from './modules/bookings/bookings.routes';
+import allocationRoutes, { allocationsRouter } from './modules/allocation/allocation.routes';
+import { gateRouter, vehiclesRouter } from './modules/gate/gate.routes';
 
 export const app = express();
 
@@ -62,7 +63,11 @@ api.use('/blocks', blockItemRouter); // DELETE /:id
 api.use('/dashboard', dashboardRoutes);
 api.use('/me', meRoutes); // GET/PATCH profile + GET /me/bookings (own history)
 api.use('/bookings', bookingsRoutes);
+api.use('/availability', availabilityRouter); // per-date slot grid for the caller's company (Phase 7)
 api.use('/allocation', allocationRoutes);
+api.use('/allocations', allocationsRouter); // per-slot roster — CA (own) / SA (all)
+api.use('/vehicles', vehiclesRouter); // car registry the gate reads (Phase 7)
+api.use('/gate', gateRouter); // check-in / check-out + unbooked-entry feed (Phase 7)
 
 app.use('/api/v1', api);
 

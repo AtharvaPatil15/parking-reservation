@@ -1,7 +1,8 @@
 import { act, render, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
+import { queryClient } from '../api/queryClient';
 import { server } from '../mocks/node';
 import { AuthProvider, useAuth, type AuthSession } from './auth';
 
@@ -9,6 +10,16 @@ const session: AuthSession = {
   accessToken: 'tok',
   user: { id: '1', fullName: 'Uma User', role: 'USER', companyId: 'c1', companyName: 'Acme' },
 };
+
+// Build a JWT-shaped token whose payload carries `exp` (seconds) so the proactive-refresh effect,
+// which reads that claim, schedules a pre-expiry timer. Only the payload segment needs to decode.
+function makeJwt(expSeconds: number): string {
+  const payload = btoa(JSON.stringify({ exp: expSeconds }))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `header.${payload}.sig`;
+}
 
 describe('AuthProvider', () => {
   it('starts unauthenticated', () => {
@@ -73,5 +84,78 @@ describe('AuthProvider', () => {
     act(() => result.current.login(session));
     await api.GET('/config', {});
     expect(seen).toBe('Bearer tok');
+  });
+
+  it('clears the query cache on login and on logout (prevents cross-user data bleed)', () => {
+    // Keys like ['dashboard','user'] and ['me'] aren't scoped to the signed-in user, so a stale
+    // entry from a prior session must not survive into the next one.
+    queryClient.setQueryData(['dashboard', 'user'], { stale: 'prev-user' });
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+
+    act(() => result.current.login(session));
+    expect(queryClient.getQueryData(['dashboard', 'user'])).toBeUndefined();
+
+    queryClient.setQueryData(['me'], { id: 'prev' });
+    act(() => result.current.logout());
+    expect(queryClient.getQueryData(['me'])).toBeUndefined();
+  });
+
+  it('proactively refreshes the access token just before it expires (no reactive 401 needed)', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = 1_700_000_000_000;
+      vi.setSystemTime(now);
+      const exp = Math.floor(now / 1000) + 90; // expires in 90s → timer fires at 90 − 60 (skew) = 30s
+      let refreshCalls = 0;
+      server.use(
+        http.post('*/api/v1/auth/refresh', () => {
+          refreshCalls += 1;
+          return HttpResponse.json({
+            success: true,
+            data: { accessToken: makeJwt(Math.floor(now / 1000) + 900), tokenType: 'Bearer', expiresIn: 900 },
+          });
+        }),
+      );
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: ({ children }) => (
+          <AuthProvider initialSession={{ ...session, accessToken: makeJwt(exp) }}>{children}</AuthProvider>
+        ),
+      });
+      // A silent refresh is the SAME user — its cached data must NOT be wiped (only login/logout clear).
+      queryClient.setQueryData(['me'], { id: 'same-user' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      expect(refreshCalls).toBe(1);
+      expect(result.current.isAuthenticated).toBe(true); // rotated silently — still signed in
+      expect(queryClient.getQueryData(['me'])).toEqual({ id: 'same-user' }); // cache preserved across refresh
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('logs out when the proactive pre-expiry refresh fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = 1_700_000_000_000;
+      vi.setSystemTime(now);
+      const exp = Math.floor(now / 1000) + 90;
+      server.use(
+        http.post('*/api/v1/auth/refresh', () =>
+          HttpResponse.json({ success: false, error: { code: 'UNAUTHENTICATED', message: 'dead cookie' } }, { status: 401 }),
+        ),
+      );
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: ({ children }) => (
+          <AuthProvider initialSession={{ ...session, accessToken: makeJwt(exp) }}>{children}</AuthProvider>
+        ),
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+      expect(result.current.isAuthenticated).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

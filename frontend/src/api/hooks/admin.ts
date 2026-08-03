@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
@@ -12,6 +12,7 @@ type CompanyQuota = components['schemas']['CompanyQuota'];
 type CompanyQuotaSummaryEntry = components['schemas']['CompanyQuotaSummaryEntry'];
 type CreateSlotRequest = components['schemas']['CreateSlotRequest'];
 type CreateQuotaRequest = components['schemas']['CreateQuotaRequest'];
+type CreateParkingAreaRequest = components['schemas']['CreateParkingAreaRequest'];
 type UserProfile = components['schemas']['UserProfile'];
 type ApprovalDecision = components['schemas']['ApprovalDecision'];
 
@@ -71,13 +72,28 @@ export function usePendingAdmins(page = 1, pageSize = 10) {
   });
 }
 
+/** GET /users/admin-requests/history — processed company-admin requests (approval history). */
+export function useAdminRequestHistory(page = 1, pageSize = 10) {
+  return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
+    queryKey: queryKeys.adminRequestHistory(page, pageSize),
+    queryFn: () =>
+      unwrapPage<UserProfile>(
+        api.GET('/users/admin-requests/history', { params: { query: { page, pageSize } } }),
+      ),
+  });
+}
+
 /** PATCH /users/{id}/approval — approve/reject a pending company-admin request (SA queue). */
 export function useApproveAdminRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ userId, decision }: { userId: string; decision: ApprovalDecision }) =>
       unwrap<UserProfile>(api.PATCH('/users/{id}/approval', { params: { path: { id: userId } }, body: { decision } })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users', 'pending-admins'] });
+      // The decided request now belongs in the approval history.
+      qc.invalidateQueries({ queryKey: ['users', 'admin-requests', 'history'] });
+    },
   });
 }
 
@@ -100,15 +116,33 @@ export function useParkingAreas() {
   });
 }
 
+/** POST /parking-areas — create an area (e.g. "Basement 2"). */
+export function useCreateParkingArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateParkingAreaRequest) => unwrap<ParkingArea>(api.POST('/parking-areas', { body })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.parkingAreas }),
+  });
+}
+
+/**
+ * Slot inventory changes ripple into every count and roster derived from slots — the SA inventory
+ * list, all dashboards (available / in-service counts for SA, company admin, and users), and the
+ * per-company allocation rosters. Refresh them together so a create / deactivate / delete shows up
+ * everywhere without a manual page reload.
+ */
+function invalidateSlotDerived(qc: QueryClient): void {
+  qc.invalidateQueries({ queryKey: ['slots'] });
+  qc.invalidateQueries({ queryKey: ['dashboard'] });
+  qc.invalidateQueries({ queryKey: ['allocations'] });
+}
+
 /** POST /slots — create a parking slot. */
 export function useCreateSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateSlotRequest) => unwrap<ParkingSlot>(api.POST('/slots', { body })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['slots'] });
-      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
-    },
+    onSuccess: () => invalidateSlotDerived(qc),
   });
 }
 
@@ -118,10 +152,7 @@ export function useUpdateSlot() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & components['schemas']['UpdateSlotRequest']) =>
       unwrap<ParkingSlot>(api.PATCH('/slots/{id}', { params: { path: { id } }, body })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['slots'] });
-      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
-    },
+    onSuccess: () => invalidateSlotDerived(qc),
   });
 }
 
@@ -131,10 +162,7 @@ export function useDeleteSlot() {
   return useMutation({
     mutationFn: (id: string) =>
       unwrap<{ message: string }>(api.DELETE('/slots/{id}', { params: { path: { id } } })),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['slots'] });
-      qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
-    },
+    onSuccess: () => invalidateSlotDerived(qc),
   });
 }
 
@@ -154,6 +182,13 @@ export function useSetCompanyQuota(companyId: string) {
   return useMutation({
     mutationFn: (body: CreateQuotaRequest) =>
       unwrap<CompanyQuota>(api.POST('/companies/{id}/quota', { params: { path: { id: companyId } }, body })),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.companyQuota(companyId) }),
+    onSuccess: () => {
+      // The new quota shows in three places: the rows inside the modal, the "Assigned" column on the
+      // companies table (any picked date), and the SA/company dashboards. Refresh all so the allotted
+      // count updates without a reload.
+      qc.invalidateQueries({ queryKey: queryKeys.companyQuota(companyId) });
+      qc.invalidateQueries({ queryKey: ['companies', 'quota-summary'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }

@@ -3,6 +3,7 @@ import { ErrorState, Input, LoadingState } from '../../components';
 import { useCompanyAdminDashboard } from '../../api/hooks';
 import { StatTiles, type Stat } from '../shared/StatTiles';
 import { BookingList } from '../shared/BookingList';
+import { UnbookedEntries } from '../shared/UnbookedEntries';
 
 const fmt = (n: number | undefined) => (n == null ? '—' : n.toLocaleString());
 const pct = (n: number | undefined) => (n == null ? '—' : `${n}%`);
@@ -46,6 +47,9 @@ export function CompanyDashboard() {
       ) : (
         <StatTiles stats={stats} />
       )}
+
+      {/* Phase 7 D16: security never blocks the barrier, so unbooked entries land here for follow-up. */}
+      <UnbookedEntries date={date || undefined} />
 
       <BookingList scope="company" date={date} />
     </div>

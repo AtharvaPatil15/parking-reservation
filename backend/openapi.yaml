@@ -2636,6 +2636,11 @@ components:
           allOf: [ { $ref: '#/components/schemas/Booking' } ]
           description: Absent when the user has no upcoming booking.
         cutoffCountdownSeconds: { type: integer, nullable: true }
+        nextAllocationRunAt: { type: string, format: date-time }
+        nextAllocationRunCountdownSeconds: { type: integer }
+        nextAllocationRuns:
+          type: array
+          items: { type: string, format: date-time }
         previousBookingsCount: { type: integer }
 
     # --- Booking window + availability grid (Phase 7) ---
@@ -2645,14 +2650,15 @@ components:
         The rolling request window and the weekly run it closes at (Phase 7 §3). Everything the client
         needs to say "book between X and Y; results published on Z".
       required:
-        [nextRunAt, nextRunCountdownSeconds, requestCloseAt, requestCloseCountdownSeconds, resultsRunAt, runDay, runTime, windowWeeks, approvalLeadDays,
-         earliestDate, latestDate, requestableDates]
+        [nextRunAt, nextRunCountdownSeconds, requestCloseAt, requestCloseCountdownSeconds, resultsRunAt,
+         runDay, runFrequency, runTime, windowWeeks, approvalLeadDays, earliestDate, latestDate,
+         requestableDates, nextRuns]
       properties:
-        nextRunAt: { type: string, format: date-time, description: When the next weekly batch runs. }
+        nextRunAt: { type: string, format: date-time, description: When the next automatic batch runs. }
         nextRunCountdownSeconds: { type: integer, description: Seconds until `nextRunAt`; 0 once passed. }
-        requestCloseAt: { type: string, format: date-time, description: Requests for the closing band lock at 19:00 IST. }
+        requestCloseAt: { type: string, format: date-time, description: When requests close for the next processed band. }
         requestCloseCountdownSeconds: { type: integer, description: Seconds until `requestCloseAt`; 0 once passed. }
-        resultsRunAt: { type: string, format: date-time, description: Allocation run that will publish results for the currently open request window. }
+        resultsRunAt: { type: string, format: date-time, description: Run that publishes results for the open request band. }
         runDay: { type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY] }
         runFrequency: { type: string, enum: [WEEKLY, BIWEEKLY, MONTHLY] }
         runTime: { type: string, description: 'HH:MM IST.' }
@@ -2664,6 +2670,10 @@ components:
           type: array
           description: Bookable weekdays currently open for requests.
           items: { type: string, format: date }
+        nextRuns:
+          type: array
+          description: Next five automatic allocation run instants.
+          items: { type: string, format: date-time }
 
     SlotBoxState:
       type: string

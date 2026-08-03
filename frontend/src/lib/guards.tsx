@@ -21,16 +21,22 @@ export function RequireAuth() {
 }
 
 /**
- * Gate for a specific role. Enforces auth first (→ /login), then role: a wrong-role
+ * Gate for one role or a set of them. Enforces auth first (→ /login), then role: a wrong-role
  * user is sent to their own home (never a dead-end, never a redirect loop).
+ *
+ * The array form exists for genuinely cross-role areas (e.g. booking, which USER, COMPANY_ADMIN and
+ * SUPER_ADMIN all reach but SECURITY does not). It is preferred over `RequireAuth` there, because
+ * "any signed-in user" silently admits every role added later — Phase 7's SECURITY would otherwise
+ * have landed on a booking form it has no use for.
  */
-export function RequireRole({ role }: { role: Role }) {
+export function RequireRole({ role }: { role: Role | Role[] }) {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
-  if (user.role !== role) {
+  const allowed = Array.isArray(role) ? role : [role];
+  if (!allowed.includes(user.role)) {
     return <Navigate to={roleHome(user.role)} replace />;
   }
   return <Outlet />;

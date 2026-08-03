@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { validateConfigValue, validateTimingOrder } from './configValidation';
+import { validateConfigValue, validateTimingOrder, labelForKey } from './configValidation';
+
+describe('labelForKey', () => {
+  it('humanizes keys and never returns the raw dotted key', () => {
+    expect(labelForKey('booking.primaryCutoff')).toBe('Primary cutoff'); // curated
+    expect(labelForKey('allocation.distanceWeight')).toBe('Distance weight');
+    expect(labelForKey('carpool.maxPeople')).toBe('Max people');
+    expect(labelForKey('password.minLength')).toBe('Min length');
+    expect(labelForKey('allocation.distanceWeight')).not.toContain('.');
+  });
+});
 
 describe('validateConfigValue', () => {
   it('rejects empty values', () => {

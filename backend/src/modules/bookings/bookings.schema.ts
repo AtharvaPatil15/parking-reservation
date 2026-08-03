@@ -37,6 +37,16 @@ export const createBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type CarpoolMemberInput = z.infer<typeof carpoolMemberInput>;
 
+/**
+ * Slot-grid query (GET /availability, Phase 7 §4). Both bounds optional: with neither, the service
+ * answers for the whole currently-open window, which is what the booking form asks for.
+ */
+export const availabilityQuery = z.object({
+  from: dateString.optional(),
+  to: dateString.optional(),
+});
+export type AvailabilityQuery = z.infer<typeof availabilityQuery>;
+
 /** Partial edit before the primary cutoff (openapi `UpdateBookingRequest`). At least one field. */
 export const updateBookingSchema = z
   .object({
@@ -48,6 +58,14 @@ export const updateBookingSchema = z
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'At least one field is required' });
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+
+const releaseBookingBodySchema = z.object({
+  reason: z.string().min(1).nullable().optional(),
+});
+
+/** Release an allocated slot (openapi `ReleaseBookingRequest`). Body is optional — no body becomes `{}`. */
+export const releaseBookingSchema = z.preprocess((body) => body ?? {}, releaseBookingBodySchema);
+export type ReleaseBookingInput = z.infer<typeof releaseBookingBodySchema>;
 
 /**
  * Admin booking-list query (GET /bookings). COMPANY_ADMIN is scoped to their own company in the

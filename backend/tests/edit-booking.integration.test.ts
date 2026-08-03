@@ -2,14 +2,15 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { API, bearer, login, resetTransactional } from './integration/helpers';
+import { API, bearer, login, resetTransactional, futureBookableDate } from './integration/helpers';
 
 /**
  * Edit booking (PATCH /bookings/{id}) + company quota-summary (GET /companies/quota-summary).
  * Uses the same window as the hero harness (DATE is a bookable weekday within the primary window).
  */
 
-const DATE = '2026-07-31'; // Friday; seeded Assent quota (8) is effective for it.
+// Computed forward so the primary window is always open; seeded Assent quota (8) applies from today.
+const DATE = futureBookableDate();
 
 beforeEach(async () => {
   await resetTransactional();
@@ -35,17 +36,37 @@ describe('PATCH /bookings/:id — edit before cutoff', () => {
     const edit = await request(app)
       .patch(`${API}/bookings/${id}`)
       .set(bearer(aditi))
-      .send({ carpoolPeople: 3, vehicleType: 'EV_CAR', vehicleNumber: 'KA-05-0001', specialRequirement: 'Near lift' });
+      .send({ carpoolPeople: 3, vehicleType: 'CAR', vehicleNumber: 'KA-05-0001', specialRequirement: 'Near lift' });
     expect(edit.status).toBe(200);
     expect(edit.body.data.carpoolMemberCount).toBe(2); // people 3 → driver + 2
-    expect(edit.body.data.vehicleType).toBe('EV_CAR');
+    expect(edit.body.data.vehicleType).toBe('CAR');
     expect(edit.body.data.vehicleNumber).toBe('KA-05-0001');
     expect(edit.body.data.specialRequirement).toBe('Near lift');
 
     // Persisted — a subsequent GET reflects the edit.
     const detail = await request(app).get(`${API}/bookings/${id}`).set(bearer(aditi));
     expect(detail.body.data.carpoolMemberCount).toBe(2);
-    expect(detail.body.data.vehicleType).toBe('EV_CAR');
+    expect(detail.body.data.vehicleType).toBe('CAR');
+  });
+
+  it('rejects non-car vehicle types on edit', async () => {
+    const aditi = await login('aditi@assent.example');
+    const id = await createBooking(aditi);
+
+    const edit = await request(app)
+      .patch(`${API}/bookings/${id}`)
+      .set(bearer(aditi))
+      .send({ vehicleType: 'EV_CAR' });
+
+    expect(edit.status).toBe(400);
+    expect(edit.body.error.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'vehicleType',
+          message: 'Only normal car bookings are supported right now',
+        }),
+      ]),
+    );
   });
 
   it('hides another user’s booking — edit returns 404', async () => {
@@ -77,7 +98,9 @@ describe('GET /companies/quota-summary — assigned per company (SA)', () => {
     const entry = (res.body.data as Array<{ companyId: string; assignedSlots: number }>).find(
       (e) => e.companyId === assent.id,
     );
-    expect(entry?.assignedSlots).toBe(8); // seeded Assent quota effective for DATE
+    // Seeded Assent quota effective for DATE (prisma/seed.ts §7 — 12 since Phase 7, so the booking
+    // grid renders the 12 boxes the requirement calls for).
+    expect(entry?.assignedSlots).toBe(12);
   });
 
   it('is Super-Admin only — a Company Admin gets 403', async () => {

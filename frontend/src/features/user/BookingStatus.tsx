@@ -1,24 +1,20 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Badge, Button, Card, ErrorState, Input, LoadingState, Modal, Select, useToast, type SelectOption,
+  Badge, Button, Card, ErrorState, Input, LoadingState, Modal, useToast,
 } from '../../components';
 import { useBooking, useReleaseBooking, useUpdateBooking } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import { isTodayOrFuture } from '../../lib/dates';
+import { BackLink } from '../shared/BackLink';
 import { statusTone } from './statusTone';
 import type { components } from '../../api/types';
 
 type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
-type VehicleType = components['schemas']['VehicleType'];
 
-const VEHICLE_TYPES: SelectOption[] = [
-  { value: 'CAR', label: 'Car' },
-  { value: 'BIKE', label: 'Bike' },
-  { value: 'EV_CAR', label: 'EV Car' },
-  { value: 'EV_BIKE', label: 'EV Bike' },
-  { value: 'OTHER', label: 'Other' },
-];
+// Mirror the create flow's hard cap (bookingSchema: carpoolPeople 1–4) so an edit
+// can't push people past 4 or spawn an unbounded number of member rows.
+const MAX_CARPOOL_PEOPLE = 4;
 
 function Row({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
@@ -37,10 +33,10 @@ export function BookingStatus() {
   const { toast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [vehicleType, setVehicleType] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
   const [special, setSpecial] = useState('');
+  const [members, setMembers] = useState<{ name: string; employeeEmail: string }[]>([]);
 
   if (booking.isLoading) return <LoadingState label="Loading booking…" />;
   if (booking.isError || !booking.data) {
@@ -77,21 +73,36 @@ export function BookingStatus() {
     });
   }
 
+  const peopleNum = Math.min(MAX_CARPOOL_PEOPLE, Math.max(1, Number(people) || 1));
+  function addMember() {
+    setMembers((prev) => [...prev, { name: '', employeeEmail: '' }]);
+  }
+  function removeMember(i: number) {
+    setMembers((prev) => prev.filter((_, idx) => idx !== i));
+  }
+  function setMember(i: number, field: 'name' | 'employeeEmail', val: string) {
+    setMembers((prev) => prev.map((m, idx) => (idx === i ? { ...m, [field]: val } : m)));
+  }
+
   function openEdit() {
-    setVehicleType(b.vehicleType ?? '');
     setVehicleNumber(b.vehicleNumber ?? '');
     setPeople(String(b.carpoolMemberCount + 1));
     setSpecial(b.specialRequirement ?? '');
+    setMembers((b.carpoolMembers ?? []).map((m) => ({ name: m.name, employeeEmail: m.employeeEmail ?? '' })));
     setEditOpen(true);
   }
 
   function onSaveEdit() {
     if (!id) return;
+    const cleanedMembers = members
+      .filter((m) => m.name.trim())
+      .map((m) => ({ name: m.name.trim(), employeeEmail: m.employeeEmail.trim() || undefined }));
     const body: UpdateBookingRequest = {
-      carpoolPeople: Math.max(1, Number(people) || 1),
+      // Keep people ≥ declared members + driver so the edit is internally consistent.
+      carpoolPeople: Math.max(peopleNum, cleanedMembers.length + 1),
       vehicleNumber: vehicleNumber.trim() || null,
       specialRequirement: special.trim() || null,
-      ...(vehicleType ? { vehicleType: vehicleType as VehicleType } : {}),
+      carpoolMembers: cleanedMembers,
     };
     update.mutate(body, {
       onSuccess: () => {
@@ -103,6 +114,7 @@ export function BookingStatus() {
 
   return (
     <div className="space-y-6">
+      <BackLink to="/my-bookings" label="Back to my bookings" />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Booking status</h1>
@@ -181,22 +193,49 @@ export function BookingStatus() {
         }
       >
         <div className="space-y-4">
-          <Select
-            label="Vehicle type"
-            placeholder="Select…"
-            options={VEHICLE_TYPES}
-            value={vehicleType}
-            onChange={(e) => setVehicleType(e.target.value)}
-          />
-          <Input label="Vehicle number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
+          <Input label="Car number" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} />
           <Input
             label="People (incl. you)"
             type="number"
             min={1}
+            max={MAX_CARPOOL_PEOPLE}
             value={people}
             onChange={(e) => setPeople(e.target.value)}
             hint="Driver counts as person 1. Distance isn't editable — it's snapshotted from your profile."
           />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-text">Carpool members</span>
+              <Button type="button" size="sm" variant="secondary" disabled={members.length >= peopleNum - 1} onClick={addMember}>
+                Add member
+              </Button>
+            </div>
+            {members.length === 0 ? (
+              <p className="text-xs text-text-muted">No members added.</p>
+            ) : (
+              members.map((m, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <Input
+                    aria-label={`Member ${i + 1} name`}
+                    placeholder="Name"
+                    value={m.name}
+                    onChange={(e) => setMember(i, 'name', e.target.value)}
+                  />
+                  <Input
+                    aria-label={`Member ${i + 1} email`}
+                    placeholder="Employee email"
+                    value={m.employeeEmail}
+                    onChange={(e) => setMember(i, 'employeeEmail', e.target.value)}
+                  />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => removeMember(i)}>
+                    Remove
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
           <Input label="Special requirement" value={special} onChange={(e) => setSpecial(e.target.value)} />
           {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
         </div>

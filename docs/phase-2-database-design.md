@@ -2,7 +2,7 @@
 
 **Database:** PostgreSQL · **ORM:** Prisma (target **6.x** — the `url = env("DATABASE_URL")` datasource
 form; Prisma 7 moved this to `prisma.config.ts`, which the later backend phase can adopt if desired).
-Schema: [`prisma/schema.prisma`](../prisma/schema.prisma). Seed: [`prisma/seed.ts`](../prisma/seed.ts).
+Schema: [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma). Seed: [`backend/prisma/seed.ts`](../backend/prisma/seed.ts).
 
 > Built on the **quota slot model** (D2) and the resolutions in `docs/decisions.md`. Validated with
 > `prisma validate` and `prisma migrate diff` (23 tables, 65 DDL statements).
@@ -127,7 +127,7 @@ CREATE UNIQUE INDEX "User_email_active_key" ON "User"("email") WHERE "deletedAt"
 
 ---
 
-## 4. Seed data ([`prisma/seed.ts`](../prisma/seed.ts))
+## 4. Seed data ([`backend/prisma/seed.ts`](../backend/prisma/seed.ts))
 
 Idempotent (`upsert`-based) seed covering the spec's required data:
 - **Roles:** `SUPER_ADMIN`, `COMPANY_ADMIN`, `USER`.
@@ -146,6 +146,7 @@ Idempotent (`upsert`-based) seed covering the spec's required data:
 
 ### Commands (runnable once the backend foundation + a Postgres instance exist — later phase)
 ```bash
+cd backend                              # the schema + migrations live here
 npx prisma migrate dev --name init      # create tables from schema
 psql "$DATABASE_URL" -f prisma/partial-unique.sql   # apply F7 addendum (optional in dev)
 npx prisma db seed                      # run prisma/seed.ts

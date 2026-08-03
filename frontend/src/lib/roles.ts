@@ -7,6 +7,7 @@ export function roleHome(role: Role): string {
       return '/admin';
     case 'COMPANY_ADMIN':
       return '/company';
+    // A gate operator has exactly one screen (Phase 7 D15) — check in / check out.
     case 'SECURITY':
       return '/security';
     case 'USER':

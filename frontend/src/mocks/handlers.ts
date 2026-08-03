@@ -357,8 +357,6 @@ function mockNextRun(now = new Date()): Date {
 
 function mockWindow(now = new Date()): BookingWindow {
   const nextRun = mockNextRun(now);
-  const requestClose = new Date(nextRun);
-  requestClose.setHours(19, 0, 0, 0);
   const earliest = addDaysTo(nextRun, LEAD_DAYS);
   const latest = addDaysTo(now, WINDOW_WEEKS * 7);
   const dates: string[] = [];
@@ -368,8 +366,11 @@ function mockWindow(now = new Date()): BookingWindow {
   return {
     nextRunAt: nextRun.toISOString(),
     nextRunCountdownSeconds: Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000)),
-    requestCloseAt: requestClose.toISOString(),
-    requestCloseCountdownSeconds: Math.max(0, Math.floor((requestClose.getTime() - now.getTime()) / 1000)),
+    requestCloseAt: new Date(nextRun.getFullYear(), nextRun.getMonth(), nextRun.getDate(), 19, 0, 0, 0).toISOString(),
+    requestCloseCountdownSeconds: Math.max(
+      0,
+      Math.floor((new Date(nextRun.getFullYear(), nextRun.getMonth(), nextRun.getDate(), 19, 0, 0, 0).getTime() - now.getTime()) / 1000),
+    ),
     resultsRunAt: nextRun.toISOString(),
     runDay: 'SUNDAY',
     runFrequency: 'WEEKLY',
@@ -657,15 +658,9 @@ const hero = [
     ok<UserDashboard>({
       upcomingBooking: toSummary(bookingState['mock-booking-1']),
       cutoffCountdownSeconds: 3600,
-      nextAllocationRunAt: '2026-08-09T14:30:00.000Z',
-      nextAllocationRunCountdownSeconds: 554400,
-      nextAllocationRuns: [
-        '2026-08-09T14:30:00.000Z',
-        '2026-08-16T14:30:00.000Z',
-        '2026-08-23T14:30:00.000Z',
-        '2026-08-30T14:30:00.000Z',
-        '2026-09-06T14:30:00.000Z',
-      ],
+      nextAllocationRunAt: mockWindow().nextRunAt,
+      nextAllocationRunCountdownSeconds: mockWindow().nextRunCountdownSeconds,
+      nextAllocationRuns: mockWindow().nextRuns,
       previousBookingsCount: 2,
     }),
   ),

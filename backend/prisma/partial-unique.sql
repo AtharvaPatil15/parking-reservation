@@ -6,3 +6,10 @@ DROP INDEX IF EXISTS "User_email_key";
 CREATE UNIQUE INDEX IF NOT EXISTS "User_email_active_key"
   ON "User" ("email")
   WHERE "deletedAt" IS NULL;
+
+-- Phase 7: one OPEN gate visit per car per day. A vehicle may be checked in and out repeatedly
+-- (many CHECKED_OUT rows for the same date), but never checked in twice without checking out.
+-- The service pre-checks for a clean 409; this index is the concurrency backstop.
+CREATE UNIQUE INDEX IF NOT EXISTS "GateEvent_open_visit_key"
+  ON "GateEvent" ("vehicleNumber", "bookingDate")
+  WHERE "status" = 'CHECKED_IN';
