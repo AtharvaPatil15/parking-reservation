@@ -7,6 +7,11 @@ export const primaryRunSchema = z.object({
 
 export type PrimaryRunInput = z.infer<typeof primaryRunSchema>;
 
+export const runStatusQuery = z.object({
+  bookingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD'),
+  runType: z.enum(['PRIMARY', 'COMMON_POOL']),
+});
+
 /**
  * Allocation roster query (GET /allocations). COMPANY_ADMIN is scoped to their own company in the
  * service; `companyId` is honoured only for SUPER_ADMIN. `date` filters by bookingDate, `type` by

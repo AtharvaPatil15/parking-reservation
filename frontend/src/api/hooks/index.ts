@@ -5,6 +5,7 @@ export {
   useRunPrimaryAllocation,
   useRunCommonPoolAllocation,
   useAllocationBreakdown,
+  useAllocationRunStatus,
   useAllocations,
 } from './allocation';
 export type { AllocationsFilter } from './allocation';

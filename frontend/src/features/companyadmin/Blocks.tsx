@@ -33,20 +33,21 @@ export function Blocks() {
   const [blockedCount, setBlockedCount] = useState('');
   const [startDate, setStartDate] = useState(nextBookableWeekday());
   const [endDate, setEndDate] = useState(nextBookableWeekday());
+  const [permanent, setPermanent] = useState(false);
   const [reason, setReason] = useState<BlockReason>('MAINTENANCE');
   const [reasonText, setReasonText] = useState('');
   const [removingId, setRemovingId] = useState<string | null>(null);
   const createError = apiErrorText(create.error);
   const count = Number(blockedCount);
   const countInvalid = blockedCount.trim() !== '' && (!Number.isInteger(count) || count < 1);
-  const rangeInvalid = Boolean(startDate && endDate && endDate < startDate);
+  const rangeInvalid = !permanent && Boolean(startDate && endDate && endDate < startDate);
   // Guard on companyId too — without it the mutation would hit a malformed /companies//blocks path.
   const canSubmit = Boolean(companyId) && blockedCount.trim() !== '' && !countInvalid && !rangeInvalid;
 
   function onCreate() {
     if (!canSubmit) return;
     create.mutate(
-      { blockedCount: count, startDate, endDate, reason, reasonText: reasonText.trim() || null },
+      { blockedCount: count, startDate, endDate: permanent ? '9999-12-31' : endDate, reason, reasonText: reasonText.trim() || null },
       { onSuccess: () => { toast('Block created.', { tone: 'success' }); setBlockedCount(''); setReasonText(''); } },
     );
   }
@@ -60,7 +61,7 @@ export function Blocks() {
   }
 
   const columns: Column<SlotBlock>[] = [
-    { key: 'dates', header: 'Dates', render: (b) => `${b.startDate} → ${b.endDate}` },
+    { key: 'dates', header: 'Dates', render: (b) => (b.endDate === '9999-12-31' ? `${b.startDate} onward` : `${b.startDate} to ${b.endDate}`) },
     { key: 'count', header: 'Slots', align: 'right', className: 'tabular-nums', render: (b) => b.blockedCount },
     { key: 'reason', header: 'Reason', render: (b) => <Badge tone="neutral">{b.reason}</Badge> },
     { key: 'note', header: 'Note', render: (b) => b.reasonText ?? '—' },
@@ -97,9 +98,20 @@ export function Blocks() {
               label="End"
               type="date"
               value={endDate}
+              disabled={permanent}
               onChange={(e) => setEndDate(e.target.value)}
               error={rangeInvalid ? 'End must be on/after start' : undefined}
+              hint={permanent ? 'Permanent' : undefined}
             />
+            <label className="flex min-h-11 items-center gap-2 pt-6 text-sm text-text">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-border text-primary"
+                checked={permanent}
+                onChange={(e) => setPermanent(e.target.checked)}
+              />
+              Permanent block
+            </label>
             <Select label="Reason" options={REASONS} value={reason} onChange={(e) => setReason(e.target.value as BlockReason)} />
             <Input label="Note" value={reasonText} onChange={(e) => setReasonText(e.target.value)} hint="Optional" />
           </div>

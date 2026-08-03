@@ -3,7 +3,7 @@ import { useFieldArray, useForm, type FieldPath } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Card, Input, LoadingState, SuccessState } from '../../components';
 import { useCreateBooking, useMe, useUserDashboard } from '../../api/hooks';
-import { ApiError } from '../../api/http';
+import { ApiError, apiErrorText } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
 import { cn } from '../../lib/cn';
 import { BackLink } from '../shared/BackLink';
@@ -63,7 +63,7 @@ export function BookingForm() {
           ? 'You already have a request for this date.'
           : err.code === 'WINDOW_CLOSED'
             ? 'The booking window is closed for this date.'
-            : err.message
+            : apiErrorText(err) ?? err.message
         : 'Something went wrong. Please try again.'
       : null;
 

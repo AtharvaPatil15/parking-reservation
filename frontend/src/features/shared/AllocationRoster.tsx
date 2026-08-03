@@ -23,7 +23,7 @@ const PAGE_SIZE = 20;
  * the caller's company; `scope='all'` (Super Admin) shows every company and adds a company filter.
  */
 export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
-  const showCompany = scope === 'all';
+  const showCompanyFilter = scope === 'all';
   const [date, setDate] = useState('');
   const [type, setType] = useState('');
   const [companyId, setCompanyId] = useState('');
@@ -36,7 +36,7 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
   const roster = useAllocations({
     date: date || undefined,
     type: (type || undefined) as BookingType | undefined,
-    companyId: showCompany ? companyId || undefined : undefined,
+    companyId: showCompanyFilter ? companyId || undefined : undefined,
     page,
     pageSize: PAGE_SIZE,
   });
@@ -54,9 +54,7 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
         <div className="text-xs text-text-muted">{a.employeeEmail}</div>
       </div>
     ) },
-    ...(showCompany
-      ? [{ key: 'company', header: 'Company', render: (a: AllocationRosterItem) => a.companyName }]
-      : []),
+    { key: 'company', header: 'Company', render: (a) => a.companyName },
     { key: 'date', header: 'Date', className: 'tabular-nums', render: (a) => a.bookingDate },
     {
       key: 'type', header: 'Type',
@@ -82,7 +80,7 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
         <div className="w-40">
           <Select label="Type" options={TYPE_OPTIONS} value={type} onChange={(e) => setType(e.target.value)} />
         </div>
-        {showCompany && (
+        {showCompanyFilter && (
           <div className="w-52">
             <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
           </div>

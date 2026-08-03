@@ -47,6 +47,7 @@ type AdminBookingRow = Prisma.BookingRequestGetPayload<{
   include: {
     user: { select: { fullName: true; email: true } };
     company: { select: { name: true } };
+    carpoolMembers: true;
     allocation: { include: { slot: { select: { slotNumber: true } } } };
   };
 }>;
@@ -102,6 +103,13 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
   }
 
   // 3. Carpool headcount cap (D8) and member/seat consistency.
+  if (input.vehicleType && input.vehicleType !== 'CAR') {
+    fail('vehicleType', 'Only normal car bookings are supported right now');
+  }
+
+  // The POC is car-only: keep persisted rows explicit even if older clients omit the field.
+  input.vehicleType = 'CAR';
+
   const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
   if (input.carpoolPeople > maxPeople) {
     fail('carpoolPeople', `Must be between 1 and ${maxPeople}`);
@@ -596,6 +604,7 @@ export async function listBookings(principal: Principal, filter: ListBookingsQue
     include: {
       user: { select: { fullName: true, email: true } },
       company: { select: { name: true } },
+      carpoolMembers: true,
       allocation: { include: { slot: { select: { slotNumber: true } } } },
     },
     orderBy: [{ bookingDate: 'desc' }, { createdAt: 'desc' }],

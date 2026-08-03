@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
-import { primaryRunSchema, listAllocationsQuery } from './allocation.schema';
+import { primaryRunSchema, listAllocationsQuery, runStatusQuery } from './allocation.schema';
 import * as c from './allocation.controller';
 
 // /allocation — runs are SUPER_ADMIN only (P4-13, P4-17).
 const allocationRouter = Router();
 allocationRouter.post('/primary/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runPrimary);
 allocationRouter.post('/common-pool/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runCommonPool);
+allocationRouter.get('/runs/by-date', authenticate, requireRole('SUPER_ADMIN'), validate(runStatusQuery, 'query'), c.getRunByDate);
 allocationRouter.get('/runs/:id', authenticate, requireRole('SUPER_ADMIN'), c.getRun);
 allocationRouter.get('/runs/:id/breakdown', authenticate, requireRole('SUPER_ADMIN'), c.getBreakdown);
 

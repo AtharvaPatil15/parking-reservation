@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Table, type Column } from '../../components';
+import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Select, Table, type Column, type SelectOption } from '../../components';
 import { useMyBookings } from '../../api/hooks';
 import { BackLink } from '../shared/BackLink';
 import { statusTone } from './statusTone';
@@ -8,6 +8,16 @@ import type { components } from '../../api/types';
 
 type Booking = components['schemas']['Booking'];
 const PAGE_SIZE = 10;
+const STATUS_OPTIONS: SelectOption[] = [
+  { value: '', label: 'All statuses' },
+  { value: 'SUBMITTED', label: 'Submitted' },
+  { value: 'ALLOCATED', label: 'Allocated' },
+  { value: 'WAITLISTED', label: 'Waitlisted' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'RELEASED', label: 'Released' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'EXPIRED', label: 'Expired' },
+];
 
 const columns: Column<Booking>[] = [
   { key: 'date', header: 'Date', render: (b) => b.bookingDate },
@@ -22,7 +32,8 @@ const columns: Column<Booking>[] = [
 
 export function History() {
   const [page, setPage] = useState(1);
-  const q = useMyBookings(page, PAGE_SIZE);
+  const [status, setStatus] = useState('');
+  const q = useMyBookings(page, PAGE_SIZE, status);
 
   const items = q.data?.items ?? [];
   const total = q.data?.meta.total ?? 0;
@@ -36,6 +47,20 @@ export function History() {
         <BackLink />
         <h1 className="text-2xl font-semibold tracking-tight">Booking history</h1>
       </div>
+
+      <Card>
+        <div className="w-48">
+          <Select
+            label="Status"
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+      </Card>
 
       {q.isLoading && !q.data ? (
         <LoadingState label="Loading history…" />

@@ -7,6 +7,8 @@ import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 
 const toDate = (s: string): Date => new Date(`${s}T00:00:00.000Z`);
+const MS_DAY = 24 * 60 * 60 * 1000;
+const LONG_RANGE_VALIDATION_DAYS = 366;
 
 async function assertCompanyExists(companyId: string) {
   const company = await prisma.company.findFirst({ where: { id: companyId, deletedAt: null } });
@@ -212,10 +214,13 @@ export async function createBlock(
   // already-blocked + this new count must not exceed that day's effective quota.
   const start = toDate(input.startDate);
   const end = toDate(input.endDate);
-  const MS_DAY = 24 * 60 * 60 * 1000;
   const dayCount = Math.floor((end.getTime() - start.getTime()) / MS_DAY) + 1;
-  for (let i = 0; i < dayCount; i++) {
-    const day = new Date(start.getTime() + i * MS_DAY);
+  const daysToCheck =
+    dayCount > LONG_RANGE_VALIDATION_DAYS
+      ? [start, end]
+      : Array.from({ length: dayCount }, (_v, i) => new Date(start.getTime() + i * MS_DAY));
+
+  for (const day of daysToCheck) {
     const [quota, alreadyBlocked] = await Promise.all([
       getEffectiveQuota(companyId, day),
       getBlockedCount(companyId, day),

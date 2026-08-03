@@ -12,6 +12,7 @@ type AllocationRosterItem = components['schemas']['AllocationRosterItem'];
 function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
   qc.invalidateQueries({ queryKey: ['allocations'] });
+  qc.invalidateQueries({ queryKey: ['allocationRun'] });
   qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
   qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
 }
@@ -33,6 +34,22 @@ export function useRunCommonPoolAllocation() {
     mutationFn: (body: { bookingDate: string }) =>
       unwrap<AllocationRunSummary>(api.POST('/allocation/common-pool/run', { body })),
     onSuccess: () => invalidateAfterRun(qc),
+  });
+}
+
+export function useAllocationRunStatus(bookingDate: string, runType: 'PRIMARY' | 'COMMON_POOL') {
+  return useQuery({
+    queryKey: queryKeys.allocationRunStatus(bookingDate, runType),
+    queryFn: () => {
+      const get = api.GET as unknown as (
+        path: '/allocation/runs/by-date',
+        init: { params: { query: { bookingDate: string; runType: 'PRIMARY' | 'COMMON_POOL' } } },
+      ) => ReturnType<typeof api.GET>;
+      return unwrap<AllocationRunSummary | null>(
+        get('/allocation/runs/by-date', { params: { query: { bookingDate, runType } } }),
+      );
+    },
+    enabled: Boolean(bookingDate),
   });
 }
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '../../components';
 import { PublicHeader } from '../../app/chrome';
@@ -10,7 +10,7 @@ import { ApiError } from '../../api/http';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { isAuthenticated, login, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const loginMutation = useLogin();
@@ -20,6 +20,10 @@ export function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+
+  useEffect(() => {
+    if (isAuthenticated && user) navigate(roleHome(user.role), { replace: true });
+  }, [isAuthenticated, navigate, user]);
 
   function validate(): boolean {
     const next: { email?: string; password?: string } = {};
