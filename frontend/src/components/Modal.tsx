@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../lib/cn';
-import { BlueprintMarks } from './Blueprint';
 
 export interface ModalProps {
   open: boolean;
@@ -69,7 +68,10 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
           sizeClasses[size],
         )}
       >
-        <BlueprintMarks />
+        {/* No registration marks here: the system's dialog spec frames the panel
+            with a hairline border only. Marks are drawn outside their box, so on
+            an opaque panel floating over the scrim they read as stray artifacts
+            rather than as part of the frame. */}
         {title && (
           <div className="border-b border-border px-4 py-3">
             <h2 id={titleId} className="text-xl text-text">
