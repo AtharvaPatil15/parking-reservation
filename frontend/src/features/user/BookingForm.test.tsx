@@ -163,6 +163,19 @@ describe('BookingForm', () => {
     expect(screen.getByText(/results are published/i)).toBeInTheDocument();
   });
 
+  it('offers saved profile cars while still allowing manual car entry', async () => {
+    useAvailability(availability());
+    const view = renderForm();
+    const carNumber = await screen.findByLabelText(/car number/i);
+
+    expect(carNumber).toHaveAttribute('list', 'profile-cars');
+    const option = view.container.querySelector('datalist#profile-cars option[value="KA011234"]');
+    expect(option).toHaveTextContent(/KA 01 1234 - Honda City - Silver/i);
+
+    await userEvent.type(carNumber, 'MH12ZZ9999');
+    expect(carNumber).toHaveValue('MH12ZZ9999');
+  });
+
   it('maps CAPACITY_FULL to a "grid refreshed" message', async () => {
     useAvailability(availability());
     server.use(

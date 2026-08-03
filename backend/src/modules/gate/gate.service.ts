@@ -81,8 +81,8 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
   const bookingDate = currentIstCalendarDate(now);
 
   const [vehicle, openVisit] = await Promise.all([
-    prisma.vehicle.findUnique({
-      where: { vehicleNumber },
+    prisma.vehicle.findFirst({
+      where: { vehicleNumber, isActive: true },
       include: { company: { select: { name: true } } },
     }),
     prisma.gateEvent.findFirst({

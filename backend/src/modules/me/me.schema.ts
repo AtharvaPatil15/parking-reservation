@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const vehicleNumber = z.string().trim().min(4, 'Car number is too short').max(16, 'Car number is too long');
+
 /** openapi `UpdateProfileRequest` — partial self-profile update; at least one field. */
 export const updateProfileSchema = z
   .object({
@@ -11,6 +13,16 @@ export const updateProfileSchema = z
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'At least one field is required' });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const createMyVehicleSchema = z.object({
+  vehicleNumber,
+  displayNumber: z.string().trim().min(4).max(24).optional(),
+  vehicleType: z.enum(['CAR', 'EV_CAR', 'BIKE']).default('CAR').optional(),
+  makeModel: z.string().trim().min(1).max(80).nullable().optional(),
+  colour: z.string().trim().min(1).max(40).nullable().optional(),
+  notes: z.string().trim().min(1).max(500).nullable().optional(),
+});
+export type CreateMyVehicleInput = z.infer<typeof createMyVehicleSchema>;
 
 const bookingStatus = z.enum([
   'DRAFT', 'SUBMITTED', 'CANCELLED', 'ALLOCATED', 'WAITLISTED', 'REJECTED', 'RELEASED', 'EXPIRED',

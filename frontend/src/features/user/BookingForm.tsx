@@ -12,7 +12,7 @@ import {
   SlotGrid,
   SlotGridLegend,
 } from '../../components';
-import { useAvailability, useCreateBooking, useMe } from '../../api/hooks';
+import { useAvailability, useCreateBooking, useMe, useMyVehicles } from '../../api/hooks';
 import { ApiError, apiErrorText } from '../../api/http';
 import { useCountdown } from '../../lib/useCountdown';
 import { cn } from '../../lib/cn';
@@ -49,6 +49,7 @@ const runLabel = (iso: string): string =>
  */
 export function BookingForm() {
   const me = useMe();
+  const vehicles = useMyVehicles();
   const availability = useAvailability();
   const createBooking = useCreateBooking();
 
@@ -82,7 +83,7 @@ export function BookingForm() {
   const secondsLeft = useCountdown(window_?.nextRunCountdownSeconds);
   const runUrgent = secondsLeft != null && secondsLeft > 0 && secondsLeft <= FINAL_WINDOW_SECONDS;
 
-  if (me.isLoading || availability.isLoading) return <LoadingState label="Loading booking form…" />;
+  if (me.isLoading || availability.isLoading || vehicles.isLoading) return <LoadingState label="Loading booking form…" />;
   if (availability.isError) {
     return (
       <ErrorState
@@ -133,6 +134,7 @@ export function BookingForm() {
       : null;
 
   const submitBlocked = !selected || !selected.requestable;
+  const savedCars = vehicles.data ?? [];
 
   const onSubmit = handleSubmit((values) => {
     createBooking.mutate(
@@ -269,7 +271,24 @@ export function BookingForm() {
           {errors.bookingDate?.message && <p className="text-sm text-danger">{errors.bookingDate.message}</p>}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Car number" {...register('vehicleNumber')} error={errors.vehicleNumber?.message} hint="Optional — helps security match you at the gate." />
+            <div>
+              <Input
+                label="Car number"
+                list={savedCars.length > 0 ? 'profile-cars' : undefined}
+                {...register('vehicleNumber')}
+                error={errors.vehicleNumber?.message}
+                hint={savedCars.length > 0 ? 'Choose a saved car or type another number.' : 'Optional - helps security match you at the gate.'}
+              />
+              {savedCars.length > 0 && (
+                <datalist id="profile-cars">
+                  {savedCars.map((v) => (
+                    <option key={v.id} value={v.vehicleNumber}>
+                      {[v.displayNumber, v.makeModel, v.colour].filter(Boolean).join(' - ')}
+                    </option>
+                  ))}
+                </datalist>
+              )}
+            </div>
             <Input
               label="Carpool people"
               type="number"

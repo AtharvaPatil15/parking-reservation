@@ -23,7 +23,15 @@ export {
 } from './gate';
 export type { GateEventsFilter, UnbookedFilter } from './gate';
 export { useConfig, useUpdateConfig } from './config';
-export { useMe, useMyBookings, useUserDashboard } from './user';
+export {
+  useMe,
+  useUpdateMe,
+  useMyVehicles,
+  useCreateMyVehicle,
+  useRemoveMyVehicle,
+  useMyBookings,
+  useUserDashboard,
+} from './user';
 export {
   useSuperAdminDashboard,
   usePendingAdmins,

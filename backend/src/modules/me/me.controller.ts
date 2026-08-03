@@ -10,6 +10,7 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const num = (v: unknown) => (v != null ? Number(v) : null);
 
 type BookingRow = Awaited<ReturnType<typeof service.listMyBookings>>['rows'][number];
+type MyVehicleRow = Awaited<ReturnType<typeof service.listMyVehicles>>[number];
 
 /** openapi Booking (list summary). */
 function toBooking(b: BookingRow) {
@@ -29,6 +30,23 @@ function toBooking(b: BookingRow) {
   };
 }
 
+/** openapi VehicleSummary — one of the current user's saved cars. */
+function toVehicle(v: MyVehicleRow) {
+  return {
+    id: v.id,
+    vehicleNumber: v.vehicleNumber,
+    displayNumber: v.displayNumber,
+    ownerName: v.ownerName,
+    ownerEmail: v.ownerEmail ?? null,
+    contactNumber: v.contactNumber ?? null,
+    vehicleType: v.vehicleType,
+    makeModel: v.makeModel ?? null,
+    colour: v.colour ?? null,
+    companyId: v.companyId ?? null,
+    companyName: v.company?.name ?? null,
+  };
+}
+
 export const getMe = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   sendSuccess(res, toUserProfile(await service.getProfile(req.user.id)));
@@ -37,6 +55,22 @@ export const getMe = asyncHandler(async (req, res) => {
 export const updateMe = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   sendSuccess(res, toUserProfile(await service.updateProfile(req.user.id, req.body)));
+});
+
+export const getMyVehicles = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  sendSuccess(res, (await service.listMyVehicles(req.user.id)).map(toVehicle));
+});
+
+export const createMyVehicle = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  sendSuccess(res, toVehicle(await service.createMyVehicle(req.user.id, req.body)), 201);
+});
+
+export const removeMyVehicle = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  await service.removeMyVehicle(req.user.id, req.params.id);
+  sendSuccess(res, { id: req.params.id }, 200);
 });
 
 export const getMyBookings = asyncHandler(async (req, res) => {

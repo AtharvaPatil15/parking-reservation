@@ -5,6 +5,7 @@ const NAV = [
   { to: '/app', label: 'Dashboard', end: true },
   { to: '/book', label: 'Book a slot' },
   { to: '/my-bookings', label: 'History' },
+  { to: '/profile', label: 'Profile' },
 ];
 
 /** User-area layout: nav drawer (top bar hamburger) + routed content. */
