@@ -161,7 +161,9 @@ export function BookingForm() {
   });
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    // Left-aligned like every other screen (the shell no longer centres content),
+    // but the form keeps a readable measure rather than stretching to a wide monitor.
+    <div className="max-w-4xl space-y-5">
       <div className="space-y-3">
         <BackLink />
         <div className="flex flex-wrap items-start justify-between gap-3">
