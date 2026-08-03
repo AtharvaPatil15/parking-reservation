@@ -37,3 +37,9 @@ export const setStatus = asyncHandler(async (req, res) => {
   );
   sendSuccess(res, toUserProfile(user));
 });
+
+export const removeUser = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  await service.removeUser(req.user, req.params.id);
+  sendSuccess(res, { message: 'User removed' });
+});

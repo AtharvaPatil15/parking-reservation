@@ -271,6 +271,7 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
       userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
       userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', acme),
+      userProfile('u-guard', 'Gate Guard', 'guard@acme.test', 'ACTIVE', 'SECURITY', acme),
     ],
   };
 }
@@ -843,7 +844,7 @@ const hero = [
     const { page, pageSize } = pageParams(request);
     const all = Object.values(companyUserState)
       .flat()
-      .filter((u) => u.status === 'PENDING' && u.role === 'COMPANY_ADMIN');
+      .filter((u) => u.status === 'PENDING' && (u.role === 'COMPANY_ADMIN' || u.role === 'SECURITY'));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
   }),
@@ -853,7 +854,7 @@ const hero = [
     // newest decision first (backend sorts by updatedAt desc) — sort before paginating.
     const all = Object.values(companyUserState)
       .flat()
-      .filter((u) => u.role === 'COMPANY_ADMIN' && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
+      .filter((u) => (u.role === 'COMPANY_ADMIN' || u.role === 'SECURITY') && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
       .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
@@ -886,6 +887,19 @@ const hero = [
     }
     if (!updated) return fail(404, 'NOT_FOUND', 'User not found');
     return ok<UserProfile>(updated);
+  }),
+  http.delete(`${baseURL}/users/:id`, ({ params }) => {
+    const id = String(params.id);
+    let removed = false;
+    for (const [companyId, list] of Object.entries(companyUserState)) {
+      const next = list.filter((u) => u.id !== id);
+      if (next.length !== list.length) {
+        companyUserState[companyId] = next;
+        removed = true;
+      }
+    }
+    if (!removed) return fail(404, 'NOT_FOUND', 'User not found');
+    return ok<{ message: string }>({ message: 'User removed' });
   }),
 
   // --- Slots (super admin) ---
