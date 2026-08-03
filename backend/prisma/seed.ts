@@ -25,7 +25,7 @@ async function main() {
   const passwordHash = await argon2.hash(DEV_PASSWORD);
 
   // 1. Roles ----------------------------------------------------------------
-  const [superAdminRole, companyAdminRole, userRole] = await Promise.all([
+  const [superAdminRole, companyAdminRole, userRole, securityRole] = await Promise.all([
     prisma.role.upsert({
       where: { name: 'SUPER_ADMIN' },
       update: {},
@@ -40,6 +40,12 @@ async function main() {
       where: { name: 'USER' },
       update: {},
       create: { name: 'USER', description: 'Company registered user' },
+    }),
+    // Phase 7 (D15) — building gate operator: check-in / check-out only, not tenant-scoped.
+    prisma.role.upsert({
+      where: { name: 'SECURITY' },
+      update: {},
+      create: { name: 'SECURITY', description: 'Building security / gate operator' },
     }),
   ]);
 
@@ -123,6 +129,25 @@ async function main() {
     await linkRole(created.id, userRole.id);
   }
 
+  // 5b. Building security / gate operator (Phase 7 D15) --------------------
+  // Registered against Redbricks (the building), not a tenant — the gate serves every company.
+  const guard = await prisma.user.upsert({
+    where: { email: 'security@redbricks.example' },
+    update: {},
+    create: {
+      fullName: 'Redbricks Gate Security',
+      email: 'security@redbricks.example',
+      contactNumber: '+91-9000000009',
+      address: 'Redbricks Tower, Gate 1, Baner, Pune',
+      pinCode: '411045',
+      passwordHash,
+      status: 'ACTIVE',
+      emailVerified: true,
+      companyId: redbricks.id,
+    },
+  });
+  await linkRole(guard.id, securityRole.id);
+
   // 6. Office location, parking area, slots (quota model) ------------------
   const office = await prisma.officeLocation.upsert({
     where: { id: 'seed-office-redbricks' },
@@ -157,17 +182,54 @@ async function main() {
   }
 
   // 7. Assent quota (effective today) --------------------------------------
+  // 12 = the full basement, so the Phase 7 booking grid renders the 12 boxes the requirement calls
+  // for (D14 — the grid is quota-sized, this is just the demo's quota).
   await prisma.companySlotAllocation.upsert({
     where: { id: 'seed-quota-assent' },
-    update: { slotCount: 8, effectiveFrom: today },
+    update: { slotCount: 12, effectiveFrom: today },
     create: {
       id: 'seed-quota-assent',
       companyId: assent.id,
-      slotCount: 8,
+      slotCount: 12,
       effectiveFrom: today,
       createdById: superAdmin.id,
     },
   });
+
+  // 7b. Vehicle registry (Phase 7 D17) --------------------------------------
+  // A few cars for the demo's existing users so the security check-in flow works before the real
+  // Excel sheet is imported (`npm run import:vehicles -- ../db/vehicles.sample.csv` loads more).
+  // `vehicleNumber` must be stored NORMALIZED (uppercase, no separators) — that is what the gate
+  // lookup keys on; `displayNumber` keeps the readable form.
+  const seedVehicles = [
+    { plate: 'MH12AB1234', display: 'MH 12 AB 1234', email: 'aditi@assent.example', name: 'Aditi Rao', type: 'CAR' as const, model: 'Hyundai i20', colour: 'White' },
+    { plate: 'MH12CD5678', display: 'MH 12 CD 5678', email: 'rahul@assent.example', name: 'Rahul Mehta', type: 'CAR' as const, model: 'Tata Nexon', colour: 'Blue' },
+    { plate: 'MH14EF9012', display: 'MH 14 EF 9012', email: 'sara@assent.example', name: 'Sara Khan', type: 'EV_CAR' as const, model: 'Tata Nexon EV', colour: 'Grey' },
+    { plate: 'MH12GH3456', display: 'MH 12 GH 3456', email: 'admin@assent.example', name: 'Assent Company Admin', type: 'CAR' as const, model: 'Honda City', colour: 'Silver' },
+    // Deliberately NOT linked to any account — exercises the "unknown driver, no booking" gate path.
+    { plate: 'MH12XY7788', display: 'MH 12 XY 7788', email: null, name: 'Vikram Joshi (contractor)', type: 'CAR' as const, model: 'Maruti Swift', colour: 'Red' },
+  ];
+  for (const v of seedVehicles) {
+    const owner = v.email
+      ? await prisma.user.findFirst({ where: { email: v.email, deletedAt: null }, select: { id: true, companyId: true } })
+      : null;
+    await prisma.vehicle.upsert({
+      where: { vehicleNumber: v.plate },
+      update: { userId: owner?.id ?? null, companyId: owner?.companyId ?? assent.id },
+      create: {
+        vehicleNumber: v.plate,
+        displayNumber: v.display,
+        ownerName: v.name,
+        ownerEmail: v.email,
+        contactNumber: '+91-9822001100',
+        companyId: owner?.companyId ?? assent.id,
+        userId: owner?.id ?? null,
+        vehicleType: v.type,
+        makeModel: v.model,
+        colour: v.colour,
+      },
+    });
+  }
 
   // 8. System configuration -------------------------------------------------
   const config: Array<{ key: string; value: string; valueType: 'NUMBER' | 'TIME' | 'BOOLEAN' | 'STRING'; description: string }> = [
@@ -180,6 +242,11 @@ async function main() {
     { key: 'booking.commonPoolClose', value: '22:00', valueType: 'TIME', description: 'Common-pool window closes (IST)' },
     { key: 'booking.commonPoolResultsBy', value: '23:00', valueType: 'TIME', description: 'Common-pool results published (IST)' },
     { key: 'booking.reminderBefore', value: '60', valueType: 'NUMBER', description: 'Minutes before cutoff to send the reminder' },
+    // Phase 7 — rolling booking window + weekly weekend allocation run (D9/D10/D11).
+    { key: 'booking.windowWeeks', value: '2', valueType: 'NUMBER', description: 'How many weeks ahead the booking window is open (2 or 4)' },
+    { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Weekly allocation run day (SATURDAY | SUNDAY)' },
+    { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Weekly allocation run time on the run day (IST)' },
+    { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'A date must be decided at least this many days before it (D11)' },
     { key: 'password.minLength', value: '10', valueType: 'NUMBER', description: 'Minimum password length' },
     // Notification config — delivery implemented later; see docs/notification-service-plan.md
     { key: 'notification.email.enabled', value: 'true', valueType: 'BOOLEAN', description: 'Master switch for email channel' },

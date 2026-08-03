@@ -42,6 +42,17 @@ export function AdminApprovals() {
     { key: 'email', header: 'Email', render: (u) => u.email },
     { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
+      key: 'role',
+      header: 'Requested as',
+      // Phase 7: the queue now mixes company-admin and security registrations, so the row must say
+      // which — approving a gate operator is a different decision from granting company admin.
+      render: (u) => (
+        <Badge tone={u.role === 'SECURITY' ? 'accent' : 'primary'}>
+          {u.role === 'SECURITY' ? 'Security' : 'Company admin'}
+        </Badge>
+      ),
+    },
+    {
       key: 'actions', header: '', align: 'right',
       render: (u) => (
         <div className="flex justify-end gap-2">
@@ -62,6 +73,17 @@ export function AdminApprovals() {
     { key: 'email', header: 'Email', render: (u) => u.email },
     { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
+      key: 'role',
+      header: 'Requested as',
+      // Phase 7: the queue now mixes company-admin and security registrations, so the row must say
+      // which — approving a gate operator is a different decision from granting company admin.
+      render: (u) => (
+        <Badge tone={u.role === 'SECURITY' ? 'accent' : 'primary'}>
+          {u.role === 'SECURITY' ? 'Security' : 'Company admin'}
+        </Badge>
+      ),
+    },
+    {
       key: 'decision', header: 'Decision', align: 'right',
       render: (u) => (
         <Badge tone={u.status === 'ACTIVE' ? 'success' : 'danger'}>
@@ -76,8 +98,10 @@ export function AdminApprovals() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Company-admin requests</h2>
-        <p className="text-text-muted">People who registered as a company admin. Approving grants them admin of their company.</p>
+        <h2 className="text-xl font-semibold tracking-tight">Privileged registrations</h2>
+        <p className="text-text-muted">
+          People who registered as a company admin or as building security. Only you can action these.
+        </p>
       </div>
 
       <Card title="Pending requests" padded={false}>

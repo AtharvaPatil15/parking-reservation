@@ -7,14 +7,40 @@ import type { components } from '../types';
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type AllocationRosterItem = components['schemas']['AllocationRosterItem'];
+type WeeklyRunResult = components['schemas']['WeeklyRunResult'];
+type WeeklyRunPreview = components['schemas']['WeeklyRunPreview'];
 
 /** Invalidate everything a completed allocation run changes: rosters, dashboards, the seat roster. */
 function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
   qc.invalidateQueries({ queryKey: ['allocations'] });
+  // Whole prefix: flips the run to "done" for its date AND refreshes the stored breakdown.
   qc.invalidateQueries({ queryKey: ['allocationRun'] });
   qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
   qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
+  // Phase 7: a run closes its band's dates for requests, so the grid and the band preview both move.
+  qc.invalidateQueries({ queryKey: ['availability'] });
+  qc.invalidateQueries({ queryKey: queryKeys.weeklyRunPreview });
+}
+
+/** GET /allocation/weekly — the band the next weekend batch owns, with pending counts per date. */
+export function useWeeklyRunPreview() {
+  return useQuery<WeeklyRunPreview>({
+    queryKey: queryKeys.weeklyRunPreview,
+    queryFn: () => unwrap<WeeklyRunPreview>(api.GET('/allocation/weekly')),
+  });
+}
+
+/**
+ * POST /allocation/weekly/run — the Phase 7 weekend batch. Takes no body: the band comes from
+ * config, so there is no date for the caller to get wrong.
+ */
+export function useRunWeeklyAllocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap<WeeklyRunResult>(api.POST('/allocation/weekly/run')),
+    onSuccess: () => invalidateAfterRun(qc),
+  });
 }
 
 /** POST /allocation/primary/run — returns the run summary (use `.id` for the breakdown). */
@@ -34,22 +60,6 @@ export function useRunCommonPoolAllocation() {
     mutationFn: (body: { bookingDate: string }) =>
       unwrap<AllocationRunSummary>(api.POST('/allocation/common-pool/run', { body })),
     onSuccess: () => invalidateAfterRun(qc),
-  });
-}
-
-export function useAllocationRunStatus(bookingDate: string, runType: 'PRIMARY' | 'COMMON_POOL') {
-  return useQuery({
-    queryKey: queryKeys.allocationRunStatus(bookingDate, runType),
-    queryFn: () => {
-      const get = api.GET as unknown as (
-        path: '/allocation/runs/by-date',
-        init: { params: { query: { bookingDate: string; runType: 'PRIMARY' | 'COMMON_POOL' } } },
-      ) => ReturnType<typeof api.GET>;
-      return unwrap<AllocationRunSummary | null>(
-        get('/allocation/runs/by-date', { params: { query: { bookingDate, runType } } }),
-      );
-    },
-    enabled: Boolean(bookingDate),
   });
 }
 
@@ -83,6 +93,19 @@ export function useAllocations(filter: AllocationsFilter = {}) {
           },
         }),
       ),
+  });
+}
+
+/**
+ * GET /allocation/runs?date=&type= — the existing run for a date+type, or null if not yet run.
+ * Lets the UI show stored results and disable a redundant re-run once allocation is done.
+ */
+export function useAllocationRunForDate(date: string, type: 'PRIMARY' | 'COMMON_POOL') {
+  return useQuery<AllocationRunSummary | null>({
+    queryKey: queryKeys.allocationRunForDate(date, type),
+    queryFn: () =>
+      unwrap<AllocationRunSummary | null>(api.GET('/allocation/runs', { params: { query: { date, type } } })),
+    enabled: Boolean(date),
   });
 }
 

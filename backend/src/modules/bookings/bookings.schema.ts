@@ -37,6 +37,16 @@ export const createBookingSchema = z.object({
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type CarpoolMemberInput = z.infer<typeof carpoolMemberInput>;
 
+/**
+ * Slot-grid query (GET /availability, Phase 7 §4). Both bounds optional: with neither, the service
+ * answers for the whole currently-open window, which is what the booking form asks for.
+ */
+export const availabilityQuery = z.object({
+  from: dateString.optional(),
+  to: dateString.optional(),
+});
+export type AvailabilityQuery = z.infer<typeof availabilityQuery>;
+
 /** Partial edit before the primary cutoff (openapi `UpdateBookingRequest`). At least one field. */
 export const updateBookingSchema = z
   .object({

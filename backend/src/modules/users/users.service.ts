@@ -28,14 +28,22 @@ async function loadTargetUser(actor: Actor, userId: string) {
 }
 
 /**
- * List PENDING users who registered as COMPANY_ADMIN, across all companies — the Super Admin's
- * approval queue (F11). Route-guarded SUPER_ADMIN-only, so no tenant scoping here.
+ * Roles whose registration only the Super Admin may action: company admins (F11) and, from Phase 7,
+ * security/gate operators (D15). Both are privileged — a Company Admin must not be able to grant
+ * either into their own tenant.
+ */
+const PRIVILEGED_ROLE_NAMES = ['COMPANY_ADMIN', 'SECURITY'];
+
+/**
+ * List PENDING privileged registrations (COMPANY_ADMIN or SECURITY) across all companies — the Super
+ * Admin's approval queue (F11 + Phase 7 D15). Route-guarded SUPER_ADMIN-only, so no tenant scoping
+ * here. The caller can tell the two apart from each row's `roles`.
  */
 export async function listPendingAdmins(opts: PageArgs) {
   const where: Prisma.UserWhereInput = {
     deletedAt: null,
     status: 'PENDING',
-    roles: { some: { role: { name: 'COMPANY_ADMIN' } } },
+    roles: { some: { role: { name: { in: PRIVILEGED_ROLE_NAMES } } } },
   };
   const [rows, total] = await Promise.all([
     prisma.user.findMany({
@@ -51,15 +59,15 @@ export async function listPendingAdmins(opts: PageArgs) {
 }
 
 /**
- * List PROCESSED company-admin registration requests (status ACTIVE or REJECTED), across all
- * companies — the Super Admin's approval history (F11), so decisions aren't lost once actioned.
- * SUPER_ADMIN-only route; newest decision first (by updatedAt).
+ * List PROCESSED privileged registration requests (status ACTIVE or REJECTED), across all
+ * companies — the Super Admin's approval history (F11 + Phase 7 D15), so decisions aren't lost once
+ * actioned. SUPER_ADMIN-only route; newest decision first (by updatedAt).
  */
 export async function listAdminRequestHistory(opts: PageArgs) {
   const where: Prisma.UserWhereInput = {
     deletedAt: null,
     status: { in: ['ACTIVE', 'REJECTED'] },
-    roles: { some: { role: { name: 'COMPANY_ADMIN' } } },
+    roles: { some: { role: { name: { in: PRIVILEGED_ROLE_NAMES } } } },
   };
   const [rows, total] = await Promise.all([
     prisma.user.findMany({
@@ -80,11 +88,16 @@ export async function setApproval(actor: Actor, userId: string, decision: 'APPRO
     throw new ValidationError('Only PENDING users can be approved or rejected');
   }
 
-  // A company-admin registration (F11) is a privileged request: only the Super Admin may action
-  // it — a Company Admin cannot approve another admin into their own company.
+  // A company-admin (F11) or security (Phase 7 D15) registration is privileged: only the Super Admin
+  // may action it — a Company Admin cannot approve another admin, or a gate operator, into place.
   const isAdminRequest = user.roles.some((r) => r.role.name === 'COMPANY_ADMIN');
-  if (isAdminRequest && actor.role !== 'SUPER_ADMIN') {
-    throw new ForbiddenError('Company-admin registrations are approved by the super admin');
+  const isSecurityRequest = user.roles.some((r) => r.role.name === 'SECURITY');
+  if ((isAdminRequest || isSecurityRequest) && actor.role !== 'SUPER_ADMIN') {
+    throw new ForbiddenError(
+      isAdminRequest
+        ? 'Company-admin registrations are approved by the super admin'
+        : 'Security registrations are approved by the super admin',
+    );
   }
 
   const newStatus: UserStatus = decision === 'APPROVE' ? 'ACTIVE' : 'REJECTED';

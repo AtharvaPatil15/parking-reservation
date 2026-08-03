@@ -80,6 +80,19 @@ export const runCommonPool = asyncHandler(async (req, res) => {
   sendSuccess(res, toRunSummary(await service.getRunSummary(runId)), 200);
 });
 
+/**
+ * POST /allocation/weekly/run — the Phase 7 weekend batch. Decides every date in the band this run
+ * owns, in one call, and reports per-date outcomes so the Super Admin can see what happened.
+ */
+export const runWeekly = asyncHandler(async (req, res) => {
+  sendSuccess(res, await service.runWeeklyAllocation(req.user?.id), 200);
+});
+
+/** GET /allocation/weekly — the band the next batch owns, with pending-request counts per date. */
+export const weeklyPreview = asyncHandler(async (_req, res) => {
+  sendSuccess(res, await service.getWeeklyRunPreview(), 200);
+});
+
 export const listAllocations = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const p = parsePagination(req.query as Record<string, unknown>);
@@ -99,11 +112,10 @@ export const getRun = asyncHandler(async (req, res) => {
   sendSuccess(res, toRunSummary(await service.getRunSummary(req.params.id)), 200);
 });
 
-export const getRunByDate = asyncHandler(async (req, res) => {
-  const summary = await service.getRunSummaryByDate(
-    req.query.runType as 'PRIMARY' | 'COMMON_POOL',
-    req.query.bookingDate as string,
-  );
+/** GET /allocation/runs?date=&type= — the existing run for a date+type, or null if none yet. */
+export const getRunForDate = asyncHandler(async (req, res) => {
+  const { date, type } = req.query as { date: string; type: 'PRIMARY' | 'COMMON_POOL' };
+  const summary = await service.getRunByDate(type, date);
   sendSuccess(res, summary ? toRunSummary(summary) : null, 200);
 });
 

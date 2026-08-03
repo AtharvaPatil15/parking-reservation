@@ -2,7 +2,9 @@ import { Outlet } from 'react-router-dom';
 import { useRegisterNavDrawerItems } from '../../app/navDrawer';
 
 const NAV = [
-  { to: '/admin', label: 'Allocation', end: true },
+  // Phase 7: the weekly batch is the normal path, so it leads; the per-date run stays for ad-hoc use.
+  { to: '/admin', label: 'Weekly run', end: true },
+  { to: '/admin/allocation', label: 'Run by date' },
   { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/config', label: 'Config' },
   { to: '/admin/companies', label: 'Companies' },

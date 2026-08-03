@@ -59,7 +59,7 @@ function TopBar() {
           </Button>
         </div>
       </div>
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Menu">
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Menu" side="left" variant="nav">
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
             <NavLink

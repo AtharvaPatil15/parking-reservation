@@ -5,6 +5,7 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'CAPACITY_FULL'
   | 'WINDOW_CLOSED'
   | 'RATE_LIMITED'
   | 'INTERNAL';
@@ -49,6 +50,15 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message = 'Conflict') {
     super(409, 'CONFLICT', message);
+  }
+}
+/**
+ * Every slot for the requested date is already held (Phase 7 D12). Distinct from CONFLICT so the
+ * client can say "pick another date" instead of "you already booked this one".
+ */
+export class CapacityFullError extends AppError {
+  constructor(message = 'No slots remain for this date') {
+    super(409, 'CAPACITY_FULL', message);
   }
 }
 export class WindowClosedError extends AppError {

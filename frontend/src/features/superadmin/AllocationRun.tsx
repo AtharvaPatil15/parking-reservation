@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Table, type Column } from '../../components';
 import {
   useAllocationBreakdown,
-  useAllocationRunStatus,
+  useAllocationRunForDate,
   useRunPrimaryAllocation,
   useRunCommonPoolAllocation,
 } from '../../api/hooks';
@@ -57,21 +57,22 @@ export function AllocationRun() {
   const [primaryRunId, setPrimaryRunId] = useState<string | null>(null);
   const [commonPoolRunId, setCommonPoolRunId] = useState<string | null>(null);
 
+  // Existing runs for the picked date — drives the "already done" lock and surfaces stored results on
+  // load (a run persists per date, so revisiting a date shows what was allocated without re-running).
+  const existingPrimary = useAllocationRunForDate(bookingDate, 'PRIMARY');
+  const existingCommonPool = useAllocationRunForDate(bookingDate, 'COMMON_POOL');
+
   const primary = useRunPrimaryAllocation();
   const commonPool = useRunCommonPoolAllocation();
-  const primaryStatus = useAllocationRunStatus(bookingDate, 'PRIMARY');
-  const commonPoolStatus = useAllocationRunStatus(bookingDate, 'COMMON_POOL');
 
-  const primaryCompleted = primaryStatus.data?.status === 'COMPLETED';
-  const commonPoolCompleted = commonPoolStatus.data?.status === 'COMPLETED';
+  // A new date has its own runs; drop the just-ran ids so a prior date's results don't linger.
+  useEffect(() => { setPrimaryRunId(null); setCommonPoolRunId(null); }, [bookingDate]);
 
-  useEffect(() => {
-    setPrimaryRunId(primaryStatus.data?.id ?? null);
-  }, [primaryStatus.data?.id]);
-
-  useEffect(() => {
-    setCommonPoolRunId(commonPoolStatus.data?.id ?? null);
-  }, [commonPoolStatus.data?.id]);
+  const primaryDone = existingPrimary.data?.status === 'COMPLETED';
+  const commonPoolDone = existingCommonPool.data?.status === 'COMPLETED';
+  // Prefer the id we just ran (instant), else the stored run for this date.
+  const effectivePrimaryId = primaryRunId ?? existingPrimary.data?.id ?? null;
+  const effectiveCommonPoolId = commonPoolRunId ?? existingCommonPool.data?.id ?? null;
 
   function onRunPrimary() {
     primary.mutate({ bookingDate }, { onSuccess: (summary) => setPrimaryRunId(summary.id) });
@@ -100,34 +101,42 @@ export function AllocationRun() {
 
       {/* Step 1 — primary allocation */}
       <Card title="1 · Primary allocation" description="Rank each company's submitted requests and assign within its quota.">
-        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate || primaryCompleted}>
-          {primaryCompleted ? 'Primary allocation already done' : 'Run primary allocation'}
+        <Button onClick={onRunPrimary} loading={primary.isPending} disabled={!bookingDate || primaryDone}>
+          {primaryDone ? 'Primary allocation already done' : 'Run primary allocation'}
         </Button>
-        {primaryCompleted && <p className="mt-3 text-sm text-text-muted">Allocation has already been done for this date.</p>}
+        {primaryDone && (
+          <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
+            Primary allocation has already been done for {bookingDate}. The stored results are shown below.
+          </p>
+        )}
         {primaryError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {primaryError}
           </p>
         )}
       </Card>
-      <RunResults runId={primaryRunId} emptyHint="No requests were scored for this date." />
+      <RunResults runId={effectivePrimaryId} emptyHint="No requests were scored for this date." />
 
       {/* Step 2 — common pool */}
       <Card
         title="2 · Common pool"
         description="Enroll the users waitlisted by primary and share every company's unused slots across the whole building, top score first."
       >
-        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate || commonPoolCompleted}>
-          {commonPoolCompleted ? 'Common pool already done' : 'Start common pool'}
+        <Button variant="secondary" onClick={onRunCommonPool} loading={commonPool.isPending} disabled={!bookingDate || commonPoolDone}>
+          {commonPoolDone ? 'Common pool already done' : 'Start common pool'}
         </Button>
-        {commonPoolCompleted && <p className="mt-3 text-sm text-text-muted">Common-pool allocation has already been done for this date.</p>}
+        {commonPoolDone && (
+          <p role="status" className="mt-3 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm text-text-muted">
+            Common pool has already been done for {bookingDate}. The stored results are shown below.
+          </p>
+        )}
         {commonPoolError && (
           <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger">
             {commonPoolError}
           </p>
         )}
       </Card>
-      <RunResults runId={commonPoolRunId} emptyHint="No waitlisted users or no spare slots for this date." />
+      <RunResults runId={effectiveCommonPoolId} emptyHint="No waitlisted users or no spare slots for this date." />
     </div>
   );
 }

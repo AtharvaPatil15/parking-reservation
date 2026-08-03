@@ -1,17 +1,21 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { getString, getNumber } from '../../config/systemConfig';
-import { ValidationError, ConflictError, NotFoundError, WindowClosedError } from '../../lib/errors';
+import { getNumber } from '../../config/systemConfig';
 import {
-  isValidCalendarDate,
-  isBookableWeekday,
-  isBeforePrimaryCutoff,
-  parseCalendarDate,
-  currentIstCalendarDate,
-} from './bookings.time';
+  ValidationError,
+  ConflictError,
+  CapacityFullError,
+  NotFoundError,
+  WindowClosedError,
+} from '../../lib/errors';
+import { parseCalendarDate, currentIstCalendarDate } from './bookings.time';
+import { checkRequestable, toIsoDate } from './bookings.window';
+import { loadWindowConfig } from './bookings.windowConfig';
+import { LIVE_BOOKING_STATUSES } from './bookings.availability';
 import { score, rankCandidates } from '../allocation/score';
 import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
+import type { Role } from '../../lib/roles';
 import type {
   CreateBookingInput,
   UpdateBookingInput,
@@ -19,7 +23,6 @@ import type {
   ReleaseBookingInput,
 } from './bookings.schema';
 
-const DEFAULT_PRIMARY_CUTOFF = '18:00';
 const DEFAULT_MAX_PEOPLE = 4;
 // Mirror the allocation run's fallbacks so a release scores identically to the run (decisions §3).
 const DEFAULT_DISTANCE_WEIGHT = 0.6;
@@ -39,8 +42,25 @@ const STATUS_PRIORITY: Record<string, number> = {
 /** Authenticated principal (matches req.user). */
 export interface Principal {
   id: string;
-  role: 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'USER';
+  role: Role;
   companyId: string;
+}
+
+/**
+ * Resource-level visibility for a booking, as an ALLOW-list: SUPER_ADMIN sees everything,
+ * COMPANY_ADMIN their own company, and every other role (USER, and Phase 7's SECURITY) only their
+ * own rows. Written this way round deliberately — a deny-list keyed on `role === 'USER'` silently
+ * grants full visibility to any role added later.
+ *
+ * Not-visible resolves to 404, never 403, so existence is never leaked (openapi §/bookings/{id}).
+ */
+function assertCanSeeBooking(principal: Principal, booking: { userId: string; companyId: string }): void {
+  if (principal.role === 'SUPER_ADMIN') return;
+  if (principal.role === 'COMPANY_ADMIN') {
+    if (booking.companyId !== principal.companyId) throw new NotFoundError('Booking not found');
+    return;
+  }
+  if (booking.userId !== principal.id) throw new NotFoundError('Booking not found');
 }
 
 type AdminBookingRow = Prisma.BookingRequestGetPayload<{
@@ -81,35 +101,33 @@ async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => 
 }
 
 /**
- * Create a submitted PRIMARY booking for the current user (P4-12).
+ * Create a submitted PRIMARY booking for the current user (P4-12, reworked for Phase 7).
  * Snapshots distance/address from the profile (F6); records carpool members, flagging only
- * validated same-company employees as scored (F4). Rejects non-weekday / past-cutoff dates
- * (422 WINDOW_CLOSED) and a duplicate same-type request for the date (409 CONFLICT).
+ * validated same-company employees as scored (F4).
+ *
+ * Phase 7 changes the gate from "before 18:00 the day before" to the rolling window (D9/D11): the
+ * date must be a bookable weekday inside `[nextRun + approvalLeadDays, today + windowWeeks*7]`
+ * (422 WINDOW_CLOSED otherwise), and the request must fit the company's remaining capacity for that
+ * date (409 CAPACITY_FULL otherwise) — that capacity reservation (D12) is what makes the promise of
+ * "no rejections" structural rather than a hope. Duplicate same-type request → 409 CONFLICT.
  * `now` is injectable for testing.
  */
 export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
-  // 1. Date validity + bookable weekday (D7).
-  if (!isValidCalendarDate(input.bookingDate)) fail('bookingDate', 'Not a valid calendar date');
-  if (!isBookableWeekday(input.bookingDate)) {
-    throw new WindowClosedError('Booking date must be a bookable weekday (Mon–Fri)');
+  // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
+  const windowCfg = await loadWindowConfig();
+  const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
+  if (!windowCheck.ok) {
+    if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
+    throw new WindowClosedError(windowCheck.message);
   }
 
-  // 2. Primary cutoff window (F1/F2) — read live config (D8).
-  const cutoff = (await getString('booking.primaryCutoff')) ?? DEFAULT_PRIMARY_CUTOFF;
-  if (!isBeforePrimaryCutoff(now, input.bookingDate, cutoff)) {
-    throw new WindowClosedError(
-      `Primary booking window for ${input.bookingDate} has closed (cutoff ${cutoff} IST on the preceding day)`,
-    );
-  }
-
-  // 3. Carpool headcount cap (D8) and member/seat consistency.
+  // 2. Car-only POC: reject anything else, and persist the field explicitly even when a client omits it.
   if (input.vehicleType && input.vehicleType !== 'CAR') {
     fail('vehicleType', 'Only normal car bookings are supported right now');
   }
-
-  // The POC is car-only: keep persisted rows explicit even if older clients omit the field.
   input.vehicleType = 'CAR';
 
+  // 3. Carpool headcount cap (D8) and member/seat consistency.
   const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
   if (input.carpoolPeople > maxPeople) {
     fail('carpoolPeople', `Must be between 1 and ${maxPeople}`);
@@ -157,39 +175,103 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     };
   });
 
-  // 6. Reject a duplicate same-type request up front for a clean 409 (DB unique is the backstop).
-  const duplicate = await prisma.bookingRequest.findUnique({
-    where: {
-      userId_bookingDate_bookingType: {
-        userId: user.id,
-        bookingDate: bookingDateUtc,
-        bookingType: 'PRIMARY',
-      },
-    },
-    select: { id: true },
-  });
-  if (duplicate) throw new ConflictError('You already have a PRIMARY booking for this date');
-
-  // 7. Create booking + carpool members atomically. Status = SUBMITTED (this is the submit endpoint).
+  // 6/7. Capacity check + create, together in one SERIALIZABLE transaction.
+  //
+  // Reading remaining capacity and then inserting must be atomic: two users submitting for the last
+  // free slot at the same time would otherwise both read `available = 1` and both be admitted,
+  // oversubscribing the date and forcing the weekly run to reject one of them — exactly what this
+  // phase exists to prevent. There is no unique constraint that can act as a backstop for a *count*,
+  // so the isolation level is doing the real work here.
+  //
+  // Wrapped in `withSerializableRetry` so a lost write race is retried server-side rather than shown
+  // to the user: losing the race does not mean the date is full, only that this read was stale.
   try {
-    return await prisma.bookingRequest.create({
-      data: {
-        bookingDate: bookingDateUtc,
-        userId: user.id,
-        companyId: user.companyId,
-        bookingType: 'PRIMARY',
-        status: 'SUBMITTED',
-        userAddress: user.address,
-        pinCode: user.pinCode,
-        travelDistanceKm: user.distanceKm, // Decimal | null — snapshot (F6)
-        vehicleType: input.vehicleType ?? null,
-        vehicleNumber: input.vehicleNumber ?? null,
-        carpoolMemberCount: input.carpoolPeople - 1,
-        specialRequirement: input.specialRequirement ?? null,
-        submittedAt: now,
-        carpoolMembers: memberRows.length ? { create: memberRows } : undefined,
+    return await withSerializableRetry(
+      async (tx) => {
+        // Once a date's run has completed it is decided and closed, whatever the window says.
+        const decided = await tx.allocationRun.findFirst({
+          where: { runType: 'PRIMARY', bookingDate: bookingDateUtc, status: 'COMPLETED' },
+          select: { id: true },
+        });
+        if (decided) {
+          throw new WindowClosedError(`Allocation for ${input.bookingDate} has already run — this date is closed`);
+        }
+
+        // Duplicate same-type request → clean 409 (the composite unique is the backstop).
+        const duplicate = await tx.bookingRequest.findUnique({
+          where: {
+            userId_bookingDate_bookingType: {
+              userId: user.id,
+              bookingDate: bookingDateUtc,
+              bookingType: 'PRIMARY',
+            },
+          },
+          select: { id: true },
+        });
+        if (duplicate) throw new ConflictError('You already have a PRIMARY booking for this date');
+
+        // Remaining capacity = effective quota − blocked − live PRIMARY requests already holding a box.
+        const [quotaRow, blockedAgg, taken] = await Promise.all([
+          tx.companySlotAllocation.findFirst({
+            where: {
+              companyId: user.companyId,
+              effectiveFrom: { lte: bookingDateUtc },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gte: bookingDateUtc } }],
+            },
+            orderBy: { effectiveFrom: 'desc' },
+            select: { slotCount: true },
+          }),
+          tx.slotBlock.aggregate({
+            _sum: { blockedCount: true },
+            where: {
+              companyId: user.companyId,
+              startDate: { lte: bookingDateUtc },
+              endDate: { gte: bookingDateUtc },
+            },
+          }),
+          tx.bookingRequest.count({
+            where: {
+              companyId: user.companyId,
+              bookingDate: bookingDateUtc,
+              bookingType: 'PRIMARY',
+              status: { in: LIVE_BOOKING_STATUSES },
+            },
+          }),
+        ]);
+        const quota = quotaRow?.slotCount ?? 0;
+        const blocked = Math.min(quota, blockedAgg._sum.blockedCount ?? 0);
+        const available = Math.max(0, quota - blocked - taken);
+        if (quota === 0) {
+          throw new CapacityFullError(
+            `Your company has no parking quota configured for ${input.bookingDate}`,
+          );
+        }
+        if (available === 0) {
+          throw new CapacityFullError(
+            `All ${quota - blocked} slot(s) for ${input.bookingDate} are already taken — please choose another date`,
+          );
+        }
+
+        return tx.bookingRequest.create({
+          data: {
+            bookingDate: bookingDateUtc,
+            userId: user.id,
+            companyId: user.companyId,
+            bookingType: 'PRIMARY',
+            status: 'SUBMITTED',
+            userAddress: user.address,
+            pinCode: user.pinCode,
+            travelDistanceKm: user.distanceKm, // Decimal | null — snapshot (F6)
+            vehicleType: input.vehicleType ?? null,
+            vehicleNumber: input.vehicleNumber ?? null,
+            carpoolMemberCount: input.carpoolPeople - 1,
+            specialRequirement: input.specialRequirement ?? null,
+            submittedAt: now,
+            carpoolMembers: memberRows.length ? { create: memberRows } : undefined,
+          },
+        });
       },
-    });
+    );
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = Array.isArray(err.meta?.target)
@@ -199,6 +281,13 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
         throw new ConflictError('A carpool member is already part of another booking for this date');
       }
       throw new ConflictError('You already have a PRIMARY booking for this date');
+    }
+    // P2034 — the capacity check kept losing the write race even after the retries above. The read is
+    // stale so the request must not be admitted; surface a retryable 409 rather than a 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw new CapacityFullError(
+        'Another request for this date landed at the same moment — please refresh the slot grid and try again',
+      );
     }
     throw err;
   }
@@ -226,12 +315,20 @@ export async function updateBooking(
     throw new WindowClosedError('This booking can no longer be edited');
   }
 
-  // Editable only while the primary window is still open (F2) — read live config (D8).
-  const cutoff = (await getString('booking.primaryCutoff')) ?? DEFAULT_PRIMARY_CUTOFF;
-  const bookingDateIso = booking.bookingDate.toISOString().slice(0, 10);
-  if (!isBeforePrimaryCutoff(now, bookingDateIso, cutoff)) {
+  // Editable only while the date is still undecided (Phase 7 — replaces the F2 evening cutoff).
+  // `TOO_SOON` is exactly "already decided, or locked because the next run owns it": allowing an edit
+  // past that point would let someone change the carpool size the run scored them on, after the
+  // outcome was communicated.
+  const bookingDateIso = toIsoDate(booking.bookingDate);
+  const windowCfg = await loadWindowConfig();
+  const check = checkRequestable(bookingDateIso, now, windowCfg);
+  const decided = await prisma.allocationRun.findFirst({
+    where: { runType: 'PRIMARY', bookingDate: booking.bookingDate, status: 'COMPLETED' },
+    select: { id: true },
+  });
+  if (decided || (!check.ok && check.code === 'TOO_SOON')) {
     throw new WindowClosedError(
-      `Editing closed — the primary window for ${bookingDateIso} has passed (cutoff ${cutoff} IST)`,
+      `Editing closed — allocation for ${bookingDateIso} has been decided or is locked for the next run`,
     );
   }
 
@@ -344,12 +441,7 @@ export async function releaseBooking(
   });
   // Hide existence from non-owners (consistent with GET/PATCH) — 404, not 403.
   if (!booking) throw new NotFoundError('Booking not found');
-  if (principal.role === 'USER' && booking.userId !== principal.id) {
-    throw new NotFoundError('Booking not found');
-  }
-  if (principal.role === 'COMPANY_ADMIN' && booking.companyId !== principal.companyId) {
-    throw new NotFoundError('Booking not found');
-  }
+  assertCanSeeBooking(principal, booking);
   if (booking.status !== 'ALLOCATED' || !booking.allocation) {
     throw new ConflictError('Only an allocated booking can be released');
   }
@@ -569,8 +661,7 @@ export async function releaseBooking(
 
 /**
  * Fetch a booking with its carpool members, allocated slot, and score breakdown, enforcing
- * resource-level visibility: USER sees only their own; COMPANY_ADMIN only their company's;
- * SUPER_ADMIN any. Not-visible resolves to 404 (never leaks existence — openapi §/bookings/{id}).
+ * resource-level visibility (see `assertCanSeeBooking`).
  */
 export async function getBookingForPrincipal(principal: Principal, bookingId: string) {
   const booking = await prisma.bookingRequest.findUnique({
@@ -582,12 +673,7 @@ export async function getBookingForPrincipal(principal: Principal, bookingId: st
     },
   });
   if (!booking) throw new NotFoundError('Booking not found');
-  if (principal.role === 'USER' && booking.userId !== principal.id) {
-    throw new NotFoundError('Booking not found');
-  }
-  if (principal.role === 'COMPANY_ADMIN' && booking.companyId !== principal.companyId) {
-    throw new NotFoundError('Booking not found');
-  }
+  assertCanSeeBooking(principal, booking);
   return booking;
 }
 
@@ -598,9 +684,15 @@ export async function getBookingForPrincipal(principal: Principal, bookingId: st
  */
 export async function listBookings(principal: Principal, filter: ListBookingsQuery, page: PageArgs) {
   const where: Prisma.BookingRequestWhereInput = {};
-  // Tenant scoping: CA is locked to their own company; SA may optionally filter by one.
-  if (principal.role === 'COMPANY_ADMIN') where.companyId = principal.companyId;
-  else if (filter.companyId) where.companyId = filter.companyId;
+  // Tenant scoping, allow-listed: SA may optionally filter by company; CA is locked to their own;
+  // anything else only ever sees its own rows (the route is admin-only, this is the backstop).
+  if (principal.role === 'SUPER_ADMIN') {
+    if (filter.companyId) where.companyId = filter.companyId;
+  } else if (principal.role === 'COMPANY_ADMIN') {
+    where.companyId = principal.companyId;
+  } else {
+    where.userId = principal.id;
+  }
   if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
   if (filter.status) where.status = filter.status;
 

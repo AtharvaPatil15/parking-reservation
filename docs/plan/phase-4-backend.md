@@ -25,9 +25,9 @@ with time-order + range validation (D8).
 - **Status:** ☑ (GET/PATCH /config live-tested; time-order, range & unknown-key all → 400. Guarded by `requireRole('SUPER_ADMIN')` — no-auth→401, CA→403 (**finding #1 closed**). Audit now wired (P4-10): each change writes a `CONFIG_UPDATED` AuditLog row with old/new maps.)
 
 #### P4-03 · Prisma lib + migrate + seed wiring · Owner: Devashish · Tag: DEMO · Deps: P4-01
-Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `prisma/seed.ts`; F7 partial-unique SQL applied.
+Prisma client singleton; `prisma migrate` runs the schema; `db seed` runs `backend/prisma/seed.ts`; F7 partial-unique SQL applied.
 - **AC:** fresh DB → `migrate` + `seed` succeed; seeded Super Admin/Company Admin/users/slots/quota/config present.
-- **Evidence:** `backend/src/lib/prisma.ts`; `prisma/seed.ts`; `prisma/partial-unique.sql`.
+- **Evidence:** `backend/src/lib/prisma.ts`; `backend/prisma/seed.ts`; `backend/prisma/partial-unique.sql`.
 - **Status:** ☑ (migrate init + partial-unique + seed verified on fresh parking_poc: 23 tables, 5 users/2 cos/12 slots/13 config)
 
 #### P4-04 · Cross-cutting middleware · Owner: Devashish · Tag: DEMO · Deps: P4-01

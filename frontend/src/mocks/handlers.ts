@@ -24,6 +24,15 @@ type CompanyQuotaSummaryEntry = components['schemas']['CompanyQuotaSummaryEntry'
 type SlotBlock = components['schemas']['SlotBlock'];
 type CompanySummary = components['schemas']['CompanySummary'];
 type RegisterRequest = components['schemas']['RegisterRequest'];
+type AvailabilityResponse = components['schemas']['AvailabilityResponse'];
+type DayAvailability = components['schemas']['DayAvailability'];
+type SlotBox = components['schemas']['SlotBox'];
+type BookingWindow = components['schemas']['BookingWindow'];
+type WeeklyRunPreview = components['schemas']['WeeklyRunPreview'];
+type WeeklyRunResult = components['schemas']['WeeklyRunResult'];
+type VehicleSummary = components['schemas']['VehicleSummary'];
+type GateLookup = components['schemas']['GateLookup'];
+type GateEvent = components['schemas']['GateEvent'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
@@ -56,6 +65,8 @@ const fail = (status: number, code: string, message: string) =>
 function roleForEmail(email: string): RoleName {
   if (email.startsWith('admin@')) return 'SUPER_ADMIN';
   if (email.startsWith('company@')) return 'COMPANY_ADMIN';
+  // Phase 7: `security@…` signs in as a gate operator so the mock demo can reach /security.
+  if (email.startsWith('security@')) return 'SECURITY';
   return 'USER';
 }
 
@@ -80,6 +91,11 @@ function seedConfig(): ConfigEntry[] {
     { key: 'carpool.maxPeople', value: '4', valueType: 'NUMBER', description: 'Max people per carpool' },
     { key: 'booking.reminderBefore', value: '120', valueType: 'NUMBER', description: 'Reminder lead time (minutes)' },
     { key: 'password.minLength', value: '8', valueType: 'NUMBER', description: 'Minimum password length' },
+    // Phase 7 — rolling window + weekly weekend run.
+    { key: 'booking.windowWeeks', value: '2', valueType: 'NUMBER', description: 'How many weeks ahead booking is open (2 or 4)' },
+    { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Weekly allocation run day' },
+    { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Weekly allocation run time (IST)' },
+    { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'Days a date is decided ahead of itself' },
   ];
 }
 
@@ -303,6 +319,120 @@ function seedParkingAreas(): ParkingArea[] {
   ];
 }
 
+// ---------------------------------------------------------------------------
+// Phase 7 — booking window / slot grid + gate (security persona).
+//
+// Dates are derived from "today" rather than hardcoded, so the mock window is always open and the
+// demo never goes stale. The maths mirrors backend `bookings.window.ts`: the batch runs on Sunday at
+// 20:00, a date is decided `LEAD_DAYS` ahead of itself, and requests are open from the next run's
+// date + lead until today + WINDOW_WEEKS*7.
+// ---------------------------------------------------------------------------
+
+const MOCK_QUOTA = 12; // matches the seeded Assent quota, so the grid shows the 12 boxes of the spec
+const LEAD_DAYS = 3;
+const WINDOW_WEEKS = 2;
+
+const isoOf = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const addDaysTo = (d: Date, n: number): Date => {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + n);
+  return copy;
+};
+const isWeekday = (iso: string): boolean => {
+  const day = new Date(`${iso}T00:00:00`).getDay();
+  return day >= 1 && day <= 5;
+};
+
+/** Next Sunday 20:00 local, strictly after now (a run happening now belongs to this week). */
+function mockNextRun(now = new Date()): Date {
+  const run = new Date(now);
+  run.setHours(20, 0, 0, 0);
+  const delta = (0 - run.getDay() + 7) % 7; // 0 = Sunday
+  run.setDate(run.getDate() + delta);
+  if (run.getTime() <= now.getTime()) run.setDate(run.getDate() + 7);
+  return run;
+}
+
+function mockWindow(now = new Date()): BookingWindow {
+  const nextRun = mockNextRun(now);
+  const earliest = addDaysTo(nextRun, LEAD_DAYS);
+  const latest = addDaysTo(now, WINDOW_WEEKS * 7);
+  const dates: string[] = [];
+  for (let d = new Date(earliest); d.getTime() <= latest.getTime(); d = addDaysTo(d, 1)) {
+    if (isWeekday(isoOf(d))) dates.push(isoOf(d));
+  }
+  return {
+    nextRunAt: nextRun.toISOString(),
+    nextRunCountdownSeconds: Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000)),
+    runDay: 'SUNDAY',
+    runTime: '20:00',
+    windowWeeks: WINDOW_WEEKS,
+    approvalLeadDays: LEAD_DAYS,
+    earliestDate: isoOf(earliest),
+    latestDate: isoOf(latest),
+    requestableDates: dates,
+  };
+}
+
+/** Mirrors backend `buildBoxes`: mine first (so it survives the clamp), then taken, blocked, free. */
+function mockBoxes(quota: number, blocked: number, taken: number, mine: boolean): SlotBox[] {
+  const states: SlotBox['state'][] = [];
+  if (mine) states.push('MINE');
+  for (let i = 0; i < taken - (mine ? 1 : 0); i++) states.push('TAKEN');
+  for (let i = 0; i < blocked; i++) states.push('BLOCKED');
+  while (states.length < quota) states.push('AVAILABLE');
+  return states.slice(0, quota).map((state, i) => ({ index: i + 1, state }));
+}
+
+/** Per-date occupancy the mock mutates when a booking is submitted. */
+interface MockDayState { taken: number; blocked: number; mine: boolean; decided: boolean }
+
+function seedAvailability(): Record<string, MockDayState> {
+  const win = mockWindow();
+  const state: Record<string, MockDayState> = {};
+  win.requestableDates.forEach((date, i) => {
+    // A spread of occupancy so the grid is visibly interesting: one nearly-full day, one blocked day.
+    state[date] = {
+      taken: i === 0 ? MOCK_QUOTA - 1 : i === 1 ? 4 : i % 3,
+      blocked: i === 2 ? 2 : 0,
+      mine: false,
+      decided: false,
+    };
+  });
+  return state;
+}
+
+function seedVehicles(): VehicleSummary[] {
+  return [
+    { id: 'veh-1', vehicleNumber: 'MH12AB1234', displayNumber: 'MH 12 AB 1234', ownerName: 'Aditi Rao', ownerEmail: 'aditi@assent.example', contactNumber: '9822001101', vehicleType: 'CAR', makeModel: 'Hyundai i20', colour: 'White', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-2', vehicleNumber: 'MH12CD5678', displayNumber: 'MH 12 CD 5678', ownerName: 'Rahul Mehta', ownerEmail: 'rahul@assent.example', contactNumber: '9822001102', vehicleType: 'CAR', makeModel: 'Tata Nexon', colour: 'Blue', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-3', vehicleNumber: 'MH14EF9012', displayNumber: 'MH 14 EF 9012', ownerName: 'Sara Khan', ownerEmail: 'sara@assent.example', contactNumber: '9822001103', vehicleType: 'EV_CAR', makeModel: 'Tata Nexon EV', colour: 'Grey', companyId: 'mock-co', companyName: 'Mock Co' },
+  ];
+}
+
+/** Same normalization as backend `lib/plate.ts` — spacing/case must not change the answer. */
+const normalizeMockPlate = (raw: string): string => raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+/** The half-open band the next run owns: `[nextRun + lead, nextRun + 7 + lead)`. */
+function mockBand(win: BookingWindow): { from: string; toExclusive: string; dates: string[] } {
+  const nextRun = new Date(win.nextRunAt);
+  const from = isoOf(addDaysTo(nextRun, LEAD_DAYS));
+  const toExclusive = isoOf(addDaysTo(nextRun, 7 + LEAD_DAYS));
+  const dates: string[] = [];
+  for (let d = new Date(`${from}T00:00:00`); isoOf(d) < toExclusive; d = addDaysTo(d, 1)) {
+    if (isWeekday(isoOf(d))) dates.push(isoOf(d));
+  }
+  return { from, toExclusive, dates };
+}
+
+/** Cars with a booking today — drives `hasBooking`, i.e. whether the gate warns (D16). */
+const bookedTodayPlates = new Set(['MH12AB1234']);
+
+function seedGateEvents(): GateEvent[] {
+  return [];
+}
+
 // --- Mutable demo state (reset via resetMockData) ---
 let configState = seedConfig();
 let bookingState = seedBookings();
@@ -312,6 +442,9 @@ let slotState = seedSlots();
 let quotaState = seedQuota();
 let blockState = seedBlocks();
 let parkingAreaState = seedParkingAreas();
+let availabilityState = seedAvailability();
+let vehicleState = seedVehicles();
+let gateEventState = seedGateEvents();
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
 
@@ -325,6 +458,9 @@ export function resetMockData(): void {
   quotaState = seedQuota();
   blockState = seedBlocks();
   parkingAreaState = seedParkingAreas();
+  availabilityState = seedAvailability();
+  vehicleState = seedVehicles();
+  gateEventState = seedGateEvents();
   seq = 0;
 }
 
@@ -423,15 +559,35 @@ const hero = [
         { status: 400 },
       );
     }
+    // Phase 7 D12: a request reserves a slot immediately. Mirror the server so the mock demo shows
+    // the grid filling up, and can actually reach the "date is full" refusal.
+    const date = b.bookingDate ?? isoOf(new Date());
+    const day = availabilityState[date];
+    if (day) {
+      if (day.decided) {
+        return fail(422, 'WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
+      }
+      if (day.mine) return fail(409, 'CONFLICT', 'You already have a PRIMARY booking for this date');
+      const capacity = MOCK_QUOTA - day.blocked;
+      if (day.taken >= capacity) {
+        return fail(
+          409,
+          'CAPACITY_FULL',
+          `All ${capacity} slot(s) for ${date} are already taken — please choose another date`,
+        );
+      }
+      day.taken += 1;
+      day.mine = true;
+    }
     return ok<BookingCreatedData>(
       {
         id: 'mock-booking-1',
         status: 'SUBMITTED',
         bookingType: 'PRIMARY',
-        bookingDate: b.bookingDate ?? '2026-08-03',
+        bookingDate: date,
         travelDistanceKm: 6.2,
         carpoolPeople: b.carpoolPeople ?? 1,
-        submittedAt: '2026-07-29T09:00:00.000Z',
+        submittedAt: new Date().toISOString(),
       },
       201,
     );
@@ -503,6 +659,8 @@ const hero = [
   }),
 
   // --- Allocation (super admin) ---
+  // Existing-run lookup: null = not yet run for this date+type (tests needing a run override this).
+  http.get(`${baseURL}/allocation/runs`, () => ok<AllocationRunSummary | null>(null)),
   http.post(`${baseURL}/allocation/primary/run`, () =>
     ok<AllocationRunSummary>({
       id: 'run-demo', runType: 'PRIMARY', bookingDate: '2026-08-03', status: 'COMPLETED',
@@ -739,6 +897,160 @@ const hero = [
     };
     blockState[companyId] = [...(blockState[companyId] ?? []), block];
     return ok<SlotBlock>(block, 201);
+  }),
+  // --- Availability / slot grid (Phase 7) ---
+  http.get(`${baseURL}/availability`, ({ request }) => {
+    const url = new URL(request.url);
+    const win = mockWindow();
+    const from = url.searchParams.get('from') ?? win.earliestDate;
+    const to = url.searchParams.get('to') ?? win.latestDate;
+    const days: DayAvailability[] = [];
+    for (let d = new Date(`${from}T00:00:00`); isoOf(d) <= to; d = addDaysTo(d, 1)) {
+      const date = isoOf(d);
+      if (!isWeekday(date)) {
+        days.push({
+          date, quota: MOCK_QUOTA, blocked: 0, taken: 0, available: 0, mine: false,
+          requestable: false, reason: 'NOT_WEEKDAY',
+          message: 'Booking date must be a bookable weekday (Mon–Fri)',
+          boxes: [],
+        });
+        continue;
+      }
+      const st = availabilityState[date] ?? { taken: 0, blocked: 0, mine: false, decided: false };
+      const available = Math.max(0, MOCK_QUOTA - st.blocked - st.taken);
+      const inWindow = date >= win.earliestDate && date <= win.latestDate;
+      const reason: DayAvailability['reason'] =
+        !inWindow ? (date < win.earliestDate ? 'TOO_SOON' : 'BEYOND_WINDOW')
+        : st.decided ? 'TOO_SOON'
+        : st.mine ? 'ALREADY_BOOKED'
+        : available === 0 ? 'FULL'
+        : null;
+      const message =
+        reason === 'TOO_SOON' ? `${date} has already been allocated.`
+        : reason === 'BEYOND_WINDOW' ? `${date} is beyond the ${WINDOW_WEEKS}-week booking window.`
+        : reason === 'ALREADY_BOOKED' ? 'You already have a request for this date.'
+        : reason === 'FULL' ? 'All slots for this date are taken — pick another date.'
+        : null;
+      days.push({
+        date, quota: MOCK_QUOTA, blocked: st.blocked, taken: st.taken, available,
+        mine: st.mine, requestable: reason === null, reason, message,
+        boxes: mockBoxes(MOCK_QUOTA, st.blocked, st.taken, st.mine),
+      });
+    }
+    return ok<AvailabilityResponse>({ window: win, days });
+  }),
+
+  // --- Weekly allocation batch (Phase 7) ---
+  http.get(`${baseURL}/allocation/weekly`, () => {
+    const win = mockWindow();
+    const band = mockBand(win);
+    return ok<WeeklyRunPreview>({
+      window: win,
+      band,
+      dates: band.dates.map((date) => ({
+        bookingDate: date,
+        runStatus: availabilityState[date]?.decided ? 'COMPLETED' : null,
+        pendingRequests: availabilityState[date]?.taken ?? 0,
+      })),
+    });
+  }),
+  http.post(`${baseURL}/allocation/weekly/run`, () => {
+    const win = mockWindow();
+    const band = mockBand(win);
+    const results = band.dates.map((date) => {
+      const st = availabilityState[date];
+      const alreadyDecided = st?.decided ?? false;
+      const capacity = st ? MOCK_QUOTA - st.blocked : MOCK_QUOTA;
+      const allocated = st ? Math.min(st.taken, capacity) : 0;
+      if (st) st.decided = true; // a decided date closes for requests, as on the server
+      return {
+        bookingDate: date,
+        runId: `mock-run-${date}`,
+        status: 'COMPLETED' as const,
+        alreadyDecided,
+        allocated,
+        waitlisted: st ? Math.max(0, st.taken - capacity) : 0,
+        error: null,
+      };
+    });
+    return ok<WeeklyRunResult>({
+      runAt: new Date().toISOString(),
+      band,
+      dates: results,
+      totalAllocated: results.reduce((sum, r) => sum + r.allocated, 0),
+      totalWaitlisted: results.reduce((sum, r) => sum + r.waitlisted, 0),
+    });
+  }),
+
+  // --- Gate: vehicle registry + check-in/out (Phase 7) ---
+  http.get(`${baseURL}/vehicles`, ({ request }) => {
+    const term = normalizeMockPlate(new URL(request.url).searchParams.get('search') ?? '');
+    if (!term) return ok<VehicleSummary[]>([]);
+    return ok<VehicleSummary[]>(
+      vehicleState.filter((v) => v.vehicleNumber.includes(term) || v.ownerName.toUpperCase().includes(term)),
+    );
+  }),
+  http.get(`${baseURL}/vehicles/lookup`, ({ request }) => {
+    const plate = normalizeMockPlate(new URL(request.url).searchParams.get('number') ?? '');
+    if (plate.length < 4) return fail(400, 'VALIDATION_ERROR', 'Enter a car number');
+    const vehicle = vehicleState.find((v) => v.vehicleNumber === plate) ?? null;
+    const open = gateEventState.find((e) => e.vehicleNumber === plate && e.status === 'CHECKED_IN') ?? null;
+    const hasBooking = bookedTodayPlates.has(plate);
+    return ok<GateLookup>({
+      vehicleNumber: plate,
+      known: vehicle !== null,
+      vehicle,
+      bookingDate: isoOf(new Date()),
+      hasBooking,
+      booking: hasBooking
+        ? { id: 'mock-booking-1', status: 'ALLOCATED', bookingType: 'PRIMARY', allocatedSlotNumber: 'B1-03' }
+        : null,
+      openVisit: open ? { id: open.id, checkInAt: open.checkInAt } : null,
+    });
+  }),
+  http.post(`${baseURL}/gate/check-in`, async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { vehicleNumber?: string; notes?: string | null };
+    const plate = normalizeMockPlate(body.vehicleNumber ?? '');
+    if (plate.length < 4) return fail(400, 'VALIDATION_ERROR', 'Enter a car number');
+    if (gateEventState.some((e) => e.vehicleNumber === plate && e.status === 'CHECKED_IN')) {
+      return fail(409, 'CONFLICT', `${plate} is already checked in — check it out first`);
+    }
+    // D16: an unknown plate is recorded, not refused.
+    const vehicle = vehicleState.find((v) => v.vehicleNumber === plate) ?? null;
+    const event: GateEvent = {
+      id: nextId('gate'),
+      vehicleNumber: plate,
+      displayNumber: vehicle?.displayNumber ?? plate,
+      ownerName: vehicle?.ownerName ?? null,
+      companyId: vehicle?.companyId ?? null,
+      companyName: vehicle?.companyName ?? null,
+      bookingDate: isoOf(new Date()),
+      bookingRequestId: bookedTodayPlates.has(plate) ? 'mock-booking-1' : null,
+      hadBooking: bookedTodayPlates.has(plate),
+      status: 'CHECKED_IN',
+      checkInAt: new Date().toISOString(),
+      checkOutAt: null,
+      notes: body.notes ?? null,
+    };
+    gateEventState = [event, ...gateEventState];
+    return ok<GateEvent>(event, 201);
+  }),
+  http.post(`${baseURL}/gate/check-out`, async ({ request }) => {
+    const body = (await request.json().catch(() => ({}))) as { vehicleNumber?: string };
+    const plate = normalizeMockPlate(body.vehicleNumber ?? '');
+    const open = gateEventState.find((e) => e.vehicleNumber === plate && e.status === 'CHECKED_IN');
+    if (!open) return fail(404, 'NOT_FOUND', `${plate} is not currently checked in`);
+    open.status = 'CHECKED_OUT';
+    open.checkOutAt = new Date().toISOString();
+    return ok<GateEvent>(open);
+  }),
+  http.get(`${baseURL}/gate/events`, ({ request }) => {
+    const { page, pageSize } = pageParams(request);
+    return okPage<GateEvent>(gateEventState, page, pageSize);
+  }),
+  http.get(`${baseURL}/gate/unbooked`, ({ request }) => {
+    const { page, pageSize } = pageParams(request);
+    return okPage<GateEvent>(gateEventState.filter((e) => !e.hadBooking), page, pageSize);
   }),
   http.delete(`${baseURL}/blocks/:id`, ({ params }) => {
     const id = String(params.id);

@@ -1,4 +1,4 @@
-export type Role = 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'USER';
+export type Role = 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'SECURITY' | 'USER';
 
 /** Landing route for a role — used after login and when bouncing off a wrong-role page. */
 export function roleHome(role: Role): string {
@@ -7,6 +7,9 @@ export function roleHome(role: Role): string {
       return '/admin';
     case 'COMPANY_ADMIN':
       return '/company';
+    // A gate operator has exactly one screen (Phase 7 D15) — check in / check out.
+    case 'SECURITY':
+      return '/security';
     case 'USER':
       return '/app';
     default:

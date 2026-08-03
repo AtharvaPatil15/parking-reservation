@@ -98,7 +98,9 @@ describe('GET /companies/quota-summary — assigned per company (SA)', () => {
     const entry = (res.body.data as Array<{ companyId: string; assignedSlots: number }>).find(
       (e) => e.companyId === assent.id,
     );
-    expect(entry?.assignedSlots).toBe(8); // seeded Assent quota effective for DATE
+    // Seeded Assent quota effective for DATE (prisma/seed.ts §7 — 12 since Phase 7, so the booking
+    // grid renders the 12 boxes the requirement calls for).
+    expect(entry?.assignedSlots).toBe(12);
   });
 
   it('is Super-Admin only — a Company Admin gets 403', async () => {

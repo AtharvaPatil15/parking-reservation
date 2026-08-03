@@ -2,14 +2,19 @@ import { Router } from 'express';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
-import { primaryRunSchema, listAllocationsQuery, runStatusQuery } from './allocation.schema';
+import { primaryRunSchema, listAllocationsQuery, runLookupQuery } from './allocation.schema';
 import * as c from './allocation.controller';
 
 // /allocation — runs are SUPER_ADMIN only (P4-13, P4-17).
 const allocationRouter = Router();
 allocationRouter.post('/primary/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runPrimary);
 allocationRouter.post('/common-pool/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runCommonPool);
-allocationRouter.get('/runs/by-date', authenticate, requireRole('SUPER_ADMIN'), validate(runStatusQuery, 'query'), c.getRunByDate);
+// Phase 7 weekly weekend batch: the band is derived from config, so the request carries no date.
+allocationRouter.post('/weekly/run', authenticate, requireRole('SUPER_ADMIN'), c.runWeekly);
+allocationRouter.get('/weekly', authenticate, requireRole('SUPER_ADMIN'), c.weeklyPreview);
+// Lookup by date+type (registered before /runs/:id so the literal path wins). Null when not yet run.
+// Merge note: PR #33's `/runs/by-date` did the same job and was dropped in favour of this one.
+allocationRouter.get('/runs', authenticate, requireRole('SUPER_ADMIN'), validate(runLookupQuery, 'query'), c.getRunForDate);
 allocationRouter.get('/runs/:id', authenticate, requireRole('SUPER_ADMIN'), c.getRun);
 allocationRouter.get('/runs/:id/breakdown', authenticate, requireRole('SUPER_ADMIN'), c.getBreakdown);
 

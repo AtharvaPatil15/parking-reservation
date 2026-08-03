@@ -3,8 +3,8 @@ export const queryKeys = {
   config: ['config'] as const,
   booking: (id: string) => ['booking', id] as const,
   allocationBreakdown: (runId: string) => ['allocationRun', runId, 'breakdown'] as const,
-  allocationRunStatus: (bookingDate: string, runType: string) =>
-    ['allocationRun', 'status', bookingDate, runType] as const,
+  // Shares the 'allocationRun' prefix with allocationBreakdown so one invalidate covers both.
+  allocationRunForDate: (date: string, type: string) => ['allocationRun', 'byDate', type, date] as const,
   allocations: (date: string, companyId: string, type: string, page: number) =>
     ['allocations', date, companyId, type, page] as const,
   me: ['me'] as const,
@@ -26,6 +26,17 @@ export const queryKeys = {
   slots: (page: number, pageSize: number, status: string) => ['slots', page, pageSize, status] as const,
   parkingAreas: ['parking-areas'] as const,
   companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,
+
+  // Booking window + slot grid (Phase 7)
+  availability: (from: string, to: string) => ['availability', from, to] as const,
+  weeklyRunPreview: ['allocation', 'weekly'] as const,
+
+  // Gate / security persona (Phase 7)
+  vehicleSearch: (search: string) => ['vehicles', 'search', search] as const,
+  vehicleLookup: (number: string) => ['vehicles', 'lookup', number] as const,
+  gateEvents: (date: string, status: string, page: number) => ['gate', 'events', date, status, page] as const,
+  unbookedEntries: (date: string, companyId: string, page: number) =>
+    ['gate', 'unbooked', date, companyId, page] as const,
 
   // Company-scoped (P5-11 drill-in + P5-12 company admin)
   companyAdminDashboard: ['dashboard', 'company-admin'] as const,

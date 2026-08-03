@@ -10,16 +10,19 @@ import { registerSchema, type RegisterFormValues } from './registerSchema';
 import type { components } from '../../api/types';
 
 type RegisterRequest = components['schemas']['RegisterRequest'];
+type RegistrationType = NonNullable<RegisterRequest['registrationType']>;
 
 const REGISTRATION_TYPE_OPTIONS: SelectOption[] = [
   { value: 'EMPLOYEE', label: 'Employee — book parking' },
   { value: 'COMPANY_ADMIN', label: 'Company admin — manage my company' },
+  // Phase 7 (D15): a building gate operator. Approved by the super admin, never a company admin.
+  { value: 'SECURITY', label: 'Security — operate the gate' },
 ];
 
 export function RegisterPage() {
   const companies = useActiveCompanies();
   const registerUser = useRegister();
-  const [submittedAs, setSubmittedAs] = useState<'EMPLOYEE' | 'COMPANY_ADMIN' | null>(null);
+  const [submittedAs, setSubmittedAs] = useState<RegistrationType | null>(null);
 
   const {
     register,
@@ -84,9 +87,9 @@ export function RegisterPage() {
             <SuccessState
               title="Registration submitted"
               description={
-                submittedAs === 'COMPANY_ADMIN'
-                  ? "Your company-admin request is pending approval by the super admin. You'll be able to sign in once it's approved."
-                  : "Your account is pending approval by your company admin. You'll be able to sign in once it's approved."
+                submittedAs === 'EMPLOYEE'
+                  ? "Your account is pending approval by your company admin. You'll be able to sign in once it's approved."
+                  : `Your ${submittedAs === 'SECURITY' ? 'security' : 'company-admin'} request is pending approval by the super admin. You'll be able to sign in once it's approved.`
               }
               action={
                 <Link to="/login" className="text-primary hover:underline">

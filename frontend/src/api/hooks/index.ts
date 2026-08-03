@@ -5,10 +5,23 @@ export {
   useRunPrimaryAllocation,
   useRunCommonPoolAllocation,
   useAllocationBreakdown,
-  useAllocationRunStatus,
+  useAllocationRunForDate,
   useAllocations,
+  useWeeklyRunPreview,
+  useRunWeeklyAllocation,
 } from './allocation';
 export type { AllocationsFilter } from './allocation';
+export { useAvailability } from './availability';
+export type { AvailabilityRange } from './availability';
+export {
+  useVehicleSearch,
+  useVehicleLookup,
+  useGateCheckIn,
+  useGateCheckOut,
+  useGateEvents,
+  useUnbookedEntries,
+} from './gate';
+export type { GateEventsFilter, UnbookedFilter } from './gate';
 export { useConfig, useUpdateConfig } from './config';
 export { useMe, useMyBookings, useUserDashboard } from './user';
 export {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { API, bearer, login, resetTransactional, futureBookableDate } from './integration/helpers';
+import { API, bearer, blockQuotaDownTo, login, resetTransactional, futureBookableDate } from './integration/helpers';
 
 /**
  * P4-19 — backend integration tests (Supertest + throwaway Postgres, provisioned by
@@ -72,18 +72,14 @@ describe('hero path: login → book → run → status → breakdown', () => {
     expect(detail.body.data.scoreBreakdown.finalScore).toBe(18.6);
   });
 
-  it('waitlists beyond available quota (block reduces quota to 1)', async () => {
+  it('waitlists beyond available quota (blocks reduce it to 1)', async () => {
     const saToken = await login('superadmin@redbricks.example');
     const assentId = await companyIdOf('aditi@assent.example');
 
-    // Two bookings; block 7 of 8 → available quota 1 → top-scorer allocated, other waitlisted.
+    // Two bookings, quota blocked down to 1 → top-scorer allocated, the other waitlisted.
     await book('aditi@assent.example'); // 12.4 → final 18.6
     await book('sara@assent.example'); //  38.1 → final 57.15 (wins)
-    await request(app)
-      .post(`${API}/companies/${assentId}/blocks`)
-      .set(bearer(saToken))
-      .send({ blockedCount: 7, startDate: DATE, endDate: DATE, reason: 'OTHER' })
-      .expect(201);
+    await blockQuotaDownTo(saToken, assentId, DATE, 1);
 
     const run = await request(app).post(`${API}/allocation/primary/run`).set(bearer(saToken)).send({ bookingDate: DATE });
     expect(run.body.data.allocatedCount).toBe(1);
@@ -122,11 +118,7 @@ describe('concurrency: the unique (slotId, bookingDate) constraint prevents doub
     await book('rahul@assent.example'); // 24.8 → wins the single slot
     const saToken = await login('superadmin@redbricks.example');
     const assentId = await companyIdOf('aditi@assent.example');
-    await request(app)
-      .post(`${API}/companies/${assentId}/blocks`)
-      .set(bearer(saToken))
-      .send({ blockedCount: 7, startDate: DATE, endDate: DATE, reason: 'OTHER' })
-      .expect(201);
+    await blockQuotaDownTo(saToken, assentId, DATE, 1);
     await request(app).post(`${API}/allocation/primary/run`).set(bearer(saToken)).send({ bookingDate: DATE }).expect(200);
 
     const allocated = await prisma.parkingAllocation.findFirstOrThrow({ where: { bookingDate: dateUtc } });

@@ -14,15 +14,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "postinstall": "prisma generate",
+    "prebuild": "prisma generate",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "import:vehicles": "tsx scripts/import-vehicles.ts",
     "db:reset": "prisma migrate reset"
   },
   "prisma": {
-    "schema": "../prisma/schema.prisma",
-    "seed": "cross-env NODE_PATH=node_modules tsx ../prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

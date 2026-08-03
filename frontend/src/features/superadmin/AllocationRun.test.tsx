@@ -42,6 +42,33 @@ describe('AllocationRun', () => {
     expect(screen.getAllByText('ALLOCATED').length).toBeGreaterThan(0);
   });
 
+  it('locks re-running and shows stored results when primary allocation is already done', async () => {
+    server.use(
+      http.get('*/api/v1/allocation/runs', ({ request }) => {
+        const type = new URL(request.url).searchParams.get('type');
+        return HttpResponse.json({
+          success: true,
+          data:
+            type === 'PRIMARY'
+              ? {
+                  id: 'run-demo', runType: 'PRIMARY', bookingDate: '2026-08-03', status: 'COMPLETED',
+                  idempotencyKey: 'demo', attemptCount: 1, totalRequests: 3, allocatedCount: 2, waitlistedCount: 1,
+                }
+              : null, // common pool not run yet
+        });
+      }),
+    );
+    renderRun();
+    // Stored breakdown loads without clicking anything.
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    expect(screen.getByText(/already been done for 2026-/i)).toBeInTheDocument();
+    // The locked button relabels itself, so the disabled state is legible without reading the note.
+    expect(screen.getByRole('button', { name: /primary allocation already done/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^run primary allocation$/i })).not.toBeInTheDocument();
+    // Common pool wasn't run, so its button stays enabled and keeps its action label.
+    expect(screen.getByRole('button', { name: /start common pool/i })).not.toBeDisabled();
+  });
+
   it('shows an error when the run fails', async () => {
     server.use(
       http.post('*/api/v1/allocation/primary/run', () =>
