@@ -19,6 +19,12 @@ const TIMING_LABELS: Record<string, string> = {
   'booking.primaryResultsBy': 'Primary results by',
   'booking.commonPoolClose': 'Common-pool close',
   'booking.commonPoolResultsBy': 'Common-pool results by',
+  // Phase 7 — spelled out because the humanized fallback ("Window weeks") loses the meaning.
+  'booking.windowWeeks': 'Booking window (weeks ahead)',
+  'booking.allocationRunFrequency': 'Automatic allocation interval',
+  'booking.allocationRunDay': 'Weekly allocation run day',
+  'booking.allocationRunTime': 'Weekly allocation run time',
+  'booking.approvalLeadDays': 'Decision lead time (days)',
 };
 
 function toMinutes(hhmm: string): number | null {
@@ -58,11 +64,53 @@ export function validateConfigValue(key: string, valueType: string, v: string): 
       if (!Number.isInteger(n) || n < 1) return 'Must be an integer ≥ 1';
       break;
     }
+    // ---- Phase 7: booking window + weekly allocation run ----
+    case 'booking.windowWeeks':
+      if (v !== '2' && v !== '4') return 'Must be 2 or 4 weeks';
+      break;
+    case 'booking.allocationRunDay':
+      if (!['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'].includes(v)) {
+        return 'Must be a weekday';
+      }
+      break;
+    case 'booking.allocationRunFrequency':
+      if (v !== 'WEEKLY' && v !== 'BIWEEKLY' && v !== 'MONTHLY') return 'Must be weekly, biweekly, or monthly';
+      break;
+    case 'booking.approvalLeadDays': {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 6) return 'Must be an integer between 1 and 6';
+      break;
+    }
     default:
       break;
   }
   return null;
 }
+
+/**
+ * Keys whose value is a fixed set, so the config screen can offer a picker instead of a free-text
+ * box — the two Phase 7 keys where a typo would be silently accepted as "fall back to the default".
+ */
+export const ENUM_CONFIG_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+  'booking.windowWeeks': [
+    { value: '2', label: '2 weeks' },
+    { value: '4', label: '4 weeks' },
+  ],
+  'booking.allocationRunDay': [
+    { value: 'MONDAY', label: 'Monday' },
+    { value: 'TUESDAY', label: 'Tuesday' },
+    { value: 'WEDNESDAY', label: 'Wednesday' },
+    { value: 'THURSDAY', label: 'Thursday' },
+    { value: 'FRIDAY', label: 'Friday' },
+    { value: 'SATURDAY', label: 'Saturday' },
+    { value: 'SUNDAY', label: 'Sunday' },
+  ],
+  'booking.allocationRunFrequency': [
+    { value: 'WEEKLY', label: 'Weekly' },
+    { value: 'BIWEEKLY', label: 'Biweekly' },
+    { value: 'MONTHLY', label: 'Monthly' },
+  ],
+};
 
 /**
  * Cross-field timing-order check over the merged config (current values overlaid
@@ -81,7 +129,14 @@ export function validateTimingOrder(values: Record<string, string>): Record<stri
   return Object.fromEntries(TIMING_KEYS.map((k) => [k, message]));
 }
 
-/** Human label for a config key (falls back to the raw key). */
+/**
+ * Human label for a config key — never the raw dotted key. Uses the curated timing labels,
+ * else humanizes the last segment (e.g. `allocation.distanceWeight` → "Distance weight",
+ * `carpool.maxPeople` → "Max people").
+ */
 export function labelForKey(key: string): string {
-  return TIMING_LABELS[key] ?? key;
+  if (TIMING_LABELS[key]) return TIMING_LABELS[key];
+  const last = key.split('.').pop() ?? key;
+  const words = last.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }

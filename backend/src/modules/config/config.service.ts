@@ -17,6 +17,33 @@ const TIME_KEYS = [
   'booking.commonPoolResultsBy',
 ] as const;
 
+/** Weekly allocation-run days (Phase 7 D10) — the run is a weekend batch. */
+const RUN_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+const RUN_FREQUENCIES = ['WEEKLY', 'BIWEEKLY', 'MONTHLY'] as const;
+/** Allowed booking horizons in weeks (Phase 7 D9) — the requirement is "2 weeks or 4 weeks". */
+const WINDOW_WEEKS = [2, 4] as const;
+
+const DEFAULT_CONFIG_ROWS = [
+  {
+    key: 'booking.allocationRunFrequency',
+    value: 'WEEKLY',
+    valueType: 'STRING' as const,
+    description: 'Automatic allocation run interval',
+  },
+  {
+    key: 'booking.allocationRunDay',
+    value: 'SUNDAY',
+    valueType: 'STRING' as const,
+    description: 'Automatic allocation run day',
+  },
+  {
+    key: 'booking.allocationRunTime',
+    value: '20:00',
+    valueType: 'TIME' as const,
+    description: 'Automatic allocation run time (IST)',
+  },
+];
+
 function toMinutes(hhmm: string): number | null {
   const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -52,13 +79,51 @@ function validateValue(key: string, valueType: string, v: string): string | null
       if (!Number.isInteger(n) || n < 1) return 'Must be an integer >= 1';
       break;
     }
+    // ---- Phase 7: booking window + weekly allocation run ----
+    case 'booking.windowWeeks': {
+      const n = Number(v);
+      if (!WINDOW_WEEKS.includes(n as (typeof WINDOW_WEEKS)[number])) {
+        return `Must be one of ${WINDOW_WEEKS.join(' or ')} weeks`;
+      }
+      break;
+    }
+    case 'booking.allocationRunDay':
+      if (!RUN_DAYS.includes(v as (typeof RUN_DAYS)[number])) {
+        return `Must be one of ${RUN_DAYS.join(' | ')}`;
+      }
+      break;
+    case 'booking.allocationRunFrequency':
+      if (!RUN_FREQUENCIES.includes(v as (typeof RUN_FREQUENCIES)[number])) {
+        return `Must be one of ${RUN_FREQUENCIES.join(' | ')}`;
+      }
+      break;
+    case 'booking.approvalLeadDays': {
+      const n = Number(v);
+      // The lead time is what guarantees a user learns the outcome early enough to arrange
+      // another way in (D11). Capped below a week so it can never swallow a whole run band.
+      if (!Number.isInteger(n) || n < 1 || n > 6) return 'Must be an integer between 1 and 6';
+      break;
+    }
     default:
       break;
   }
   return null;
 }
 
-export function getAll() {
+async function ensureDefaultConfigRows() {
+  await prisma.$transaction(
+    DEFAULT_CONFIG_ROWS.map((row) =>
+      prisma.systemConfiguration.upsert({
+        where: { key: row.key },
+        update: {},
+        create: row,
+      }),
+    ),
+  );
+}
+
+export async function getAll() {
+  await ensureDefaultConfigRows();
   return prisma.systemConfiguration.findMany({ orderBy: { key: 'asc' } });
 }
 
@@ -66,6 +131,7 @@ export async function updateConfig(input: Record<string, string>, actorUserId?: 
   const keys = Object.keys(input);
   if (keys.length === 0) throw new ValidationError('At least one configuration key is required');
 
+  await ensureDefaultConfigRows();
   const existing = await prisma.systemConfiguration.findMany();
   const byKey = new Map(existing.map((r) => [r.key, r]));
 

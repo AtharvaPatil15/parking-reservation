@@ -1,6 +1,8 @@
 import { prisma } from '../../lib/prisma';
 import { getEffectiveQuota, getBlockedCount, countInServiceSlots } from '../slots/slots.service';
 import { getString } from '../../config/systemConfig';
+import { bookingWindowSummary } from '../bookings/bookings.window';
+import { loadWindowConfig } from '../bookings/bookings.windowConfig';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -63,7 +65,7 @@ function cutoffCountdownSeconds(cutoff: string): number | null {
 }
 
 export async function userDashboard(userId: string, date: Date) {
-  const [previousBookingsCount, upcoming, cutoff] = await Promise.all([
+  const [previousBookingsCount, upcoming, cutoff, windowConfig] = await Promise.all([
     prisma.bookingRequest.count({ where: { userId, bookingDate: { lt: date } } }),
     prisma.bookingRequest.findFirst({
       where: {
@@ -75,7 +77,9 @@ export async function userDashboard(userId: string, date: Date) {
       include: { allocation: { include: { slot: true } } },
     }),
     getString('booking.primaryCutoff', '18:00'),
+    loadWindowConfig(),
   ]);
+  const window = bookingWindowSummary(new Date(), windowConfig);
 
   const upcomingBooking = upcoming
     ? {
@@ -98,6 +102,9 @@ export async function userDashboard(userId: string, date: Date) {
   return {
     ...(upcomingBooking ? { upcomingBooking } : {}),
     cutoffCountdownSeconds: cutoffCountdownSeconds(cutoff ?? '18:00'),
+    nextAllocationRunAt: window.nextRunAt,
+    nextAllocationRunCountdownSeconds: window.nextRunCountdownSeconds,
+    nextAllocationRuns: window.nextRuns,
     previousBookingsCount,
   };
 }

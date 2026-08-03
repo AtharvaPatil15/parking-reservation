@@ -180,6 +180,11 @@ async function main() {
     { key: 'booking.commonPoolClose', value: '22:00', valueType: 'TIME', description: 'Common-pool window closes (IST)' },
     { key: 'booking.commonPoolResultsBy', value: '23:00', valueType: 'TIME', description: 'Common-pool results published (IST)' },
     { key: 'booking.reminderBefore', value: '60', valueType: 'NUMBER', description: 'Minutes before cutoff to send the reminder' },
+    { key: 'booking.windowWeeks', value: '2', valueType: 'NUMBER', description: 'How many weeks ahead the booking window is open (2 or 4)' },
+    { key: 'booking.allocationRunFrequency', value: 'WEEKLY', valueType: 'STRING', description: 'Automatic allocation run interval (weekly, biweekly, or monthly)' },
+    { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Allocation run day' },
+    { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Allocation run time on the run day (IST)' },
+    { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'A date must be decided at least this many days before it (D11)' },
     { key: 'password.minLength', value: '10', valueType: 'NUMBER', description: 'Minimum password length' },
     // Notification config — delivery implemented later; see docs/notification-service-plan.md
     { key: 'notification.email.enabled', value: 'true', valueType: 'BOOLEAN', description: 'Master switch for email channel' },

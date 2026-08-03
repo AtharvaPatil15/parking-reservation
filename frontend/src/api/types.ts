@@ -369,7 +369,7 @@ export interface paths {
         put?: never;
         /**
          * Run common-pool allocation for a date
-         * @description Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate).
+         * @description Role: SUPER_ADMIN. Idempotent per (runType=COMMON_POOL, bookingDate). Enrolls the users waitlisted by primary as common-pool requests, derives pool inventory from every company's unused quota, and assigns it cross-company by FinalScore.
          */
         post: operations["runCommonPoolAllocation"];
         delete?: never;
@@ -392,6 +392,26 @@ export interface paths {
          * @description Role: SUPER_ADMIN. Assigns a specific slot to a booking, bypassing the scored ranking. Audited.
          */
         post: operations["overrideAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the existing run for a booking date + type (null if not yet run)
+         * @description Role: SUPER_ADMIN. Lets the UI show stored results and disable a redundant re-run once allocation is done.
+         */
+        get: operations["getAllocationRunForDate"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -436,6 +456,26 @@ export interface paths {
          * @description Role: SUPER_ADMIN. Explains every outcome with per-factor scores + rank (decisions §3).
          */
         get: operations["getAllocationBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-slot allocation roster (who holds which seat, primary vs common pool)
+         * @description Role COMPANY_ADMIN (scoped to their own company) or SUPER_ADMIN (all companies; optional `companyId` filter). Each row is one allocated seat with the employee, date, and whether it came from primary or the common pool. Filter by `date` and/or `type`.
+         */
+        get: operations["listAllocations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -583,6 +623,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/admin-requests/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List processed company-admin registration requests (approval history)
+         * @description Super Admin only. Returns company-admin users already decided (status ACTIVE or REJECTED) across all companies — the approval history (F11), newest decision first.
+         */
+        get: operations["listAdminRequestHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/approval": {
         parameters: {
             query?: never;
@@ -691,7 +751,11 @@ export interface paths {
         /** List parking areas (for the slot-create area picker) */
         get: operations["listParkingAreas"];
         put?: never;
-        post?: never;
+        /**
+         * Create a parking area (e.g. Basement 2)
+         * @description Super Admin only. The area is attached to the configured office location (resolved server-side).
+         */
+        post: operations["createParkingArea"];
         delete?: never;
         options?: never;
         head?: never;
@@ -838,6 +902,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-date slot grid for the caller's company + booking-window summary
+         * @description Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the currently-open window) with the company's quota, how much is blocked/taken, and a `boxes` array to render as the slot grid. The company always comes from the principal, never the query. `taken` counts LIVE REQUESTS, not just allocations (D12) — a submitted request holds a box immediately, which is what keeps demand within supply so nobody is rejected later.
+         */
+        get: operations["getAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview the band the next weekly batch owns
+         * @description Role SUPER_ADMIN. Shows the dates the upcoming weekend batch will decide, each with its pending-request count and current run status, so the run can be inspected before triggering.
+         */
+        get: operations["getWeeklyRunPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/weekly/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the weekly weekend allocation batch
+         * @description Role SUPER_ADMIN. Decides every bookable weekday in the band the upcoming run owns — `[nextRunDate + approvalLeadDays, followingRunDate + approvalLeadDays)` — by delegating to the per-date primary run, so each date stays idempotent and score-explained. Takes no body: the band comes from config. Dates already COMPLETED are reported as `alreadyDecided` and left alone, and one failing date does not abort the others. Overflow waitlists; it never rejects.
+         */
+        post: operations["runWeeklyAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Typeahead over the vehicle registry
+         * @description Roles SECURITY, SUPER_ADMIN. Matches on the normalized plate or the owner's name. Not tenant-scoped (D15) — one guard serves every company in the building.
+         */
+        get: operations["searchVehicles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve owner + today's booking from a car number
+         * @description Roles SECURITY, SUPER_ADMIN. The car number is normalized (uppercased, separators stripped), so any spacing works. Never 404s for an unrecognised plate — `known: false` is a normal, recordable case (D16). Also reports whether the car is already inside (`openVisit`).
+         */
+        get: operations["lookupVehicle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gate/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a vehicle entering
+         * @description Role SECURITY. Stamps `checkInAt` and returns `hadBooking` so the UI can warn when the driver has no booking for today — the entry is still recorded (D16) and surfaces on the company admin's dashboard. 409 only for a genuine double check-in (the car is already inside).
+         */
+        post: operations["gateCheckIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gate/check-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a vehicle leaving
+         * @description Role SECURITY. Closes the car's open visit (the most recent one, so a car that entered before IST midnight and leaves after it still checks out cleanly). 404 when it is not inside.
+         */
+        post: operations["gateCheckOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gate/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gate log for a date (paged, newest first)
+         * @description Roles SECURITY, SUPER_ADMIN. Defaults to today (IST). Building-wide (D15).
+         */
+        get: operations["listGateEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gate/unbooked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Entries recorded without a booking (company-admin follow-up feed)
+         * @description Roles COMPANY_ADMIN (own company) or SUPER_ADMIN (all; optional `companyId`). These are the D16 entries the guard let through without a booking. An unregistered plate has no company, so it appears only for the SUPER_ADMIN — nobody can attribute an unknown car to a tenant.
+         */
+        get: operations["listUnbookedEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/{type}": {
         parameters: {
             query?: never;
@@ -907,14 +1151,14 @@ export interface components {
          * @description Canonical error codes (docs/phases-3-6-plan.md §3.2).
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
+        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "CAPACITY_FULL" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
         Pagination: {
             page: number;
             pageSize: number;
             total: number;
         };
         /** @enum {string} */
-        RoleName: "SUPER_ADMIN" | "COMPANY_ADMIN" | "USER";
+        RoleName: "SUPER_ADMIN" | "COMPANY_ADMIN" | "SECURITY" | "USER";
         /** @enum {string} */
         UserStatus: "PENDING" | "ACTIVE" | "REJECTED" | "INACTIVE";
         /** @enum {string} */
@@ -950,22 +1194,25 @@ export interface components {
         LoginResponseData: components["schemas"]["AccessTokenData"] & {
             user: components["schemas"]["AuthUser"];
         };
+        /** @description `companyId`, `address` and `pinCode` are required for EMPLOYEE and COMPANY_ADMIN but are NOT collected from a SECURITY applicant (Phase 7 D15) — a gate operator has no tenant to pick and no commute to record, so the server assigns the building company and stores no home address. Sending them as a SECURITY applicant is not an error; they are ignored. */
         RegisterRequest: {
             fullName: string;
-            /** @description Must reference an ACTIVE company. */
-            companyId: string;
+            /** @description Must reference an ACTIVE company. Required unless `registrationType` is SECURITY. */
+            companyId?: string;
             /** Format: email */
             email: string;
             contactNumber: string;
-            address: string;
-            pinCode: string;
+            /** @description Required unless `registrationType` is SECURITY. */
+            address?: string;
+            /** @description Required unless `registrationType` is SECURITY. */
+            pinCode?: string;
             /**
-             * @description Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin. COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the Super Admin; approval also grants the CompanyAdmin assignment (F11).
+             * @description Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin. COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the Super Admin; approval also grants the CompanyAdmin assignment (F11). SECURITY → a building gate operator (Phase 7 D15), approved by the Super Admin only; approval simply activates the account. Registers against the building company.
              * @default EMPLOYEE
              * @enum {string}
              */
-            registrationType: "EMPLOYEE" | "COMPANY_ADMIN";
-            /** @description Manually-entered home→office distance in km (D6). Optional at registration. */
+            registrationType: "EMPLOYEE" | "COMPANY_ADMIN" | "SECURITY";
+            /** @description Manually-entered home→office distance in km (D6). Optional at registration, and ignored for a SECURITY applicant (a guard is never allocated a slot, so is never scored). */
             distanceKm?: number | null;
             /** Format: password */
             password: string;
@@ -1024,6 +1271,11 @@ export interface components {
             /** Format: date */
             bookingDate: string;
             bookingType: components["schemas"]["BookingType"];
+            /**
+             * @description Actual source of the allocated seat; null when no seat is assigned.
+             * @enum {string|null}
+             */
+            allocationSource: "PRIMARY" | "COMMON_POOL" | "RELEASED_SLOT" | "MANUAL_OVERRIDE" | null;
             status: components["schemas"]["BookingStatus"];
             employeeName: string;
             /** Format: email */
@@ -1033,6 +1285,17 @@ export interface components {
             travelDistanceKm?: number | null;
             /** @description Driver + declared members. */
             carpoolPeople: number;
+            /** @description Declared passengers carried by the driver. */
+            carpoolMembers?: {
+                id: string;
+                name: string;
+                /** Format: email */
+                employeeEmail?: string | null;
+                contactNumber?: string | null;
+                pickupLocation?: string | null;
+                sameCompany: boolean;
+                isScored: boolean;
+            }[];
             allocationScore?: number | null;
             /** @description Slot number if ALLOCATED */
             allocatedSlotNumber?: string | null;
@@ -1040,6 +1303,22 @@ export interface components {
             submittedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Same employee/date booking lifecycle rows, grouped before pagination. */
+            history?: components["schemas"]["AdminBooking"][];
+        };
+        /** @description One allocated seat and who holds it for the date (primary or common pool). */
+        AllocationRosterItem: {
+            id: string;
+            slotNumber: string;
+            allocationType: components["schemas"]["BookingType"];
+            /** Format: date */
+            bookingDate: string;
+            employeeName: string;
+            /** Format: email */
+            employeeEmail: string;
+            companyId: string;
+            companyName: string;
+            allocationScore?: number | null;
         };
         Notification: {
             id: string;
@@ -1112,6 +1391,10 @@ export interface components {
             name: string;
             floor?: string | null;
             officeLocationId: string;
+        };
+        CreateParkingAreaRequest: {
+            name: string;
+            floor?: string | null;
         };
         ParkingSlot: {
             id: string;
@@ -1223,7 +1506,186 @@ export interface components {
             /** @description Absent when the user has no upcoming booking. */
             upcomingBooking?: components["schemas"]["Booking"];
             cutoffCountdownSeconds?: number | null;
+            nextAllocationRunAt?: string;
+            nextAllocationRunCountdownSeconds?: number;
+            nextAllocationRuns?: string[];
             previousBookingsCount?: number;
+        };
+        /** @description The rolling request window and the weekly run it closes at (Phase 7 §3). Everything the client needs to say "book between X and Y; results published on Z". */
+        BookingWindow: {
+            /**
+             * Format: date-time
+             * @description When the next weekly batch runs.
+             */
+            nextRunAt: string;
+            /** @description Seconds until `nextRunAt`; 0 once passed. */
+            nextRunCountdownSeconds: number;
+            /** Format: date-time */
+            requestCloseAt: string;
+            requestCloseCountdownSeconds: number;
+            /** Format: date-time */
+            resultsRunAt: string;
+            /** @enum {string} */
+            runDay: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            /** @enum {string} */
+            runFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
+            /** @description HH:MM IST. */
+            runTime: string;
+            /** @enum {integer} */
+            windowWeeks: 2 | 4;
+            /** @description Days a date is decided ahead of itself (D11). */
+            approvalLeadDays: number;
+            /** Format: date */
+            earliestDate: string;
+            /** Format: date */
+            latestDate: string;
+            /** @description Bookable weekdays currently open for requests. */
+            requestableDates: string[];
+            /** @description Next five automatic allocation run instants. */
+            nextRuns: string[];
+        };
+        /**
+         * @description MINE = the caller's own reservation, TAKEN = someone else's, BLOCKED = withheld by an admin, AVAILABLE = free. Render AVAILABLE green and everything else grey.
+         * @enum {string}
+         */
+        SlotBoxState: "AVAILABLE" | "TAKEN" | "BLOCKED" | "MINE";
+        SlotBox: {
+            /** @description 1-based position in the grid. */
+            index: number;
+            state: components["schemas"]["SlotBoxState"];
+        };
+        /**
+         * @description Why a date cannot be requested; `null` when it can.
+         * @enum {string}
+         */
+        UnavailableReason: "INVALID_DATE" | "NOT_WEEKDAY" | "TOO_SOON" | "BEYOND_WINDOW" | "NO_QUOTA" | "FULL" | "ALREADY_BOOKED";
+        DayAvailability: {
+            /** Format: date */
+            date: string;
+            /** @description The company's effective quota for this date — also the number of boxes (D14). */
+            quota: number;
+            blocked: number;
+            /** @description Live requests holding a box (D12), not merely completed allocations. */
+            taken: number;
+            available: number;
+            /** @description True when the caller already holds a request for this date. */
+            mine: boolean;
+            requestable: boolean;
+            reason?: components["schemas"]["UnavailableReason"] | null;
+            /** @description Human-readable explanation of `reason`. */
+            message?: string | null;
+            boxes: components["schemas"]["SlotBox"][];
+        };
+        AvailabilityResponse: {
+            window: components["schemas"]["BookingWindow"];
+            days: components["schemas"]["DayAvailability"][];
+        };
+        /** @description The half-open date range one weekly run owns — `[from, toExclusive)`. */
+        AllocationBand: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            toExclusive: string;
+            dates: string[];
+        };
+        WeeklyRunDateResult: {
+            /** Format: date */
+            bookingDate: string;
+            /** @description Empty when the date failed before a run row was resolved. */
+            runId: string;
+            status: components["schemas"]["AllocationRunStatus"];
+            /** @description True when an earlier run had already completed this date and it was left untouched. */
+            alreadyDecided: boolean;
+            allocated: number;
+            waitlisted: number;
+            error?: string | null;
+        };
+        WeeklyRunResult: {
+            /** Format: date-time */
+            runAt: string;
+            band: components["schemas"]["AllocationBand"];
+            dates: components["schemas"]["WeeklyRunDateResult"][];
+            totalAllocated: number;
+            totalWaitlisted: number;
+        };
+        WeeklyRunPreview: {
+            window: components["schemas"]["BookingWindow"];
+            band: components["schemas"]["AllocationBand"];
+            dates: {
+                /** Format: date */
+                bookingDate: string;
+                runStatus?: components["schemas"]["AllocationRunStatus"] | null;
+                pendingRequests: number;
+            }[];
+        };
+        VehicleSummary: {
+            id: string;
+            /** @description Normalized plate (uppercase */
+            vehicleNumber: string;
+            /** @description Plate as written in the source sheet. */
+            displayNumber: string;
+            ownerName: string;
+            ownerEmail?: string | null;
+            contactNumber?: string | null;
+            vehicleType: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            companyId?: string | null;
+            companyName?: string | null;
+        };
+        GateLookup: {
+            vehicleNumber: string;
+            /** @description False for a plate not in the registry — still checkable-in (D16). */
+            known: boolean;
+            vehicle?: components["schemas"]["VehicleSummary"] | null;
+            /**
+             * Format: date
+             * @description Today's IST business date.
+             */
+            bookingDate: string;
+            hasBooking: boolean;
+            booking?: {
+                id: string;
+                status: components["schemas"]["BookingStatus"];
+                bookingType: components["schemas"]["BookingType"];
+                allocatedSlotNumber?: string | null;
+            } | null;
+            /** @description Set when the car is already inside and has not checked out. */
+            openVisit?: {
+                id: string;
+                /** Format: date-time */
+                checkInAt: string;
+            } | null;
+        };
+        /** @enum {string} */
+        GateEventStatus: "CHECKED_IN" | "CHECKED_OUT";
+        GateEvent: {
+            id: string;
+            vehicleNumber: string;
+            displayNumber: string;
+            ownerName?: string | null;
+            companyId?: string | null;
+            companyName?: string | null;
+            /** Format: date */
+            bookingDate: string;
+            bookingRequestId?: string | null;
+            /** @description False → surfaced on the company-admin dashboard as an entry without a booking (D16). */
+            hadBooking: boolean;
+            status: components["schemas"]["GateEventStatus"];
+            /** Format: date-time */
+            checkInAt: string;
+            /** Format: date-time */
+            checkOutAt?: string | null;
+            notes?: string | null;
+        };
+        GateCheckInRequest: {
+            /** @description Any spacing/case — normalized server-side. */
+            vehicleNumber: string;
+            notes?: string | null;
+        };
+        GateCheckOutRequest: {
+            vehicleNumber: string;
+            notes?: string | null;
         };
         /** @enum {string} */
         ReportType: "daily-allocation" | "company-utilization" | "user-booking-history" | "requests-vs-allocations" | "common-pool-utilization" | "blocked-slot-history" | "released-slot-history" | "frequent-winners" | "frequent-waitlisted" | "carpool-participation" | "allocation-score-breakdown";
@@ -1330,6 +1792,8 @@ export interface components {
             userId?: string;
             /** @description User full name (display). */
             user?: string;
+            /** @description Company name (display). */
+            companyName?: string | null;
             distanceKm?: number | null;
             people: number;
             distanceScore: number;
@@ -2270,6 +2734,35 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    getAllocationRunForDate: {
+        parameters: {
+            query: {
+                date: string;
+                type: components["schemas"]["AllocationRunType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run for this date + type, or null if none has been triggered yet. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRunSummary"] | null;
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getAllocationRun: {
         parameters: {
             query?: never;
@@ -2368,6 +2861,43 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listAllocations: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                /** @description Filter to a single booking date (YYYY-MM-DD). */
+                date?: string;
+                /** @description SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN. */
+                companyId?: string;
+                /** @description Optional filter — PRIMARY or COMMON_POOL allocations. */
+                type?: components["schemas"]["BookingType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of allocated seats. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AllocationRosterItem"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listCompanies: {
@@ -2644,6 +3174,37 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listAdminRequestHistory: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged list of processed company-admin requests */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["UserProfile"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     setUserApproval: {
         parameters: {
             query?: never;
@@ -2867,6 +3428,36 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createParkingArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParkingAreaRequest"];
+            };
+        };
+        responses: {
+            /** @description Parking area created. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["ParkingArea"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -3150,6 +3741,271 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SuccessEnvelope"] & {
                         data?: components["schemas"]["UserDashboard"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAvailability: {
+        parameters: {
+            query?: {
+                /** @description First date (YYYY-MM-DD). Defaults to the first requestable date. */
+                from?: string;
+                /** @description Last date (YYYY-MM-DD). Defaults to the end of the window. Max span 120 days. */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Window summary plus per-date availability. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["AvailabilityResponse"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getWeeklyRunPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Band preview. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["WeeklyRunPreview"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runWeeklyAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-date outcomes for the band. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["WeeklyRunResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    searchVehicles: {
+        parameters: {
+            query?: {
+                search?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matching vehicles (empty when `search` is blank). */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    lookupVehicle: {
+        parameters: {
+            query: {
+                number: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lookup result. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateLookup"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    gateCheckIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GateCheckInRequest"];
+            };
+        };
+        responses: {
+            /** @description Visit opened. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateEvent"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    gateCheckOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GateCheckOutRequest"];
+            };
+        };
+        responses: {
+            /** @description Visit closed. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateEvent"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listGateEvents: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                date?: string;
+                status?: "CHECKED_IN" | "CHECKED_OUT";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged gate log. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateEvent"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listUnbookedEntries: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                date?: string;
+                /** @description SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN. */
+                companyId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged unbooked entries. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateEvent"][];
+                        meta: components["schemas"]["Pagination"];
                     };
                 };
             };

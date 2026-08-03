@@ -5,6 +5,19 @@ import { useCountdown } from '../../lib/useCountdown';
 import { formatCountdown } from '../../lib/dates';
 import { statusTone } from './statusTone';
 
+function formatRun(value: string) {
+  return new Intl.DateTimeFormat('en-IN', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  }).format(new Date(value));
+}
+
 export function UserDashboard() {
   const dash = useUserDashboard();
   const secondsLeft = useCountdown(dash.data?.cutoffCountdownSeconds);
@@ -46,6 +59,19 @@ export function UserDashboard() {
             </Link>
           }
         />
+      )}
+
+      {d.nextAllocationRunAt && (
+        <Card title="Next allocation run">
+          <div className="space-y-2">
+            <p className="text-text">{formatRun(d.nextAllocationRunAt)} IST</p>
+            {d.nextAllocationRunCountdownSeconds != null && (
+              <p className="text-sm text-text-muted">
+                Runs in {formatCountdown(Math.max(0, d.nextAllocationRunCountdownSeconds))}
+              </p>
+            )}
+          </div>
+        </Card>
       )}
 
       <div className="flex flex-wrap items-center gap-4">
