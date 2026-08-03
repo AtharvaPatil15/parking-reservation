@@ -3,6 +3,7 @@ export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from '.
 export { Input, type InputProps } from './Input';
 export { Select, type SelectProps, type SelectOption } from './Select';
 export { Card, type CardProps } from './Card';
+export { Blueprint, BlueprintMarks, type BlueprintProps } from './Blueprint';
 export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Table, type TableProps, type Column } from './Table';
 export { Modal, type ModalProps } from './Modal';

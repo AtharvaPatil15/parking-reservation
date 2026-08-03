@@ -101,7 +101,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 toneClasses[t.tone],
               )}
             >
-              <span className={cn('h-full w-1 self-stretch rounded-full', toneAccent[t.tone])} aria-hidden="true" />
+              <span className={cn('h-full w-1 self-stretch', toneAccent[t.tone])} aria-hidden="true" />
               <p className="flex-1 text-sm">{t.message}</p>
               <button
                 type="button"

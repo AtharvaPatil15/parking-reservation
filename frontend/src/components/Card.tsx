@@ -1,32 +1,45 @@
 import type { ReactNode } from 'react';
 import { cn } from '../lib/cn';
+import { Blueprint } from './Blueprint';
 
 export interface CardProps {
   title?: ReactNode;
   description?: ReactNode;
   /** Rendered on the right of the header (e.g. an action button). */
   actions?: ReactNode;
+  /** Monospace meta line on the right of the header (e.g. "47 requests · 31 allocated"). */
+  meta?: ReactNode;
   children?: ReactNode;
   className?: string;
   /** Set false to remove body padding (e.g. when embedding a full-bleed table). */
   padded?: boolean;
 }
 
-/** Surface container with an optional header (title/description/actions). */
-export function Card({ title, description, actions, children, className, padded = true }: CardProps) {
-  const hasHeader = title || description || actions;
+/**
+ * A framed blueprint object with an optional header (title/description/actions).
+ *
+ * Transparent by design — in this system a card is a line drawing, not a filled
+ * surface, so it takes the frame and the registration marks instead of a fill.
+ */
+export function Card({ title, description, actions, meta, children, className, padded = true }: CardProps) {
+  const hasHeader = title || description || actions || meta;
   return (
-    <section className={cn('overflow-hidden rounded-card border border-border bg-surface shadow-card', className)}>
+    <Blueprint as="section" className={cn('bg-transparent', className)}>
       {hasHeader && (
-        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
-          <div className="space-y-1">
-            {title && <h2 className="text-base font-semibold tracking-tight text-text">{title}</h2>}
+        <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-2.5">
+          <div className="space-y-0.5">
+            {title && <h2 className="text-lg text-text">{title}</h2>}
             {description && <p className="text-sm text-text-muted">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          <div className="flex shrink-0 items-center gap-2">
+            {meta && (
+              <span className="font-mono text-2xs uppercase tracking-[0.1em] text-text-muted">{meta}</span>
+            )}
+            {actions}
+          </div>
         </div>
       )}
-      {children && <div className={cn(padded && 'p-6')}>{children}</div>}
-    </section>
+      {children && <div className={cn(padded && 'p-4')}>{children}</div>}
+    </Blueprint>
   );
 }

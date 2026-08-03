@@ -5,19 +5,23 @@ import { Spinner } from './Spinner';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md';
 
+// Buttons take the condensed heading face — in this system they read as labels
+// stamped on the board, not as body text.
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-control font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center gap-1.5 rounded-control border font-heading font-semibold tracking-[0.01em] transition-colors disabled:cursor-not-allowed disabled:opacity-45';
 
+// The primary is the one solid object on an otherwise transparent board; every
+// other variant stays a line drawing.
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-hover',
-  secondary: 'border border-border bg-surface text-text hover:bg-surface-2',
-  ghost: 'text-primary hover:bg-primary-subtle',
-  danger: 'bg-danger text-white hover:opacity-90',
+  primary: 'border-primary bg-primary text-surface hover:border-primary-hover hover:bg-primary-hover',
+  secondary: 'border-border bg-transparent text-text hover:bg-surface-2',
+  ghost: 'border-transparent bg-transparent text-primary hover:bg-primary-subtle',
+  danger: 'border-danger bg-danger text-surface hover:opacity-90',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
+  sm: 'h-[30px] px-3 text-sm',
+  md: 'h-[34px] px-4 text-sm',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

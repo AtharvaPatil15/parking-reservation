@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../lib/cn';
+import { BlueprintMarks } from './Blueprint';
 
 export interface ModalProps {
   open: boolean;
@@ -64,20 +65,21 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative w-full rounded-card border border-border bg-surface shadow-pop outline-none',
+          'relative w-full rounded-card border border-border bg-surface shadow-dialog outline-none',
           sizeClasses[size],
         )}
       >
+        <BlueprintMarks />
         {title && (
-          <div className="border-b border-border px-6 py-4">
-            <h2 id={titleId} className="text-base font-semibold tracking-tight text-text">
+          <div className="border-b border-border px-4 py-3">
+            <h2 id={titleId} className="text-xl text-text">
               {title}
             </h2>
           </div>
         )}
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-4 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>
+          <div className="flex justify-end gap-2 border-t border-border px-4 py-3">{footer}</div>
         )}
       </div>
     </div>,

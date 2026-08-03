@@ -28,10 +28,15 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
   return (
     <div className={cn('overflow-x-auto', className)}>
       <table className="w-full text-left text-sm">
-        <thead className="bg-surface-2 text-xs uppercase tracking-wide text-text-muted">
+        {/* Headers are monospace and letterspaced — the system reads them as
+            spec-sheet column labels rather than as prose. */}
+        <thead className="font-mono text-2xs uppercase tracking-[0.11em] text-text-muted">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className={cn('px-6 py-3 font-medium', alignClass(col.align))}>
+              <th
+                key={col.key}
+                className={cn('border-b border-border px-3.5 py-2.5 font-normal', alignClass(col.align))}
+              >
                 {col.header}
               </th>
             ))}
@@ -40,15 +45,21 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-10">
+              <td colSpan={columns.length} className="px-3.5 py-10">
                 {empty ?? <p className="text-center text-sm text-text-muted">No data.</p>}
               </td>
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={rowKey(row)} className={cn('border-t border-border', rowClassName?.(row))}>
+              <tr
+                key={rowKey(row)}
+                className={cn(
+                  'border-b border-border/50 transition-colors hover:bg-surface-2/60',
+                  rowClassName?.(row),
+                )}
+              >
                 {columns.map((col) => (
-                  <td key={col.key} className={cn('px-6 py-3', alignClass(col.align), col.className)}>
+                  <td key={col.key} className={cn('px-3.5 py-2.5', alignClass(col.align), col.className)}>
                     {col.render(row)}
                   </td>
                 ))}

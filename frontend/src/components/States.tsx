@@ -57,7 +57,9 @@ export function ErrorState({
 }: ErrorStateProps) {
   return (
     <StateShell>
-      <div className="grid h-10 w-10 place-items-center rounded-full bg-danger-subtle text-danger">!</div>
+      <div className="grid h-9 w-9 place-items-center border border-danger bg-danger-subtle font-heading text-lg text-danger">
+        !
+      </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-text">{title}</p>
         <p className="max-w-sm text-sm text-text-muted">{description}</p>
@@ -76,7 +78,9 @@ export interface SuccessStateProps {
 export function SuccessState({ title, description, action }: SuccessStateProps) {
   return (
     <StateShell>
-      <div className="grid h-10 w-10 place-items-center rounded-full bg-success-subtle text-success">✓</div>
+      <div className="grid h-9 w-9 place-items-center border border-success bg-success-subtle text-lg text-success">
+        ✓
+      </div>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-text">{title}</p>
         {description && <p className="max-w-sm text-sm text-text-muted">{description}</p>}

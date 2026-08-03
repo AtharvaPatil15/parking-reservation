@@ -1,3 +1,11 @@
+/* Barlow (body) + Barlow Condensed (headings), self-hosted so there is no
+   render-blocking third-party request and the app still styles offline. */
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/700.css';
+@import '@fontsource/barlow-condensed/400.css';
+@import '@fontsource/barlow-condensed/600.css';
+
 @import './theme.css';
 
 @tailwind base;
@@ -12,13 +20,30 @@
   }
 
   body {
-    @apply bg-canvas text-text;
+    @apply bg-canvas text-text text-base;
     margin: 0;
     min-height: 100vh;
   }
 
-  /* Consistent, visible focus ring for keyboard users across the app. */
+  /* Headings take the condensed face system-wide, so screens don't each restate it. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: theme('fontFamily.heading');
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Consistent, visible focus ring for keyboard users across the app.
+     Industry mandates a 2px accent outline rather than a browser default. */
   :focus-visible {
     @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-canvas;
+  }
+
+  ::selection {
+    background: rgb(var(--primary) / 0.3);
   }
 }

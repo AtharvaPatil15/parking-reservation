@@ -86,7 +86,7 @@ export function Drawer({
         {(title || description) && (
           <div className={cn('space-y-1 border-b border-border', isNav ? 'px-4 py-4' : 'px-6 py-4')}>
             {title && (
-              <h2 id={titleId} className="text-base font-semibold tracking-tight text-text">
+              <h2 id={titleId} className="text-lg text-text">
                 {title}
               </h2>
             )}

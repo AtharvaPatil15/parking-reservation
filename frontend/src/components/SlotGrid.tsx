@@ -21,10 +21,10 @@ export interface SlotGridProps {
 // Both TAKEN and BLOCKED are grey per the requirement; BLOCKED gets a dashed edge so the two are
 // still tellable apart without introducing another colour.
 const STATE_STYLES: Record<BoxState, string> = {
-  AVAILABLE: 'border-success/40 bg-success-subtle',
+  AVAILABLE: 'border-success/50 bg-success-subtle',
   TAKEN: 'border-border bg-surface-2',
-  BLOCKED: 'border-dashed border-text-muted/40 bg-surface-2',
-  MINE: 'border-primary/50 bg-primary-subtle',
+  BLOCKED: 'border-dashed border-text-muted/50 bg-surface-2',
+  MINE: 'border-primary bg-primary-subtle',
 };
 
 const STATE_LABELS: Record<BoxState, string> = {
@@ -50,8 +50,8 @@ export function SlotGrid({ boxes, size = 'md', className }: SlotGridProps) {
           key={box.index}
           title={`Slot ${box.index} — ${STATE_LABELS[box.state]}`}
           className={cn(
-            'flex items-center justify-center rounded-control border font-medium tabular-nums',
-            size === 'sm' ? 'h-5 w-5 text-[10px]' : 'h-9 w-9 text-xs',
+            'flex items-center justify-center rounded-control border font-heading font-semibold tabular-nums',
+            size === 'sm' ? 'h-5 w-5 text-[10px]' : 'h-9 w-9 text-sm',
             STATE_STYLES[box.state],
             box.state === 'MINE' ? 'text-primary' : box.state === 'AVAILABLE' ? 'text-success' : 'text-text-muted',
           )}
@@ -71,7 +71,7 @@ export function SlotGridLegend({ className }: { className?: string }) {
     <ul className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-muted', className)}>
       {items.map((state) => (
         <li key={state} className="flex items-center gap-1.5">
-          <span aria-hidden="true" className={cn('h-3 w-3 rounded-sm border', STATE_STYLES[state])} />
+          <span aria-hidden="true" className={cn('h-3 w-3 border', STATE_STYLES[state])} />
           {STATE_LABELS[state]}
         </li>
       ))}
