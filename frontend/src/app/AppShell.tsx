@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Button, Drawer } from '../components';
 import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
@@ -48,12 +48,16 @@ function TopBar() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <span className="flex items-center gap-2 rounded-control border border-border bg-surface px-2.5 py-1 text-sm text-text-muted">
+          <Link
+            to="/profile"
+            aria-label="Open profile"
+            className="flex items-center gap-2 rounded-control border border-border bg-surface px-2.5 py-1 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
             <span className="grid h-6 w-6 place-items-center rounded-full bg-primary-subtle text-xs font-semibold text-primary">
               {initial}
             </span>
             <span className="hidden sm:inline">{user?.fullName ?? 'Account'}</span>
-          </span>
+          </Link>
           <Button size="sm" variant="secondary" onClick={logout}>
             Sign out
           </Button>

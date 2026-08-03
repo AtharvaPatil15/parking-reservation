@@ -288,6 +288,83 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /me/vehicles:
+    get:
+      tags: [User]
+      operationId: getMyVehicles
+      summary: List the current user's saved cars
+      x-maturity: DEMO
+      responses:
+        '200':
+          description: Saved cars visible to security
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/VehicleSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [User]
+      operationId: createMyVehicle
+      summary: Add a car to the current user's profile
+      description: Creates or reactivates an active vehicle-registry row for security lookup.
+      x-maturity: DEMO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMyVehicleRequest' }
+      responses:
+        '201':
+          description: Saved car
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VehicleSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /me/vehicles/{id}:
+    delete:
+      tags: [User]
+      operationId: removeMyVehicle
+      summary: Remove one of the current user's saved cars
+      x-maturity: DEMO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Removed
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /me/bookings:
     get:
       tags: [User]
@@ -2329,6 +2406,21 @@ components:
         address: { type: string }
         pinCode: { type: string }
         distanceKm: { type: number, nullable: true, minimum: 0, maximum: 200 }
+
+    CreateMyVehicleRequest:
+      type: object
+      required: [vehicleNumber]
+      properties:
+        vehicleNumber:
+          type: string
+          description: Any spacing/case; normalized server-side for security lookup.
+        displayNumber:
+          type: string
+          description: Optional display form shown to security.
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        makeModel: { type: string, nullable: true }
+        colour: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
 
     Booking:
       type: object

@@ -417,6 +417,7 @@ function seedVehicles(): VehicleSummary[] {
     { id: 'veh-1', vehicleNumber: 'MH12AB1234', displayNumber: 'MH 12 AB 1234', ownerName: 'Aditi Rao', ownerEmail: 'aditi@assent.example', contactNumber: '9822001101', vehicleType: 'CAR', makeModel: 'Hyundai i20', colour: 'White', companyId: 'mock-co', companyName: 'Mock Co' },
     { id: 'veh-2', vehicleNumber: 'MH12CD5678', displayNumber: 'MH 12 CD 5678', ownerName: 'Rahul Mehta', ownerEmail: 'rahul@assent.example', contactNumber: '9822001102', vehicleType: 'CAR', makeModel: 'Tata Nexon', colour: 'Blue', companyId: 'mock-co', companyName: 'Mock Co' },
     { id: 'veh-3', vehicleNumber: 'MH14EF9012', displayNumber: 'MH 14 EF 9012', ownerName: 'Sara Khan', ownerEmail: 'sara@assent.example', contactNumber: '9822001103', vehicleType: 'EV_CAR', makeModel: 'Tata Nexon EV', colour: 'Grey', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-mine-1', vehicleNumber: 'KA011234', displayNumber: 'KA 01 1234', ownerName: 'Mock User', ownerEmail: 'user@acme.test', contactNumber: '9000000000', vehicleType: 'CAR', makeModel: 'Honda City', colour: 'Silver', companyId: 'mock-co', companyName: 'Mock Co' },
   ];
 }
 
@@ -454,8 +455,19 @@ let parkingAreaState = seedParkingAreas();
 let availabilityState = seedAvailability();
 let vehicleState = seedVehicles();
 let gateEventState = seedGateEvents();
+let profileState: Record<string, Partial<UserProfile>> = {};
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
+
+function currentMockProfile(): UserProfile {
+  const s = readMockSession();
+  if (s) {
+    const base = userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName });
+    return { ...base, ...profileState[s.id] };
+  }
+  const base = userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE');
+  return { ...base, ...profileState[base.id] };
+}
 
 /** Restore all mutable mock state to its seed. Call between tests (see test/setup.ts). */
 export function resetMockData(): void {
@@ -470,6 +482,7 @@ export function resetMockData(): void {
   availabilityState = seedAvailability();
   vehicleState = seedVehicles();
   gateEventState = seedGateEvents();
+  profileState = {};
   seq = 0;
 }
 
@@ -646,13 +659,51 @@ const hero = [
     return ok<BookingDetail>(detail);
   }),
   http.get(`${baseURL}/me`, () => {
+    return ok<UserProfile>(currentMockProfile());
+  }),
+  http.patch(`${baseURL}/me`, async ({ request }) => {
+    const current = currentMockProfile();
+    const body = await request.json() as Partial<UserProfile>;
+    const updated = { ...current, ...body, updatedAt: new Date().toISOString() };
+    profileState[current.id] = updated;
     const s = readMockSession();
-    if (s) {
-      return ok<UserProfile>(
-        userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName }),
-      );
-    }
-    return ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE'));
+    if (s && body.fullName) writeMockSession({ ...s, fullName: body.fullName });
+    return ok<UserProfile>(updated);
+  }),
+  http.get(`${baseURL}/me/vehicles`, () => {
+    const me = currentMockProfile();
+    return ok<VehicleSummary[]>(vehicleState.filter((v) => v.ownerEmail === me.email));
+  }),
+  http.post(`${baseURL}/me/vehicles`, async ({ request }) => {
+    const me = currentMockProfile();
+    const body = await request.json() as Partial<VehicleSummary> & { vehicleNumber?: string };
+    const plate = normalizeMockPlate(body.vehicleNumber ?? '');
+    if (!plate) return fail(400, 'VALIDATION_ERROR', 'Car number is required');
+    const existing = vehicleState.find((v) => v.vehicleNumber === plate);
+    if (existing && existing.ownerEmail !== me.email) return fail(409, 'CONFLICT', 'This car number is already registered to another user');
+    const vehicle: VehicleSummary = {
+      id: existing?.id ?? nextId('veh'),
+      vehicleNumber: plate,
+      displayNumber: body.displayNumber || body.vehicleNumber || plate,
+      ownerName: me.fullName,
+      ownerEmail: me.email,
+      contactNumber: me.contactNumber,
+      vehicleType: body.vehicleType ?? 'CAR',
+      makeModel: body.makeModel ?? null,
+      colour: body.colour ?? null,
+      companyId: me.companyId,
+      companyName: me.companyName,
+    };
+    vehicleState = existing ? vehicleState.map((v) => (v.id === existing.id ? vehicle : v)) : [vehicle, ...vehicleState];
+    return ok<VehicleSummary>(vehicle, 201);
+  }),
+  http.delete(`${baseURL}/me/vehicles/:id`, ({ params }) => {
+    const me = currentMockProfile();
+    const id = String(params.id);
+    const vehicle = vehicleState.find((v) => v.id === id && v.ownerEmail === me.email);
+    if (!vehicle) return fail(404, 'NOT_FOUND', 'Car not found');
+    vehicleState = vehicleState.filter((v) => v.id !== id);
+    return ok<{ id: string }>({ id });
   }),
   http.get(`${baseURL}/dashboard/user`, () =>
     ok<UserDashboard>({
