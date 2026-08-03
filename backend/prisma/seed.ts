@@ -198,7 +198,7 @@ async function main() {
 
   // 7b. Vehicle registry (Phase 7 D17) --------------------------------------
   // A few cars for the demo's existing users so the security check-in flow works before the real
-  // Excel sheet is imported (`npm run import:vehicles -- ../db/vehicles.sample.csv` loads more).
+  // Excel sheet is imported (`npm run import:vehicles -- ./fixtures/vehicles.sample.csv` loads more).
   // `vehicleNumber` must be stored NORMALIZED (uppercase, no separators) — that is what the gate
   // lookup keys on; `displayNumber` keeps the readable form.
   const seedVehicles = [

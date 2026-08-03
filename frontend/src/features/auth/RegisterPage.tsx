@@ -28,6 +28,7 @@ export function RegisterPage() {
     register,
     handleSubmit,
     setError,
+    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -37,20 +38,30 @@ export function RegisterPage() {
     },
   });
 
+  // A gate operator has no tenant to pick and no commute to record (D15), so those fields are hidden
+  // rather than disabled — an irrelevant field is noise, and the guard's whole job is two buttons.
+  const isSecurity = watch('registrationType') === 'SECURITY';
+
   const companyOptions: SelectOption[] = (companies.data ?? []).map((c) => ({ value: c.id, label: c.name }));
 
   const onSubmit: SubmitHandler<RegisterFormValues> = (values) => {
     const body: RegisterRequest = {
       fullName: values.fullName,
       registrationType: values.registrationType,
-      companyId: values.companyId,
       email: values.email,
       contactNumber: values.contactNumber,
-      address: values.address,
-      pinCode: values.pinCode,
-      distanceKm: values.distanceKm ? Number(values.distanceKm) : null,
       password: values.password,
       confirmPassword: values.confirmPassword,
+      // Omitted entirely for SECURITY: the server assigns the building company and stores no home
+      // address. Sending stale values from a switched-away-from selection would be misleading.
+      ...(isSecurity
+        ? {}
+        : {
+            companyId: values.companyId,
+            address: values.address,
+            pinCode: values.pinCode,
+            distanceKm: values.distanceKm ? Number(values.distanceKm) : null,
+          }),
     };
     registerUser.mutate(body, {
       onSuccess: () => setSubmittedAs(values.registrationType),
@@ -111,29 +122,39 @@ export function RegisterPage() {
                 <Select
                   label="Registering as"
                   options={REGISTRATION_TYPE_OPTIONS}
-                  hint="Company-admin requests are approved by the super admin."
+                  hint={
+                    isSecurity
+                      ? 'Security accounts are approved by the super admin and cover the whole building.'
+                      : 'Company-admin requests are approved by the super admin.'
+                  }
                   error={errors.registrationType?.message}
                   {...register('registrationType')}
                 />
-                <Select
-                  label="Company"
-                  placeholder={companies.isLoading ? 'Loading companies…' : 'Select your company'}
-                  options={companyOptions}
-                  error={errors.companyId?.message}
-                  {...register('companyId')}
-                />
+                {!isSecurity && (
+                  <Select
+                    label="Company"
+                    placeholder={companies.isLoading ? 'Loading companies…' : 'Select your company'}
+                    options={companyOptions}
+                    error={errors.companyId?.message}
+                    {...register('companyId')}
+                  />
+                )}
                 <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
                 <Input label="Contact number" type="tel" inputMode="numeric" placeholder="10-digit mobile" error={errors.contactNumber?.message} {...register('contactNumber')} />
-                <Input label="Address" error={errors.address?.message} {...register('address')} />
-                <Input label="PIN code" inputMode="numeric" placeholder="6-digit PIN" error={errors.pinCode?.message} {...register('pinCode')} />
-                <Input
-                  label="Home → office distance (km)"
-                  type="number"
-                  step="any"
-                  hint="Optional — used for allocation scoring."
-                  error={errors.distanceKm?.message}
-                  {...register('distanceKm')}
-                />
+                {!isSecurity && (
+                  <>
+                    <Input label="Address" error={errors.address?.message} {...register('address')} />
+                    <Input label="PIN code" inputMode="numeric" placeholder="6-digit PIN" error={errors.pinCode?.message} {...register('pinCode')} />
+                    <Input
+                      label="Home → office distance (km)"
+                      type="number"
+                      step="any"
+                      hint="Optional — used for allocation scoring."
+                      error={errors.distanceKm?.message}
+                      {...register('distanceKm')}
+                    />
+                  </>
+                )}
                 <Input label="Password" type="password" error={errors.password?.message} {...register('password')} />
                 <Input label="Confirm password" type="password" error={errors.confirmPassword?.message} {...register('confirmPassword')} />
 

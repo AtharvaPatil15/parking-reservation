@@ -12,6 +12,13 @@ import type { RegisterInput } from './auth.schema';
 
 const DEFAULT_MIN_PASSWORD_LENGTH = 8;
 
+/**
+ * The building operator's own company (seeded as "Redbricks (Building Administrator)") — the tenant a
+ * SECURITY account is filed under, since the gate is building-wide and not tenant-scoped (D15).
+ * Matched by `code` because that is the stable identity in the seed; ids are cuids and differ per DB.
+ */
+const BUILDING_COMPANY_CODE = 'REDBRICKS';
+
 const hashToken = (raw: string): string => createHash('sha256').update(raw).digest('hex');
 
 export interface AuthUser {
@@ -90,11 +97,21 @@ export async function login(
  * In every case the role is assigned now but access is gated by `status = PENDING`.
  */
 export async function register(input: RegisterInput) {
-  // Company must exist and be ACTIVE.
-  const company = await prisma.company.findFirst({ where: { id: input.companyId, deletedAt: null } });
+  // Company must exist and be ACTIVE. A SECURITY applicant does not choose one (D15): the gate serves
+  // the whole building, so they are attached to the building company server-side. Resolving it here
+  // rather than trusting a client-supplied id also stops a guard account being filed under a tenant.
+  const company =
+    input.registrationType === 'SECURITY'
+      ? await prisma.company.findFirst({ where: { code: BUILDING_COMPANY_CODE, deletedAt: null } })
+      : await prisma.company.findFirst({ where: { id: input.companyId, deletedAt: null } });
   if (!company || company.status !== 'ACTIVE') {
     throw new ValidationError('Request validation failed', [
-      { field: 'companyId', message: 'Company not found or not active' },
+      input.registrationType === 'SECURITY'
+        ? {
+            field: 'registrationType',
+            message: `No active building company (code ${BUILDING_COMPANY_CODE}); ask the super admin to set one up`,
+          }
+        : { field: 'companyId', message: 'Company not found or not active' },
     ]);
   }
 
@@ -123,12 +140,17 @@ export async function register(input: RegisterInput) {
         fullName: input.fullName,
         email: input.email,
         contactNumber: input.contactNumber,
-        address: input.address,
-        pinCode: input.pinCode,
+        // Blank for a guard: not collected (D15). Forced blank rather than defaulted, so a client that
+        // sends these anyway cannot record a home address against a gate account. The columns are
+        // non-null and widening them to nullable would ripple through every screen that renders a user,
+        // so a guard simply carries no address rather than a fabricated one.
+        address: input.registrationType === 'SECURITY' ? '' : (input.address ?? ''),
+        pinCode: input.registrationType === 'SECURITY' ? '' : (input.pinCode ?? ''),
         passwordHash,
         status: 'PENDING',
         emailVerified: false,
-        distanceKm: input.distanceKm ?? null,
+        // Scoring is an employee concern; a guard is never allocated a slot, so never carries a distance.
+        distanceKm: input.registrationType === 'SECURITY' ? null : (input.distanceKm ?? null),
         companyId: company.id,
         roles: { create: { role: { connect: { name: roleName } } } },
       },

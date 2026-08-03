@@ -2264,14 +2264,21 @@ components:
 
     RegisterRequest:
       type: object
-      required: [fullName, companyId, email, contactNumber, address, pinCode, password, confirmPassword]
+      description: >
+        `companyId`, `address` and `pinCode` are required for EMPLOYEE and COMPANY_ADMIN but are NOT
+        collected from a SECURITY applicant (Phase 7 D15) — a gate operator has no tenant to pick and
+        no commute to record, so the server assigns the building company and stores no home address.
+        Sending them as a SECURITY applicant is not an error; they are ignored.
+      required: [fullName, email, contactNumber, password, confirmPassword]
       properties:
         fullName: { type: string }
-        companyId: { type: string, description: Must reference an ACTIVE company. }
+        companyId:
+          type: string
+          description: Must reference an ACTIVE company. Required unless `registrationType` is SECURITY.
         email: { type: string, format: email }
         contactNumber: { type: string }
-        address: { type: string }
-        pinCode: { type: string }
+        address: { type: string, description: Required unless `registrationType` is SECURITY. }
+        pinCode: { type: string, description: Required unless `registrationType` is SECURITY. }
         registrationType:
           type: string
           enum: [EMPLOYEE, COMPANY_ADMIN, SECURITY]
@@ -2287,7 +2294,9 @@ components:
           nullable: true
           minimum: 0
           maximum: 200
-          description: Manually-entered home→office distance in km (D6). Optional at registration.
+          description: >
+            Manually-entered home→office distance in km (D6). Optional at registration, and ignored for
+            a SECURITY applicant (a guard is never allocated a slot, so is never scored).
         password: { type: string, format: password }
         confirmPassword: { type: string, format: password }
 
