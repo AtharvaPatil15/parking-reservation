@@ -2030,6 +2030,10 @@ components:
         allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
+        history:
+          type: array
+          description: Same employee/date booking lifecycle rows, grouped before pagination.
+          items: { $ref: '#/components/schemas/AdminBooking' }
 
     AllocationRosterItem:
       type: object
