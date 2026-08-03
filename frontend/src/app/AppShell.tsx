@@ -42,13 +42,11 @@ function ShellFrame({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <CrumbStrip onOpenNav={navItems.length > 0 ? () => setDrawerOpen(true) : undefined} />
-        {/* The content region fills the frame beside the rail, but stops growing at
-            the width the design was drawn for (1280 total − the 248px rail). Past
-            that the column stays put rather than stretching tables and panels to an
-            unreadable measure on a wide monitor; below it, it is fluid. */}
-        <main className="mx-auto w-full max-w-[1032px] flex-1 px-5 py-6 sm:px-6 lg:px-[26px]">
-          {children}
-        </main>
+        {/* Full-bleed beside the rail: the content region uses the whole frame at
+            every width rather than stopping at a fixed column, so a wide monitor
+            gets the room instead of an empty band. Prose blocks cap their own
+            measure (max-w on the sub-lines) so only panels and tables stretch. */}
+        <main className="w-full flex-1 px-5 py-6 sm:px-6 lg:px-[26px]">{children}</main>
       </div>
 
       {/* Below lg the same rail rides in the drawer, so there is one nav to maintain. */}
@@ -82,10 +80,10 @@ function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
     .sort((a, b) => b.to.length - a.to.length)[0]?.label;
 
   return (
-    // The bar spans the frame (it is chrome), but its contents track the same
-    // centred column as the content below so the two never look misaligned.
+    // The bar spans the frame and its contents share the content region's padding,
+    // so the crumb lines up with the heading beneath it.
     <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center border-b border-border bg-surface-2">
-      <div className="mx-auto flex w-full max-w-[1032px] items-center justify-between gap-4 px-5 sm:px-6 lg:px-[26px]">
+      <div className="flex w-full items-center justify-between gap-4 px-5 sm:px-6 lg:px-[26px]">
         <div className="flex min-w-0 items-center gap-3">
           {onOpenNav && (
             <button
