@@ -168,4 +168,46 @@ describe('AuthProvider', () => {
       vi.useRealTimers();
     }
   });
+
+  it('logs out when a silent refresh returns a token for a different user', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = 1_700_000_000_000;
+      vi.setSystemTime(now);
+      const exp = Math.floor(now / 1000) + 90;
+      server.use(
+        http.post('*/api/v1/auth/refresh', () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              accessToken: makeJwt(Math.floor(now / 1000) + 900),
+              tokenType: 'Bearer',
+              expiresIn: 900,
+              user: {
+                id: '2',
+                fullName: 'Different User',
+                role: 'USER',
+                companyId: 'c2',
+                companyName: 'Other Co',
+              },
+            },
+          }),
+        ),
+      );
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: ({ children }) => (
+          <AuthProvider initialSession={{ ...session, accessToken: makeJwt(exp) }}>{children}</AuthProvider>
+        ),
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(sessionStorage.getItem('auth:session')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

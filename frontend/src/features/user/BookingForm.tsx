@@ -247,7 +247,6 @@ export function BookingForm() {
         vehicleType: 'CAR',
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
-        specialRequirement: values.specialRequirement || undefined,
         // Email is required by the schema, so pass it through unchanged (no `|| undefined`).
         carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail })),
       },
@@ -534,10 +533,6 @@ export function BookingForm() {
               Add member
             </Button>
           </fieldset>
-
-          <div className="border-t border-border pt-5">
-            <Input label="Special requirement" {...register('specialRequirement')} error={errors.specialRequirement?.message} />
-          </div>
 
           <Button type="submit" loading={createBookings.isPending} disabled={submitBlocked} className="w-full">
             {/* Covers "nothing selected", "nothing in the window is open at all", and a stale selection. */}

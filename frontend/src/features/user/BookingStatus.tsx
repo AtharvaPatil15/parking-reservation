@@ -35,7 +35,6 @@ export function BookingStatus() {
   const [editOpen, setEditOpen] = useState(false);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
-  const [special, setSpecial] = useState('');
   const [members, setMembers] = useState<{ name: string; employeeEmail: string }[]>([]);
 
   if (booking.isLoading) return <LoadingState label="Loading booking…" />;
@@ -87,7 +86,6 @@ export function BookingStatus() {
   function openEdit() {
     setVehicleNumber(b.vehicleNumber ?? '');
     setPeople(String(b.carpoolMemberCount + 1));
-    setSpecial(b.specialRequirement ?? '');
     setMembers((b.carpoolMembers ?? []).map((m) => ({ name: m.name, employeeEmail: m.employeeEmail ?? '' })));
     setEditOpen(true);
   }
@@ -101,7 +99,6 @@ export function BookingStatus() {
       // Keep people ≥ declared members + driver so the edit is internally consistent.
       carpoolPeople: Math.max(peopleNum, cleanedMembers.length + 1),
       vehicleNumber: vehicleNumber.trim() || null,
-      specialRequirement: special.trim() || null,
       carpoolMembers: cleanedMembers,
     };
     update.mutate(body, {
@@ -236,7 +233,6 @@ export function BookingStatus() {
             )}
           </div>
 
-          <Input label="Special requirement" value={special} onChange={(e) => setSpecial(e.target.value)} />
           {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
         </div>
       </Modal>

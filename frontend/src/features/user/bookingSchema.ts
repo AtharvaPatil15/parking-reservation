@@ -20,7 +20,6 @@ export const bookingSchema = z
     // raises it, this client cap should be sourced from `useConfig()` rather than hardcoded.
     // Kept static for the demo (cap stays 4); the backend is the authority and 422s violations.
     carpoolPeople: z.coerce.number({ invalid_type_error: 'Enter a number.' }).int('Whole number.').min(1, 'At least 1 person.').max(4, 'Up to 4 people.'),
-    specialRequirement: z.string().optional(),
     carpoolMembers: z
       .array(
         z.object({

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ErrorState, Input, LoadingState } from '../../components';
+import { Button, ErrorState, Input, LoadingState } from '../../components';
 import { useCompanyAdminDashboard } from '../../api/hooks';
+import { apiErrorText } from '../../api/http';
 import { StatTiles, type Stat } from '../shared/StatTiles';
 import { BookingList } from '../shared/BookingList';
 import { UnbookedEntries } from '../shared/UnbookedEntries';
@@ -43,7 +44,15 @@ export function CompanyDashboard() {
       {dash.isLoading ? (
         <LoadingState label="Loading dashboard…" />
       ) : dash.isError || !d ? (
-        <ErrorState title="Couldn't load the dashboard" />
+        <ErrorState
+          title="Couldn't load the dashboard"
+          description={apiErrorText(dash.error) ?? 'Please check that the backend is running, then try again.'}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => dash.refetch()}>
+              Retry
+            </Button>
+          }
+        />
       ) : (
         <StatTiles stats={stats} />
       )}

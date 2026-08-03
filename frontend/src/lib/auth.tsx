@@ -164,16 +164,26 @@ export function AuthProvider({
   // When the client silently rotates the access token, mirror it into the session + storage so
   // the context value and a later page refresh both carry the current token.
   useEffect(() => {
-    registerTokenRefreshedHandler((token) => {
-      setSession((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev, accessToken: token };
-        writeStoredSession(next);
-        return next;
-      });
+    registerTokenRefreshedHandler((token, refreshedUser) => {
+      if (!session) return;
+      if (refreshedUser && refreshedUser.id !== session.user.id) {
+        logout();
+        return;
+      }
+      const nextUser = refreshedUser ?? session.user;
+      if (
+        nextUser.role !== session.user.role ||
+        nextUser.companyId !== session.user.companyId ||
+        nextUser.companyName !== session.user.companyName
+      ) {
+        queryClient.clear();
+      }
+      const next = { accessToken: token, user: nextUser };
+      writeStoredSession(next);
+      setSession(next);
     });
     return () => registerTokenRefreshedHandler(null);
-  }, []);
+  }, [logout, session]);
 
   // Proactive JWT session management: schedule a silent refresh just BEFORE the access token's own
   // `exp`, so requests never race an expired token (the reactive 401 handler is only a fallback for

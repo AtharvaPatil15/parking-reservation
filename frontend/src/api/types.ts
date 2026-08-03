@@ -758,7 +758,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove a user */
+        /**
+         * Remove a user
+         * @description Soft-removes a user. Super Admin may remove company-admin and security users. Company Admin may remove non-privileged users from their own company.
+         */
         delete: operations["removeUser"];
         options?: never;
         head?: never;
@@ -2275,7 +2278,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessEnvelope"] & {
-                        data?: components["schemas"]["AccessTokenData"];
+                        data?: components["schemas"]["LoginResponseData"];
                     };
                 };
             };
