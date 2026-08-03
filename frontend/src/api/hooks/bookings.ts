@@ -5,6 +5,8 @@ import { queryKeys } from '../queryKeys';
 import type { components } from '../types';
 
 type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
+type CreateBookingsBatchRequest = components['schemas']['CreateBookingsBatchRequest'];
+type BookingsBatchData = components['schemas']['BookingsBatchData'];
 type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
@@ -51,6 +53,31 @@ export function useCreateBooking() {
       qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
       qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
       qc.invalidateQueries({ queryKey: ['bookings', 'admin'] }); // new booking shows on admin rosters
+    },
+  });
+}
+
+/**
+ * POST /bookings/batch — one request per selected date, same trip details on each.
+ *
+ * Resolves (200) even when some or all dates failed: the payload is a per-date report, not an
+ * all-or-nothing result, so `onError` only fires for a genuinely broken request (400/401/network).
+ * Callers must read `results[]` to see what actually got booked.
+ */
+export function useCreateBookings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateBookingsBatchRequest) =>
+      unwrap<BookingsBatchData>(api.POST('/bookings/batch', { body })),
+    onSuccess: (data) => {
+      // A batch where every date failed changed nothing — leave the caches alone.
+      if (data.createdCount === 0) return;
+      qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
+      qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
+      // The grid the user just booked from is now stale by however many slots they took. Invalidate by
+      // prefix (the key is ['availability', from, to]) so every window range refetches.
+      qc.invalidateQueries({ queryKey: ['availability'] });
     },
   });
 }

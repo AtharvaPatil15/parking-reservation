@@ -283,6 +283,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit parking requests for several dates at once
+         * @description Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`, applying the same trip details (vehicle, carpool, special requirement) to every date.
+         *
+         *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+         *
+         *     A 200 with every result `FAILED` is a valid response. Request-level problems — an empty or oversized `bookingDates`, a malformed date, a carpool that breaks the cap — are rejected as 400 before any booking is attempted, so a bad payload never books a partial set.
+         */
+        post: operations["createBookingsBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/bookings/common-pool": {
         parameters: {
             query?: never;
@@ -1809,6 +1833,39 @@ export interface components {
             /** @description Optional carpool members; only same-company employees are scored (F4). */
             carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
         };
+        /** @description Multi-date booking. Identical to CreateBookingRequest except that `bookingDate` becomes `bookingDates`; every other field is applied unchanged to each date. */
+        CreateBookingsBatchRequest: {
+            /** @description Target bookable weekdays (Mon–Fri, D7). Duplicates are collapsed and the list is sorted ascending before booking. The cap of 20 is the most weekdays a maximum 4-week window can contain, so it can never reject a legitimate selection. */
+            bookingDates: string[];
+            vehicleType?: components["schemas"]["VehicleType"];
+            vehicleNumber?: string | null;
+            /** @description Total people incl. the driver (person 1, D3), applied to every date. Server enforces the current carpool.maxPeople cap (default 4, D8). */
+            carpoolPeople: number;
+            specialRequirement?: string | null;
+            /** @description Optional carpool members, applied to every date; only same-company employees are scored (F4). */
+            carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
+        };
+        /** @description Outcome for a single date within a batch. */
+        BookingBatchResult: {
+            /** Format: date */
+            bookingDate: string;
+            /** @enum {string} */
+            outcome: "CREATED" | "FAILED";
+            /** @description Present when `outcome` is CREATED. */
+            booking?: components["schemas"]["BookingCreatedData"] | null;
+            /** @description Present when `outcome` is FAILED — the same error code the single-date endpoint would have returned for this date (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR). */
+            code?: string | null;
+            /** @description Present when `outcome` is FAILED — human-readable reason, safe to show the user. */
+            message?: string | null;
+        };
+        BookingsBatchData: {
+            /** @description Distinct dates evaluated after de-duplication. */
+            requested: number;
+            createdCount: number;
+            failedCount: number;
+            /** @description One entry per requested date, ascending. */
+            results: components["schemas"]["BookingBatchResult"][];
+        };
         /** @description Partial edit before the primary cutoff. All fields optional. */
         UpdateBookingRequest: {
             vehicleType?: components["schemas"]["VehicleType"];
@@ -2634,6 +2691,98 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["WindowClosed"];
+        };
+    };
+    createBookingsBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bookingDates": [
+                 *         "2026-08-12",
+                 *         "2026-08-13",
+                 *         "2026-08-14"
+                 *       ],
+                 *       "vehicleType": "CAR",
+                 *       "vehicleNumber": "MH12AB1234",
+                 *       "carpoolPeople": 2,
+                 *       "carpoolMembers": [
+                 *         {
+                 *           "name": "Rahul Mehta",
+                 *           "employeeEmail": "rahul@assent.example"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateBookingsBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-date outcomes. Check `results[]` — some dates may have failed. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "data": {
+                     *         "requested": 3,
+                     *         "createdCount": 2,
+                     *         "failedCount": 1,
+                     *         "results": [
+                     *           {
+                     *             "bookingDate": "2026-08-12",
+                     *             "outcome": "CREATED",
+                     *             "booking": {
+                     *               "id": "bkg_123",
+                     *               "status": "SUBMITTED",
+                     *               "bookingType": "PRIMARY",
+                     *               "bookingDate": "2026-08-12",
+                     *               "travelDistanceKm": 12.4,
+                     *               "carpoolPeople": 2,
+                     *               "submittedAt": "2026-08-04T11:20:00Z"
+                     *             }
+                     *           },
+                     *           {
+                     *             "bookingDate": "2026-08-13",
+                     *             "outcome": "FAILED",
+                     *             "code": "CAPACITY_FULL",
+                     *             "message": "All 12 slot(s) for 2026-08-13 are already taken — please choose another date"
+                     *           },
+                     *           {
+                     *             "bookingDate": "2026-08-14",
+                     *             "outcome": "CREATED",
+                     *             "booking": {
+                     *               "id": "bkg_124",
+                     *               "status": "SUBMITTED",
+                     *               "bookingType": "PRIMARY",
+                     *               "bookingDate": "2026-08-14",
+                     *               "travelDistanceKm": 12.4,
+                     *               "carpoolPeople": 2,
+                     *               "submittedAt": "2026-08-04T11:20:00Z"
+                     *             }
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingsBatchData"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createCommonPoolBooking: {

@@ -556,6 +556,89 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/WindowClosed' }
 
+  /bookings/batch:
+    post:
+      tags: [Bookings]
+      operationId: createBookingsBatch
+      summary: Submit parking requests for several dates at once
+      description: >
+        Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`,
+        applying the same trip details (vehicle, carpool, special requirement) to every date.
+
+
+        **Partial success is intentional and is why this returns 200, never 201.** Each date is
+        evaluated independently, in its own transaction, in ascending date order — so when quota is
+        tight the earliest dates win, deterministically. One date being full, already requested or
+        outside the window does NOT discard the others; that would defeat the point of the
+        no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the
+        booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have
+        returned (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+
+
+        A 200 with every result `FAILED` is a valid response. Request-level problems — an empty or
+        oversized `bookingDates`, a malformed date, a carpool that breaks the cap — are rejected as
+        400 before any booking is attempted, so a bad payload never books a partial set.
+      x-maturity: DEMO
+      x-required-roles: [USER, COMPANY_ADMIN, SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingsBatchRequest' }
+            example:
+              bookingDates: ["2026-08-12", "2026-08-13", "2026-08-14"]
+              vehicleType: CAR
+              vehicleNumber: MH12AB1234
+              carpoolPeople: 2
+              carpoolMembers:
+                - { name: Rahul Mehta, employeeEmail: rahul@assent.example }
+      responses:
+        '200':
+          description: Per-date outcomes. Check `results[]` — some dates may have failed.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingsBatchData' }
+              example:
+                success: true
+                data:
+                  requested: 3
+                  createdCount: 2
+                  failedCount: 1
+                  results:
+                    - bookingDate: "2026-08-12"
+                      outcome: CREATED
+                      booking:
+                        id: bkg_123
+                        status: SUBMITTED
+                        bookingType: PRIMARY
+                        bookingDate: "2026-08-12"
+                        travelDistanceKm: 12.4
+                        carpoolPeople: 2
+                        submittedAt: "2026-08-04T11:20:00Z"
+                    - bookingDate: "2026-08-13"
+                      outcome: FAILED
+                      code: CAPACITY_FULL
+                      message: All 12 slot(s) for 2026-08-13 are already taken — please choose another date
+                    - bookingDate: "2026-08-14"
+                      outcome: CREATED
+                      booking:
+                        id: bkg_124
+                        status: SUBMITTED
+                        bookingType: PRIMARY
+                        bookingDate: "2026-08-14"
+                        travelDistanceKm: 12.4
+                        carpoolPeople: 2
+                        submittedAt: "2026-08-04T11:20:00Z"
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /bookings/common-pool:
     post:
       tags: [Bookings]
@@ -3049,6 +3132,71 @@ components:
           type: array
           description: Optional carpool members; only same-company employees are scored (F4).
           items: { $ref: '#/components/schemas/CarpoolMemberInput' }
+
+    CreateBookingsBatchRequest:
+      type: object
+      description: >
+        Multi-date booking. Identical to CreateBookingRequest except that `bookingDate` becomes
+        `bookingDates`; every other field is applied unchanged to each date.
+      required: [bookingDates, carpoolPeople]
+      properties:
+        bookingDates:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          description: >
+            Target bookable weekdays (Mon–Fri, D7). Duplicates are collapsed and the list is sorted
+            ascending before booking. The cap of 20 is the most weekdays a maximum 4-week window can
+            contain, so it can never reject a legitimate selection.
+          items: { type: string, format: date }
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        vehicleNumber: { type: string, nullable: true }
+        carpoolPeople:
+          type: integer
+          minimum: 1
+          description: >
+            Total people incl. the driver (person 1, D3), applied to every date. Server enforces the
+            current carpool.maxPeople cap (default 4, D8).
+        specialRequirement: { type: string, nullable: true }
+        carpoolMembers:
+          type: array
+          description: Optional carpool members, applied to every date; only same-company employees are scored (F4).
+          items: { $ref: '#/components/schemas/CarpoolMemberInput' }
+
+    BookingBatchResult:
+      type: object
+      description: Outcome for a single date within a batch.
+      required: [bookingDate, outcome]
+      properties:
+        bookingDate: { type: string, format: date }
+        outcome: { type: string, enum: [CREATED, FAILED] }
+        booking:
+          allOf: [{ $ref: '#/components/schemas/BookingCreatedData' }]
+          nullable: true
+          description: Present when `outcome` is CREATED.
+        code:
+          type: string
+          nullable: true
+          description: >
+            Present when `outcome` is FAILED — the same error code the single-date endpoint would have
+            returned for this date (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+        message:
+          type: string
+          nullable: true
+          description: Present when `outcome` is FAILED — human-readable reason, safe to show the user.
+
+    BookingsBatchData:
+      type: object
+      required: [requested, createdCount, failedCount, results]
+      properties:
+        requested: { type: integer, description: Distinct dates evaluated after de-duplication. }
+        createdCount: { type: integer }
+        failedCount: { type: integer }
+        results:
+          type: array
+          description: One entry per requested date, ascending.
+          items: { $ref: '#/components/schemas/BookingBatchResult' }
 
     UpdateBookingRequest:
       type: object

@@ -38,6 +38,29 @@ export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export type CarpoolMemberInput = z.infer<typeof carpoolMemberInput>;
 
 /**
+ * Multi-date booking (openapi `CreateBookingsBatchRequest`). The trip details are shared; only the
+ * date varies, so this is `createBookingSchema` with `bookingDate` swapped for a list.
+ *
+ * The cap is the most weekdays a maximum 4-week window can hold (4 × 5), so it can never reject a
+ * legitimate selection while still bounding what one request can do. Duplicates are collapsed here
+ * rather than rejected: selecting the same date twice is a UI slip, not an error worth a 400.
+ */
+export const MAX_BATCH_DATES = 20;
+
+export const createBookingsBatchSchema = createBookingSchema
+  .omit({ bookingDate: true })
+  .extend({
+    bookingDates: z
+      .array(dateString)
+      .min(1, 'Select at least one date')
+      .transform((dates) => [...new Set(dates)].sort())
+      // Checked after de-duplication, so 20 distinct dates pass even if the client sent repeats.
+      .refine((dates) => dates.length <= MAX_BATCH_DATES, `Cannot book more than ${MAX_BATCH_DATES} dates at once`),
+  });
+
+export type CreateBookingsBatchInput = z.infer<typeof createBookingsBatchSchema>;
+
+/**
  * Slot-grid query (GET /availability, Phase 7 §4). Both bounds optional: with neither, the service
  * answers for the whole currently-open window, which is what the booking form asks for.
  */

@@ -11,6 +11,7 @@ import {
   resetTransactional,
 } from './integration/helpers';
 import { DEFAULT_WINDOW_CONFIG, requestableDates } from '../src/modules/bookings/bookings.window';
+import { currentIstCalendarDate } from '../src/modules/bookings/bookings.time';
 
 /**
  * Phase 7 end-to-end: the rolling booking window, the reserve-on-request slot grid, the weekly batch,
@@ -333,9 +334,10 @@ describe('security gate (Phase 7 §5)', () => {
     // Book today so the gate has something to match. Today is outside the request window, so create
     // the row directly — this test is about the gate's matching, not the booking rules.
     const aditi = await prisma.user.findFirstOrThrow({ where: { email: ASSENT_USERS[0] } });
-    const today = new Date();
-    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    const istToday = new Date(todayUtc);
+    // Must be the IST calendar date, which is what the gate matches on. Deriving it from UTC date
+    // parts made this test fail between 00:00 and 05:30 IST, when UTC is still on the previous day —
+    // a real red suite for anyone testing late in the evening UTC / early morning IST.
+    const istToday = currentIstCalendarDate(new Date());
     await prisma.bookingRequest.create({
       data: {
         bookingDate: istToday,

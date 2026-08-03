@@ -116,7 +116,7 @@ const breakdownFor = (distanceKm: number, people: number, finalScore: number) =>
 function seedBookings(): Record<string, BookingDetail> {
   return {
     'mock-booking-1': {
-      id: 'mock-booking-1', bookingDate: '2026-08-03', bookingType: 'PRIMARY', status: 'ALLOCATED',
+      id: 'mock-booking-1', bookingDate: MOCK_UPCOMING_DATE, bookingType: 'PRIMARY', status: 'ALLOCATED',
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
@@ -124,7 +124,7 @@ function seedBookings(): Record<string, BookingDetail> {
       scoreBreakdown: breakdownFor(8.5, 2, 38.8),
     },
     'bk-1': {
-      id: 'bk-1', bookingDate: '2026-08-03', bookingType: 'PRIMARY', status: 'ALLOCATED',
+      id: 'bk-1', bookingDate: MOCK_UPCOMING_DATE, bookingType: 'PRIMARY', status: 'ALLOCATED',
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
@@ -341,6 +341,21 @@ const addDaysTo = (d: Date, n: number): Date => {
   copy.setDate(copy.getDate() + n);
   return copy;
 };
+/**
+ * The demo's "upcoming allocated booking" date: today if it is a weekday, else the next Monday.
+ *
+ * Relative rather than a literal, because `BookingStatus` only offers **Release** for a booking dated
+ * today or later. A hardcoded date silently expires at midnight and takes the release affordance with
+ * it — which reads as a broken feature rather than a stale fixture, and cost a red suite once already.
+ * Exported so a test can assert the same value instead of re-deriving it.
+ */
+export const MOCK_UPCOMING_DATE: string = (() => {
+  let d = new Date();
+  // getDay(): 0 = Sunday, 6 = Saturday.
+  while (d.getDay() === 0 || d.getDay() === 6) d = addDaysTo(d, 1);
+  return isoOf(d);
+})();
+
 const isWeekday = (iso: string): boolean => {
   const day = new Date(`${iso}T00:00:00`).getDay();
   return day >= 1 && day <= 5;
@@ -501,6 +516,25 @@ const pageParams = (request: Request) => {
 const directoryEmails = (): Set<string> =>
   new Set(Object.values(companyUserState).flatMap((list) => list.map((u) => u.email.toLowerCase())));
 
+/**
+ * Carpool members must be existing users (any company). Every member needs an email, and it must
+ * resolve to a registered user — both cases come back as per-member field details so the form can flag
+ * the exact row. Shared by the single-date and batch booking handlers so they cannot disagree.
+ */
+const carpoolMemberDetails = (
+  members: { name?: string; employeeEmail?: string }[] | undefined,
+): { field: string; message: string }[] => {
+  const dir = directoryEmails();
+  return (members ?? []).flatMap((m, i) => {
+    const email = m.employeeEmail?.trim();
+    if (!email) return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
+    if (!dir.has(email.toLowerCase())) {
+      return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
+    }
+    return [];
+  });
+};
+
 /** Coherent, deterministic handlers for the hero + admin flows (override the generated random ones). */
 const hero = [
   // --- Auth ---
@@ -588,20 +622,7 @@ const hero = [
       carpoolPeople?: number;
       carpoolMembers?: { name?: string; employeeEmail?: string }[];
     };
-    // Carpool members must be existing users (any company). Every member needs an
-    // email, and it must resolve to a registered user — reject both cases with
-    // per-member field details so the form can flag the exact row.
-    const dir = directoryEmails();
-    const details = (b.carpoolMembers ?? []).flatMap((m, i) => {
-      const email = m.employeeEmail?.trim();
-      if (!email) {
-        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
-      }
-      if (!dir.has(email.toLowerCase())) {
-        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
-      }
-      return [];
-    });
+    const details = carpoolMemberDetails(b.carpoolMembers);
     if (details.length > 0) {
       return HttpResponse.json(
         { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
@@ -640,6 +661,81 @@ const hero = [
       },
       201,
     );
+  }),
+  /**
+   * POST /bookings/batch — one request per date, shared trip details.
+   *
+   * Mirrors the server's partial-success contract: always 200, each date evaluated independently
+   * against the same stateful grid the single-date handler mutates, so the mock demo can actually show
+   * "3 of 5 booked". Request-level member validation is rejected as 400 before any date is booked.
+   */
+  http.post(`${baseURL}/bookings/batch`, async ({ request }) => {
+    const b = (await request.json().catch(() => ({}))) as {
+      bookingDates?: string[];
+      carpoolPeople?: number;
+      carpoolMembers?: { name?: string; employeeEmail?: string }[];
+    };
+    const details = carpoolMemberDetails(b.carpoolMembers);
+    if (details.length > 0) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
+        { status: 400 },
+      );
+    }
+    const dates = [...new Set(b.bookingDates ?? [])].sort();
+    if (dates.length === 0) return fail(400, 'VALIDATION_ERROR', 'Select at least one date');
+    if (dates.length > 20) return fail(400, 'VALIDATION_ERROR', 'Cannot book more than 20 dates at once');
+
+    const results = dates.map((date) => {
+      const day = availabilityState[date];
+      const refuse = (code: string, message: string) => ({ bookingDate: date, outcome: 'FAILED' as const, code, message });
+      if (day?.decided) {
+        return refuse('WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
+      }
+      if (day?.mine) return refuse('CONFLICT', 'You already have a PRIMARY booking for this date');
+      if (day) {
+        const capacity = MOCK_QUOTA - day.blocked;
+        if (day.taken >= capacity) {
+          return refuse(
+            'CAPACITY_FULL',
+            `All ${capacity} slot(s) for ${date} are already taken — please choose another date`,
+          );
+        }
+        day.taken += 1;
+        day.mine = true;
+      }
+      const id = nextId('bkg');
+      const booking = {
+        id,
+        status: 'SUBMITTED' as const,
+        bookingType: 'PRIMARY' as const,
+        bookingDate: date,
+        travelDistanceKm: 6.2,
+        carpoolPeople: b.carpoolPeople ?? 1,
+        submittedAt: new Date().toISOString(),
+      };
+      // Register a detail row so the outcome panel's "View status" link resolves in the demo.
+      bookingState[id] = {
+        ...booking,
+        vehicleType: 'CAR',
+        vehicleNumber: null,
+        carpoolMemberCount: (b.carpoolPeople ?? 1) - 1,
+        specialRequirement: null,
+        allocationScore: null,
+        allocatedSlotNumber: null,
+        createdAt: booking.submittedAt,
+        carpoolMembers: [],
+      } as BookingDetail;
+      return { bookingDate: date, outcome: 'CREATED' as const, booking };
+    });
+
+    const createdCount = results.filter((r) => r.outcome === 'CREATED').length;
+    return ok({
+      requested: results.length,
+      createdCount,
+      failedCount: results.length - createdCount,
+      results,
+    });
   }),
   http.get(`${baseURL}/bookings/:id`, ({ params }) => {
     const detail = bookingState[String(params.id)];
