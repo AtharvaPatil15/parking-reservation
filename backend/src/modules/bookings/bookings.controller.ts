@@ -151,6 +151,30 @@ export const createBooking = asyncHandler(async (req, res) => {
   sendSuccess(res, toBookingCreated(booking), 201);
 });
 
+/**
+ * Multi-date booking. 200 rather than 201 because the response is a per-date report that may mix
+ * created and failed — including all-failed, which is still a successful *request* (openapi
+ * `BookingsBatchData`). A partial set is the intended outcome, not an error.
+ */
+export const createBookingsBatch = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const batch = await service.createBookings(req.user.id, req.body);
+  sendSuccess(
+    res,
+    {
+      requested: batch.requested,
+      createdCount: batch.createdCount,
+      failedCount: batch.failedCount,
+      results: batch.results.map((r) =>
+        r.outcome === 'CREATED'
+          ? { bookingDate: r.bookingDate, outcome: r.outcome, booking: toBookingCreated(r.booking) }
+          : { bookingDate: r.bookingDate, outcome: r.outcome, code: r.code, message: r.message },
+      ),
+    },
+    200,
+  );
+});
+
 export const updateBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.updateBooking(req.user.id, req.params.id, req.body);

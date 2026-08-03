@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
 import { server } from '../../mocks/node';
+import { MOCK_UPCOMING_DATE } from '../../mocks/handlers';
 import { History } from './History';
 
 function renderHistory() {
@@ -26,7 +27,9 @@ function renderHistory() {
 describe('History', () => {
   it('lists the user bookings', async () => {
     renderHistory();
-    expect(await screen.findByText('2026-08-03')).toBeInTheDocument();
+    // The seeded upcoming booking is date-relative, so assert against the same source rather than a
+    // literal that expires overnight.
+    expect(await screen.findByText(MOCK_UPCOMING_DATE)).toBeInTheDocument();
     // Past-dated rows are resolved states, never WAITLISTED (KI-2).
     expect(screen.getByText('ALLOCATED')).toBeInTheDocument();
     expect(screen.getByText('REJECTED')).toBeInTheDocument();
