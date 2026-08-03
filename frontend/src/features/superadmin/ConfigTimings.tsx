@@ -3,7 +3,12 @@ import { Button, Card, ErrorState, Input, LoadingState, Select, useToast } from 
 import { useConfig, useUpdateConfig } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
-import { labelForKey, validateConfigValue, validateTimingOrder } from './configValidation';
+import {
+  ENUM_CONFIG_OPTIONS,
+  labelForKey,
+  validateConfigValue,
+  validateTimingOrder,
+} from './configValidation';
 
 type ConfigEntry = components['schemas']['ConfigEntry'];
 
@@ -102,6 +107,20 @@ export function ConfigTimings() {
           key={e.key}
           {...common}
           options={BOOLEAN_OPTIONS}
+          value={value}
+          onChange={(ev) => setField(e.key, ev.target.value)}
+        />
+      );
+    }
+    // Fixed-value keys (Phase 7 window weeks / run day) get a picker: a typo there would be accepted
+    // by the client only to be silently coerced back to the default server-side.
+    const enumOptions = ENUM_CONFIG_OPTIONS[e.key];
+    if (enumOptions) {
+      return (
+        <Select
+          key={e.key}
+          {...common}
+          options={enumOptions}
           value={value}
           onChange={(ev) => setField(e.key, ev.target.value)}
         />

@@ -10,14 +10,30 @@ App URL: **http://localhost:5174/** (or whatever port `npm run dev` prints).
 |------|----------------|----------|----------|
 | **Super Admin** | `admin@acme.test` | any (e.g. `password`) | `/admin` |
 | **Company Admin** | `company@acme.test` | any (e.g. `password`) | `/company` |
+| **Security** | `security@acme.test` | any (e.g. `password`) | `/security` |
 | **User** | `user@acme.test` | any (e.g. `password`) | `/app` |
 
 ## How the role is chosen
-- email starts with `admin@`  → **SUPER_ADMIN**
-- email starts with `company@` → **COMPANY_ADMIN**
-- anything else               → **USER**
+- email starts with `admin@`    → **SUPER_ADMIN**
+- email starts with `company@`  → **COMPANY_ADMIN**
+- email starts with `security@` → **SECURITY** (Phase 7 gate operator)
+- anything else                 → **USER**
 
 So `admin@anything.com`, `company@x.io`, `jane@corp.com` all work — only the prefix matters.
+
+## Things to try (Phase 7)
+- **Slot grid:** `/book` shows each open date with a 12-box grid — green free, grey taken/blocked, and
+  your own reservation highlighted. Submitting fills a box; when a date runs out, submit is disabled
+  and the row says why.
+- **Next allocation run:** the booking page names the weekend run that will decide these dates, with a
+  live countdown, so you can see why booking early matters.
+- **Security gate:** sign in as `security@…` → two big buttons. Check in `MH 12 AB 1234` (has a booking)
+  vs `MH 12 CD 5678` (none — warns but still records) vs an unknown plate like `KA 05 ZZ 9999`
+  (recorded too; the barrier is never blocked). Checking the same car in twice is refused.
+- **Unbooked follow-up:** whatever the gate records without a booking appears on the Company Admin
+  dashboard under "Entered without a booking".
+- **Weekly run:** as Super Admin, `/admin` shows the band of dates the next weekend batch owns; running
+  it twice is safe (the second pass reports every date as already decided).
 
 ## Things to try
 - **Validation:** submit with an empty field → "Email is required." / "Password is required."; a malformed email → "Enter a valid email."

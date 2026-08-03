@@ -79,6 +79,19 @@ export const runCommonPool = asyncHandler(async (req, res) => {
   sendSuccess(res, toRunSummary(await service.getRunSummary(runId)), 200);
 });
 
+/**
+ * POST /allocation/weekly/run — the Phase 7 weekend batch. Decides every date in the band this run
+ * owns, in one call, and reports per-date outcomes so the Super Admin can see what happened.
+ */
+export const runWeekly = asyncHandler(async (req, res) => {
+  sendSuccess(res, await service.runWeeklyAllocation(req.user?.id), 200);
+});
+
+/** GET /allocation/weekly — the band the next batch owns, with pending-request counts per date. */
+export const weeklyPreview = asyncHandler(async (_req, res) => {
+  sendSuccess(res, await service.getWeeklyRunPreview(), 200);
+});
+
 export const listAllocations = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const p = parsePagination(req.query as Record<string, unknown>);

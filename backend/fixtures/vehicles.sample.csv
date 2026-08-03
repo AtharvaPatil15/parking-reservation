@@ -1,0 +1,7 @@
+Car Number,Owner Name,Email,Contact Number,Company,Vehicle Type,Make Model,Colour
+MH 12 AB 1234,Aditi Rao,aditi@assent.example,9822001101,ASSENT,CAR,Hyundai i20,White
+MH12CD5678,Rahul Mehta,rahul@assent.example,9822001102,ASSENT,CAR,Tata Nexon,Blue
+MH-14-EF-9012,Sara Khan,sara@assent.example,9822001103,Assent Compliance,EV_CAR,Tata Nexon EV,Grey
+MH 12 GH 3456,Assent Company Admin,admin@assent.example,9822001104,ASSENT,CAR,Honda City,Silver
+MH 12 XY 7788,Vikram Joshi,vikram.joshi@contractor.example,9822001105,ASSENT,CAR,Maruti Swift,Red
+MH 12 ZZ 4321,Redbricks Facilities Van,,9822001106,REDBRICKS,OTHER,Mahindra Bolero,White

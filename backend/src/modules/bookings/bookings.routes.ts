@@ -7,8 +7,16 @@ import {
   updateBookingSchema,
   releaseBookingSchema,
   listBookingsQuery,
+  availabilityQuery,
 } from './bookings.schema';
 import * as c from './bookings.controller';
+
+/**
+ * /availability — the per-date slot grid for the caller's own company (Phase 7 §4). Every
+ * authenticated role can book, so every authenticated role can see the grid.
+ */
+export const availabilityRouter = Router();
+availabilityRouter.get('/', authenticate, validate(availabilityQuery, 'query'), c.getAvailability);
 
 // /bookings — any authenticated role may create/own a booking (USER, COMPANY_ADMIN, SUPER_ADMIN);
 // GET list is admin-only; GET/:id is visible to USER (own) / COMPANY_ADMIN (own company) / SUPER_ADMIN.

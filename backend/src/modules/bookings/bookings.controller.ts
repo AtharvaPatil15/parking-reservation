@@ -3,6 +3,14 @@ import { sendSuccess } from '../../lib/response';
 import { parsePagination } from '../../lib/pagination';
 import { UnauthenticatedError } from '../../lib/errors';
 import * as service from './bookings.service';
+import { getAvailability as loadAvailability } from './bookings.availability';
+import { loadWindowConfig } from './bookings.windowConfig';
+import {
+  bookingWindowSummary,
+  earliestRequestableDate,
+  latestRequestableDate,
+  toIsoDate,
+} from './bookings.window';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const num = (v: unknown) => (v != null ? Number(v) : null);
@@ -103,6 +111,21 @@ export const listBookings = asyncHandler(async (req, res) => {
     p,
   );
   sendSuccess(res, rows.map(toAdminBooking), 200, { page: p.page, pageSize: p.pageSize, total });
+});
+
+/**
+ * GET /availability — the slot grid plus the window/next-run summary the booking form renders
+ * (Phase 7 §4). The company is taken from the principal, never the query, so one tenant can never
+ * enumerate another's occupancy. Defaults to exactly the currently-open window.
+ */
+export const getAvailability = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const now = new Date();
+  const cfg = await loadWindowConfig();
+  const from = (req.query.from as string | undefined) ?? toIsoDate(earliestRequestableDate(now, cfg));
+  const to = (req.query.to as string | undefined) ?? toIsoDate(latestRequestableDate(now, cfg));
+  const days = await loadAvailability(req.user.companyId, req.user.id, from, to, cfg, now);
+  sendSuccess(res, { window: bookingWindowSummary(now, cfg), days }, 200);
 });
 
 export const createBooking = asyncHandler(async (req, res) => {

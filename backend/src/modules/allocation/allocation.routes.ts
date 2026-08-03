@@ -9,6 +9,9 @@ import * as c from './allocation.controller';
 const allocationRouter = Router();
 allocationRouter.post('/primary/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runPrimary);
 allocationRouter.post('/common-pool/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runCommonPool);
+// Phase 7 weekly weekend batch: the band is derived from config, so the request carries no date.
+allocationRouter.post('/weekly/run', authenticate, requireRole('SUPER_ADMIN'), c.runWeekly);
+allocationRouter.get('/weekly', authenticate, requireRole('SUPER_ADMIN'), c.weeklyPreview);
 // Lookup by date+type (registered before /runs/:id so the literal path wins). Null when not yet run.
 allocationRouter.get('/runs', authenticate, requireRole('SUPER_ADMIN'), validate(runLookupQuery, 'query'), c.getRunForDate);
 allocationRouter.get('/runs/:id', authenticate, requireRole('SUPER_ADMIN'), c.getRun);

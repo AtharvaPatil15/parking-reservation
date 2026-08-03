@@ -105,6 +105,12 @@ enum CommonPoolSlotStatus {
   EXPIRED
 }
 
+// Gate visit lifecycle (Phase 7 — security persona). A visit opens on check-in and closes on check-out.
+enum GateEventStatus {
+  CHECKED_IN
+  CHECKED_OUT
+}
+
 enum HolidayType {
   COMPANY
   BUILDING
@@ -164,6 +170,8 @@ model Company {
   commonPoolContributions CommonPoolSlot[]
   holidays                Holiday[]
   workingDayConfigs       WorkingDayConfiguration[]
+  vehicles                Vehicle[]
+  gateEvents              GateEvent[]
 
   @@index([status])
 }
@@ -458,6 +466,78 @@ model CommonPoolSlot {
 
   @@unique([slotId, bookingDate])
   @@index([bookingDate, status])
+}
+
+// ---------------------------------------------------------------------------
+// Gate: vehicle registry & check-in/check-out (Phase 7 — security persona)
+// ---------------------------------------------------------------------------
+
+// Master list of known cars, loaded from the building's Excel sheet via `npm run import:vehicles`
+// (docs/phase-7-no-rejection-booking-and-security.md §6). `vehicleNumber` is the NORMALIZED plate —
+// uppercased with spaces/hyphens stripped — so "MH 12 AB 1234" and "mh12ab1234" resolve to one row;
+// `displayNumber` keeps the human form for display. `userId` is a soft ref (see "by" fields note).
+model Vehicle {
+  id            String      @id @default(cuid())
+  vehicleNumber String      @unique
+  displayNumber String
+  ownerName     String
+  ownerEmail    String?
+  contactNumber String?
+  companyId     String?
+  userId        String? // resolved same-email User (soft ref) — how the gate knows "who the person is"
+  vehicleType   VehicleType @default(CAR)
+  makeModel     String?
+  colour        String?
+  notes         String?
+  isActive      Boolean     @default(true)
+
+  company Company? @relation(fields: [companyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gateEvents GateEvent[]
+
+  @@index([companyId])
+  @@index([ownerEmail])
+  @@index([userId])
+}
+
+// One row per gate visit. The car number is snapshotted so an UNKNOWN plate can still be recorded
+// (D16 — never block the barrier). `hadBooking = false` rows are what the company-admin dashboard
+// surfaces as "entered without a booking".
+//
+// NOTE (partial unique): a vehicle may have many CHECKED_OUT visits on a date but only one open
+// CHECKED_IN one. Prisma's DSL cannot express that, so `prisma/partial-unique.sql` adds
+// `UNIQUE (vehicleNumber, bookingDate) WHERE status = 'CHECKED_IN'`. The service checks first for a
+// clean 409; the index is the race backstop.
+model GateEvent {
+  id            String          @id @default(cuid())
+  vehicleNumber String // normalized snapshot — set even when no Vehicle row matches
+  vehicleId     String?
+  userId        String? // resolved owner (soft ref)
+  companyId     String?
+  bookingRequestId String? // the booking this visit was matched to (soft ref)
+  bookingDate   DateTime        @db.Date // IST business date of the visit
+  hadBooking    Boolean         @default(false)
+  status        GateEventStatus @default(CHECKED_IN)
+
+  ownerNameSnapshot String?
+  checkInAt         DateTime
+  checkOutAt        DateTime?
+  checkedInById     String // security user id (soft ref)
+  checkedOutById    String? // security user id (soft ref)
+  notes             String?
+
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
+  company Company? @relation(fields: [companyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingDate, status])
+  @@index([vehicleNumber, bookingDate])
+  @@index([companyId, bookingDate, hadBooking])
 }
 
 // ---------------------------------------------------------------------------

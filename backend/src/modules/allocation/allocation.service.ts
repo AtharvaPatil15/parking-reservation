@@ -1,8 +1,10 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type AllocationRunStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { getNumber } from '../../config/systemConfig';
 import { NotFoundError, ValidationError } from '../../lib/errors';
 import { isValidCalendarDate, parseCalendarDate } from '../bookings/bookings.time';
+import { bookingWindowSummary, upcomingAllocationBand, type AllocationBand } from '../bookings/bookings.window';
+import { loadWindowConfig } from '../bookings/bookings.windowConfig';
 import { score, rankCandidates, type RankCandidate } from './score';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
@@ -531,6 +533,134 @@ export async function runCommonPoolAllocation(bookingDateStr: string, triggeredB
   return run.id;
 }
 
+// ---------------------------------------------------------------------------
+// Weekly batch run (Phase 7 D10)
+// ---------------------------------------------------------------------------
+
+export interface WeeklyRunDateResult {
+  bookingDate: string;
+  runId: string;
+  status: AllocationRunStatus;
+  /** True when this date had already been decided by an earlier run and was left untouched. */
+  alreadyDecided: boolean;
+  allocated: number;
+  waitlisted: number;
+  error: string | null;
+}
+
+export interface WeeklyRunResult {
+  runAt: string;
+  band: AllocationBand;
+  dates: WeeklyRunDateResult[];
+  totalAllocated: number;
+  totalWaitlisted: number;
+}
+
+/**
+ * Run the weekly weekend batch (Phase 7 D10/D11).
+ *
+ * This is a thin band-scoped loop over the existing per-date `runPrimaryAllocation`, deliberately:
+ * that run is already idempotent per (PRIMARY, date), transactional, and score-explaining, so the
+ * batch inherits all of it. What the batch adds is *which* dates a run owns — the half-open band
+ * `[today + leadDays, nextRunDate + leadDays)` — which is what guarantees every date is decided
+ * exactly once and always at least `approvalLeadDays` ahead of itself.
+ *
+ * Dates already COMPLETED by an earlier run short-circuit inside `runPrimaryAllocation` and are
+ * reported as `alreadyDecided`, so re-invoking the batch is safe. One date failing does not abort the
+ * rest — each date is independent, and its error is reported in that date's row.
+ */
+export async function runWeeklyAllocation(
+  triggeredById?: string,
+  now: Date = new Date(),
+): Promise<WeeklyRunResult> {
+  const cfg = await loadWindowConfig();
+  const band = upcomingAllocationBand(now, cfg);
+
+  const dates: WeeklyRunDateResult[] = [];
+  for (const bookingDate of band.dates) {
+    const parsed = parseCalendarDate(bookingDate);
+    const before = await prisma.allocationRun.findUnique({
+      where: { runType_bookingDate: { runType: 'PRIMARY', bookingDate: parsed } },
+      select: { status: true },
+    });
+    const alreadyDecided = before?.status === 'COMPLETED';
+
+    let runId: string;
+    try {
+      runId = await runPrimaryAllocation(bookingDate, triggeredById);
+    } catch (err) {
+      dates.push({
+        bookingDate,
+        runId: '',
+        status: 'FAILED',
+        alreadyDecided,
+        allocated: 0,
+        waitlisted: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
+
+    const [run, allocated, waitlisted] = await Promise.all([
+      prisma.allocationRun.findUnique({ where: { id: runId }, select: { status: true, error: true } }),
+      prisma.parkingAllocation.count({ where: { allocationRunId: runId } }),
+      prisma.bookingRequest.count({ where: { bookingDate: parsed, bookingType: 'PRIMARY', status: 'WAITLISTED' } }),
+    ]);
+    dates.push({
+      bookingDate,
+      runId,
+      status: run?.status ?? 'FAILED',
+      alreadyDecided,
+      allocated,
+      waitlisted,
+      error: run?.error ?? null,
+    });
+  }
+
+  return {
+    runAt: now.toISOString(),
+    band,
+    dates,
+    totalAllocated: dates.reduce((s, d) => s + d.allocated, 0),
+    totalWaitlisted: dates.reduce((s, d) => s + d.waitlisted, 0),
+  };
+}
+
+/** Preview the band the next (or current) weekly batch owns — lets the SA see it before running. */
+export async function getWeeklyRunPreview(now: Date = new Date()) {
+  const cfg = await loadWindowConfig();
+  const band = upcomingAllocationBand(now, cfg);
+  const runs = await prisma.allocationRun.findMany({
+    where: {
+      runType: 'PRIMARY',
+      bookingDate: { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) },
+    },
+    select: { bookingDate: true, status: true },
+  });
+  const statusByDate = new Map(runs.map((r) => [isoDate(r.bookingDate), r.status]));
+
+  const pending = await prisma.bookingRequest.groupBy({
+    by: ['bookingDate'],
+    where: {
+      bookingType: 'PRIMARY',
+      status: 'SUBMITTED',
+      bookingDate: { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) },
+    },
+    _count: { _all: true },
+  });
+  const pendingByDate = new Map(pending.map((p) => [isoDate(p.bookingDate), p._count._all]));
+
+  return {
+    window: bookingWindowSummary(now, cfg),
+    band,
+    dates: band.dates.map((d) => ({
+      bookingDate: d,
+      runStatus: statusByDate.get(d) ?? null,
+      pendingRequests: pendingByDate.get(d) ?? 0,
+    })),
+  };
+}
+
 /**
  * Per-slot allocation roster (who holds which seat, for what date, primary vs common pool).
  * COMPANY_ADMIN is forced to their own company; SUPER_ADMIN sees all and may narrow with `companyId`.
@@ -542,8 +672,13 @@ export async function listAllocations(
   page: PageArgs,
 ) {
   const where: Prisma.ParkingAllocationWhereInput = {};
-  if (principal.role === 'COMPANY_ADMIN') where.companyId = principal.companyId;
-  else if (filter.companyId) where.companyId = filter.companyId;
+  // Allow-listed tenant scoping: only SUPER_ADMIN gets the building-wide view. Any other non-CA role
+  // (the route admits none today) must not fall through to "no filter" = every company.
+  if (principal.role === 'SUPER_ADMIN') {
+    if (filter.companyId) where.companyId = filter.companyId;
+  } else {
+    where.companyId = principal.companyId;
+  }
   if (filter.date) where.bookingDate = parseCalendarDate(filter.date);
   if (filter.type) where.allocationType = filter.type;
 

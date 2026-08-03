@@ -25,6 +25,17 @@ export const queryKeys = {
   parkingAreas: ['parking-areas'] as const,
   companyQuota: (companyId: string) => ['companies', companyId, 'quota'] as const,
 
+  // Booking window + slot grid (Phase 7)
+  availability: (from: string, to: string) => ['availability', from, to] as const,
+  weeklyRunPreview: ['allocation', 'weekly'] as const,
+
+  // Gate / security persona (Phase 7)
+  vehicleSearch: (search: string) => ['vehicles', 'search', search] as const,
+  vehicleLookup: (number: string) => ['vehicles', 'lookup', number] as const,
+  gateEvents: (date: string, status: string, page: number) => ['gate', 'events', date, status, page] as const,
+  unbookedEntries: (date: string, companyId: string, page: number) =>
+    ['gate', 'unbooked', date, companyId, page] as const,
+
   // Company-scoped (P5-11 drill-in + P5-12 company admin)
   companyAdminDashboard: ['dashboard', 'company-admin'] as const,
   companyUsers: (companyId: string, page: number, pageSize: number, status: string) =>

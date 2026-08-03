@@ -3,6 +3,12 @@
 > Source of truth for later phases. Every decision here is intentional; if a later phase needs to
 > diverge, update this file first. Timezone for all scheduling is **Asia/Kolkata (IST, UTC+05:30)**.
 
+> **Superseded in part by Phase 7** (2026-08-03) — see
+> [`phase-7-no-rejection-booking-and-security.md`](phase-7-no-rejection-booking-and-security.md).
+> That phase replaces the same-day 18:00 cutoff for PRIMARY bookings with a rolling 2/4-week window and
+> a weekly weekend allocation batch (D9–D14), and adds the SECURITY gate persona (D15–D17). Everything
+> below still holds except the PRIMARY submission window itself; D2/D3/D7/D8 are unchanged.
+
 ## 1. Locked decisions (confirmed with stakeholder)
 
 | # | Decision | Choice | Rationale |

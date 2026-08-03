@@ -37,6 +37,8 @@ tags:
     description: System configuration — booking/allocation timings and weights (D8)
   - name: Dashboards
     description: Pre-aggregated counts per role
+  - name: Gate
+    description: Security persona — vehicle registry lookup + check-in/check-out (Phase 7)
   - name: Reports
     description: Reporting + CSV export (Later)
 
@@ -1721,6 +1723,299 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
 
   # ---------------------------------------------------------------------------
+  # Availability + Gate  (Phase 7)
+  # ---------------------------------------------------------------------------
+  /availability:
+    get:
+      tags: [Bookings]
+      operationId: getAvailability
+      summary: Per-date slot grid for the caller's company + booking-window summary
+      description: >
+        Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the
+        currently-open window) with the company's quota, how much is blocked/taken, and a `boxes`
+        array to render as the slot grid. The company always comes from the principal, never the
+        query. `taken` counts LIVE REQUESTS, not just allocations (D12) — a submitted request holds a
+        box immediately, which is what keeps demand within supply so nobody is rejected later.
+      x-maturity: MVP
+      x-required-roles: [USER, COMPANY_ADMIN, SUPER_ADMIN, SECURITY]
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: First date (YYYY-MM-DD). Defaults to the first requestable date.
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: false
+          description: Last date (YYYY-MM-DD). Defaults to the end of the window. Max span 120 days.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Window summary plus per-date availability.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AvailabilityResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /allocation/weekly:
+    get:
+      tags: [Allocation]
+      operationId: getWeeklyRunPreview
+      summary: Preview the band the next weekly batch owns
+      description: >
+        Role SUPER_ADMIN. Shows the dates the upcoming weekend batch will decide, each with its
+        pending-request count and current run status, so the run can be inspected before triggering.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Band preview.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WeeklyRunPreview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /allocation/weekly/run:
+    post:
+      tags: [Allocation]
+      operationId: runWeeklyAllocation
+      summary: Run the weekly weekend allocation batch
+      description: >
+        Role SUPER_ADMIN. Decides every bookable weekday in the band the upcoming run owns —
+        `[nextRunDate + approvalLeadDays, followingRunDate + approvalLeadDays)` — by delegating to the
+        per-date primary run, so each date stays idempotent and score-explained. Takes no body: the
+        band comes from config. Dates already COMPLETED are reported as `alreadyDecided` and left
+        alone, and one failing date does not abort the others. Overflow waitlists; it never rejects.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Per-date outcomes for the band.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WeeklyRunResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /vehicles:
+    get:
+      tags: [Gate]
+      operationId: searchVehicles
+      summary: Typeahead over the vehicle registry
+      description: >
+        Roles SECURITY, SUPER_ADMIN. Matches on the normalized plate or the owner's name. Not
+        tenant-scoped (D15) — one guard serves every company in the building.
+      x-maturity: MVP
+      x-required-roles: [SECURITY, SUPER_ADMIN]
+      parameters:
+        - { name: search, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 25 } }
+      responses:
+        '200':
+          description: Matching vehicles (empty when `search` is blank).
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/VehicleSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /vehicles/lookup:
+    get:
+      tags: [Gate]
+      operationId: lookupVehicle
+      summary: Resolve owner + today's booking from a car number
+      description: >
+        Roles SECURITY, SUPER_ADMIN. The car number is normalized (uppercased, separators stripped),
+        so any spacing works. Never 404s for an unrecognised plate — `known: false` is a normal,
+        recordable case (D16). Also reports whether the car is already inside (`openVisit`).
+      x-maturity: MVP
+      x-required-roles: [SECURITY, SUPER_ADMIN]
+      parameters:
+        - { name: number, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Lookup result.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GateLookup' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /gate/check-in:
+    post:
+      tags: [Gate]
+      operationId: gateCheckIn
+      summary: Record a vehicle entering
+      description: >
+        Role SECURITY. Stamps `checkInAt` and returns `hadBooking` so the UI can warn when the driver
+        has no booking for today — the entry is still recorded (D16) and surfaces on the company
+        admin's dashboard. 409 only for a genuine double check-in (the car is already inside).
+      x-maturity: MVP
+      x-required-roles: [SECURITY]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GateCheckInRequest' }
+      responses:
+        '201':
+          description: Visit opened.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GateEvent' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /gate/check-out:
+    post:
+      tags: [Gate]
+      operationId: gateCheckOut
+      summary: Record a vehicle leaving
+      description: >
+        Role SECURITY. Closes the car's open visit (the most recent one, so a car that entered before
+        IST midnight and leaves after it still checks out cleanly). 404 when it is not inside.
+      x-maturity: MVP
+      x-required-roles: [SECURITY]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GateCheckOutRequest' }
+      responses:
+        '200':
+          description: Visit closed.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GateEvent' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /gate/events:
+    get:
+      tags: [Gate]
+      operationId: listGateEvents
+      summary: Gate log for a date (paged, newest first)
+      description: 'Roles SECURITY, SUPER_ADMIN. Defaults to today (IST). Building-wide (D15).'
+      x-maturity: MVP
+      x-required-roles: [SECURITY, SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [CHECKED_IN, CHECKED_OUT] }
+      responses:
+        '200':
+          description: Paged gate log.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/GateEvent' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /gate/unbooked:
+    get:
+      tags: [Gate]
+      operationId: listUnbookedEntries
+      summary: Entries recorded without a booking (company-admin follow-up feed)
+      description: >
+        Roles COMPANY_ADMIN (own company) or SUPER_ADMIN (all; optional `companyId`). These are the
+        D16 entries the guard let through without a booking. An unregistered plate has no company, so
+        it appears only for the SUPER_ADMIN — nobody can attribute an unknown car to a tenant.
+      x-maturity: MVP
+      x-required-roles: [COMPANY_ADMIN, SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - name: companyId
+          in: query
+          required: false
+          description: SUPER_ADMIN only — narrow to one company. Ignored for COMPANY_ADMIN.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paged unbooked entries.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/GateEvent' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
   # Reports  (P3-09 — Later)
   # ---------------------------------------------------------------------------
   /reports/{type}:
@@ -1893,6 +2188,7 @@ components:
         - FORBIDDEN          # 403
         - NOT_FOUND          # 404
         - CONFLICT           # 409
+        - CAPACITY_FULL      # 409 — every slot for the date is held (Phase 7 D12)
         - WINDOW_CLOSED      # 422
         - RATE_LIMITED       # 429
         - INTERNAL           # 500
@@ -1908,7 +2204,7 @@ components:
     # --- Enums (from prisma/schema.prisma) ---
     RoleName:
       type: string
-      enum: [SUPER_ADMIN, COMPANY_ADMIN, USER]
+      enum: [SUPER_ADMIN, COMPANY_ADMIN, SECURITY, USER]
     UserStatus:
       type: string
       enum: [PENDING, ACTIVE, REJECTED, INACTIVE]
@@ -1974,12 +2270,14 @@ components:
         pinCode: { type: string }
         registrationType:
           type: string
-          enum: [EMPLOYEE, COMPANY_ADMIN]
+          enum: [EMPLOYEE, COMPANY_ADMIN, SECURITY]
           default: EMPLOYEE
           description: >
             Who the applicant registers as. EMPLOYEE → USER role, approved by the Company Admin.
             COMPANY_ADMIN → requests admin of the (existing, ACTIVE) company, approved by the
             Super Admin; approval also grants the CompanyAdmin assignment (F11).
+            SECURITY → a building gate operator (Phase 7 D15), approved by the Super Admin only;
+            approval simply activates the account. Registers against the building company.
         distanceKm:
           type: number
           nullable: true
@@ -2308,6 +2606,219 @@ components:
           description: Absent when the user has no upcoming booking.
         cutoffCountdownSeconds: { type: integer, nullable: true }
         previousBookingsCount: { type: integer }
+
+    # --- Booking window + availability grid (Phase 7) ---
+    BookingWindow:
+      type: object
+      description: >
+        The rolling request window and the weekly run it closes at (Phase 7 §3). Everything the client
+        needs to say "book between X and Y; results published on Z".
+      required:
+        [nextRunAt, nextRunCountdownSeconds, runDay, runTime, windowWeeks, approvalLeadDays,
+         earliestDate, latestDate, requestableDates]
+      properties:
+        nextRunAt: { type: string, format: date-time, description: When the next weekly batch runs. }
+        nextRunCountdownSeconds: { type: integer, description: Seconds until `nextRunAt`; 0 once passed. }
+        runDay: { type: string, enum: [SATURDAY, SUNDAY] }
+        runTime: { type: string, description: 'HH:MM IST.' }
+        windowWeeks: { type: integer, enum: [2, 4] }
+        approvalLeadDays: { type: integer, description: Days a date is decided ahead of itself (D11). }
+        earliestDate: { type: string, format: date }
+        latestDate: { type: string, format: date }
+        requestableDates:
+          type: array
+          description: Bookable weekdays currently open for requests.
+          items: { type: string, format: date }
+
+    SlotBoxState:
+      type: string
+      description: >
+        MINE = the caller's own reservation, TAKEN = someone else's, BLOCKED = withheld by an admin,
+        AVAILABLE = free. Render AVAILABLE green and everything else grey.
+      enum: [AVAILABLE, TAKEN, BLOCKED, MINE]
+
+    SlotBox:
+      type: object
+      required: [index, state]
+      properties:
+        index: { type: integer, description: 1-based position in the grid. }
+        state: { $ref: '#/components/schemas/SlotBoxState' }
+
+    UnavailableReason:
+      type: string
+      description: Why a date cannot be requested; `null` when it can.
+      enum: [INVALID_DATE, NOT_WEEKDAY, TOO_SOON, BEYOND_WINDOW, NO_QUOTA, FULL, ALREADY_BOOKED]
+
+    DayAvailability:
+      type: object
+      required: [date, quota, blocked, taken, available, mine, requestable, boxes]
+      properties:
+        date: { type: string, format: date }
+        quota:
+          type: integer
+          description: The company's effective quota for this date — also the number of boxes (D14).
+        blocked: { type: integer }
+        taken:
+          type: integer
+          description: Live requests holding a box (D12), not merely completed allocations.
+        available: { type: integer }
+        mine: { type: boolean, description: True when the caller already holds a request for this date. }
+        requestable: { type: boolean }
+        reason:
+          allOf: [ { $ref: '#/components/schemas/UnavailableReason' } ]
+          nullable: true
+        message: { type: string, nullable: true, description: Human-readable explanation of `reason`. }
+        boxes:
+          type: array
+          items: { $ref: '#/components/schemas/SlotBox' }
+
+    AvailabilityResponse:
+      type: object
+      required: [window, days]
+      properties:
+        window: { $ref: '#/components/schemas/BookingWindow' }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/DayAvailability' }
+
+    AllocationBand:
+      type: object
+      description: The half-open date range one weekly run owns — `[from, toExclusive)`.
+      required: [from, toExclusive, dates]
+      properties:
+        from: { type: string, format: date }
+        toExclusive: { type: string, format: date }
+        dates:
+          type: array
+          items: { type: string, format: date }
+
+    WeeklyRunDateResult:
+      type: object
+      required: [bookingDate, runId, status, alreadyDecided, allocated, waitlisted]
+      properties:
+        bookingDate: { type: string, format: date }
+        runId: { type: string, description: Empty when the date failed before a run row was resolved. }
+        status: { $ref: '#/components/schemas/AllocationRunStatus' }
+        alreadyDecided:
+          type: boolean
+          description: True when an earlier run had already completed this date and it was left untouched.
+        allocated: { type: integer }
+        waitlisted: { type: integer }
+        error: { type: string, nullable: true }
+
+    WeeklyRunResult:
+      type: object
+      required: [runAt, band, dates, totalAllocated, totalWaitlisted]
+      properties:
+        runAt: { type: string, format: date-time }
+        band: { $ref: '#/components/schemas/AllocationBand' }
+        dates:
+          type: array
+          items: { $ref: '#/components/schemas/WeeklyRunDateResult' }
+        totalAllocated: { type: integer }
+        totalWaitlisted: { type: integer }
+
+    WeeklyRunPreview:
+      type: object
+      required: [window, band, dates]
+      properties:
+        window: { $ref: '#/components/schemas/BookingWindow' }
+        band: { $ref: '#/components/schemas/AllocationBand' }
+        dates:
+          type: array
+          items:
+            type: object
+            required: [bookingDate, pendingRequests]
+            properties:
+              bookingDate: { type: string, format: date }
+              runStatus:
+                allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
+                nullable: true
+              pendingRequests: { type: integer }
+
+    # --- Gate: vehicle registry + check-in/out (Phase 7 §5) ---
+    VehicleSummary:
+      type: object
+      required: [id, vehicleNumber, displayNumber, ownerName, vehicleType]
+      properties:
+        id: { type: string }
+        vehicleNumber: { type: string, description: Normalized plate (uppercase, no separators). }
+        displayNumber: { type: string, description: Plate as written in the source sheet. }
+        ownerName: { type: string }
+        ownerEmail: { type: string, nullable: true }
+        contactNumber: { type: string, nullable: true }
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        makeModel: { type: string, nullable: true }
+        colour: { type: string, nullable: true }
+        companyId: { type: string, nullable: true }
+        companyName: { type: string, nullable: true }
+
+    GateLookup:
+      type: object
+      required: [vehicleNumber, known, bookingDate, hasBooking]
+      properties:
+        vehicleNumber: { type: string }
+        known: { type: boolean, description: False for a plate not in the registry — still checkable-in (D16). }
+        vehicle:
+          allOf: [ { $ref: '#/components/schemas/VehicleSummary' } ]
+          nullable: true
+        bookingDate: { type: string, format: date, description: Today's IST business date. }
+        hasBooking: { type: boolean }
+        booking:
+          type: object
+          nullable: true
+          required: [id, status, bookingType]
+          properties:
+            id: { type: string }
+            status: { $ref: '#/components/schemas/BookingStatus' }
+            bookingType: { $ref: '#/components/schemas/BookingType' }
+            allocatedSlotNumber: { type: string, nullable: true }
+        openVisit:
+          type: object
+          nullable: true
+          description: Set when the car is already inside and has not checked out.
+          required: [id, checkInAt]
+          properties:
+            id: { type: string }
+            checkInAt: { type: string, format: date-time }
+
+    GateEventStatus:
+      type: string
+      enum: [CHECKED_IN, CHECKED_OUT]
+
+    GateEvent:
+      type: object
+      required: [id, vehicleNumber, displayNumber, bookingDate, hadBooking, status, checkInAt]
+      properties:
+        id: { type: string }
+        vehicleNumber: { type: string }
+        displayNumber: { type: string }
+        ownerName: { type: string, nullable: true }
+        companyId: { type: string, nullable: true }
+        companyName: { type: string, nullable: true }
+        bookingDate: { type: string, format: date }
+        bookingRequestId: { type: string, nullable: true }
+        hadBooking:
+          type: boolean
+          description: False → surfaced on the company-admin dashboard as an entry without a booking (D16).
+        status: { $ref: '#/components/schemas/GateEventStatus' }
+        checkInAt: { type: string, format: date-time }
+        checkOutAt: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+
+    GateCheckInRequest:
+      type: object
+      required: [vehicleNumber]
+      properties:
+        vehicleNumber: { type: string, description: Any spacing/case — normalized server-side. }
+        notes: { type: string, nullable: true }
+
+    GateCheckOutRequest:
+      type: object
+      required: [vehicleNumber]
+      properties:
+        vehicleNumber: { type: string }
+        notes: { type: string, nullable: true }
 
     # --- Reports (P3-09 — Later) ---
     ReportType:

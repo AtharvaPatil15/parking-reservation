@@ -17,6 +17,11 @@ const TIME_KEYS = [
   'booking.commonPoolResultsBy',
 ] as const;
 
+/** Weekly allocation-run days (Phase 7 D10) — the run is a weekend batch. */
+const RUN_DAYS = ['SATURDAY', 'SUNDAY'] as const;
+/** Allowed booking horizons in weeks (Phase 7 D9) — the requirement is "2 weeks or 4 weeks". */
+const WINDOW_WEEKS = [2, 4] as const;
+
 function toMinutes(hhmm: string): number | null {
   const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -50,6 +55,26 @@ function validateValue(key: string, valueType: string, v: string): string | null
     case 'password.minLength': {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 1) return 'Must be an integer >= 1';
+      break;
+    }
+    // ---- Phase 7: booking window + weekly allocation run ----
+    case 'booking.windowWeeks': {
+      const n = Number(v);
+      if (!WINDOW_WEEKS.includes(n as (typeof WINDOW_WEEKS)[number])) {
+        return `Must be one of ${WINDOW_WEEKS.join(' or ')} weeks`;
+      }
+      break;
+    }
+    case 'booking.allocationRunDay':
+      if (!RUN_DAYS.includes(v as (typeof RUN_DAYS)[number])) {
+        return `Must be one of ${RUN_DAYS.join(' | ')}`;
+      }
+      break;
+    case 'booking.approvalLeadDays': {
+      const n = Number(v);
+      // The lead time is what guarantees a user learns the outcome early enough to arrange
+      // another way in (D11). Capped below a week so it can never swallow a whole run band.
+      if (!Number.isInteger(n) || n < 1 || n > 6) return 'Must be an integer between 1 and 6';
       break;
     }
     default:

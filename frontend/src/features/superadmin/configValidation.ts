@@ -19,6 +19,11 @@ const TIMING_LABELS: Record<string, string> = {
   'booking.primaryResultsBy': 'Primary results by',
   'booking.commonPoolClose': 'Common-pool close',
   'booking.commonPoolResultsBy': 'Common-pool results by',
+  // Phase 7 — spelled out because the humanized fallback ("Window weeks") loses the meaning.
+  'booking.windowWeeks': 'Booking window (weeks ahead)',
+  'booking.allocationRunDay': 'Weekly allocation run day',
+  'booking.allocationRunTime': 'Weekly allocation run time',
+  'booking.approvalLeadDays': 'Decision lead time (days)',
 };
 
 function toMinutes(hhmm: string): number | null {
@@ -58,11 +63,38 @@ export function validateConfigValue(key: string, valueType: string, v: string): 
       if (!Number.isInteger(n) || n < 1) return 'Must be an integer ≥ 1';
       break;
     }
+    // ---- Phase 7: booking window + weekly allocation run ----
+    case 'booking.windowWeeks':
+      if (v !== '2' && v !== '4') return 'Must be 2 or 4 weeks';
+      break;
+    case 'booking.allocationRunDay':
+      if (v !== 'SATURDAY' && v !== 'SUNDAY') return 'Must be SATURDAY or SUNDAY';
+      break;
+    case 'booking.approvalLeadDays': {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1 || n > 6) return 'Must be an integer between 1 and 6';
+      break;
+    }
     default:
       break;
   }
   return null;
 }
+
+/**
+ * Keys whose value is a fixed set, so the config screen can offer a picker instead of a free-text
+ * box — the two Phase 7 keys where a typo would be silently accepted as "fall back to the default".
+ */
+export const ENUM_CONFIG_OPTIONS: Record<string, Array<{ value: string; label: string }>> = {
+  'booking.windowWeeks': [
+    { value: '2', label: '2 weeks' },
+    { value: '4', label: '4 weeks' },
+  ],
+  'booking.allocationRunDay': [
+    { value: 'SATURDAY', label: 'Saturday' },
+    { value: 'SUNDAY', label: 'Sunday' },
+  ],
+};
 
 /**
  * Cross-field timing-order check over the merged config (current values overlaid

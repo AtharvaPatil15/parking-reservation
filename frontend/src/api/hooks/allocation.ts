@@ -7,6 +7,8 @@ import type { components } from '../types';
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
 type AllocationBreakdown = components['schemas']['AllocationBreakdown'];
 type AllocationRosterItem = components['schemas']['AllocationRosterItem'];
+type WeeklyRunResult = components['schemas']['WeeklyRunResult'];
+type WeeklyRunPreview = components['schemas']['WeeklyRunPreview'];
 
 /** Invalidate everything a completed allocation run changes: rosters, dashboards, the seat roster. */
 function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
@@ -15,6 +17,29 @@ function invalidateAfterRun(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['allocationRun', 'byDate'] }); // flip the run to "done" for its date
   qc.invalidateQueries({ queryKey: queryKeys.superAdminDashboard });
   qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
+  // Phase 7: a run closes its band's dates for requests, so the grid and the band preview both move.
+  qc.invalidateQueries({ queryKey: ['availability'] });
+  qc.invalidateQueries({ queryKey: queryKeys.weeklyRunPreview });
+}
+
+/** GET /allocation/weekly — the band the next weekend batch owns, with pending counts per date. */
+export function useWeeklyRunPreview() {
+  return useQuery<WeeklyRunPreview>({
+    queryKey: queryKeys.weeklyRunPreview,
+    queryFn: () => unwrap<WeeklyRunPreview>(api.GET('/allocation/weekly')),
+  });
+}
+
+/**
+ * POST /allocation/weekly/run — the Phase 7 weekend batch. Takes no body: the band comes from
+ * config, so there is no date for the caller to get wrong.
+ */
+export function useRunWeeklyAllocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap<WeeklyRunResult>(api.POST('/allocation/weekly/run')),
+    onSuccess: () => invalidateAfterRun(qc),
+  });
 }
 
 /** POST /allocation/primary/run — returns the run summary (use `.id` for the breakdown). */
