@@ -42,7 +42,7 @@ The plan and the code stay in sync, so a readiness check is always meaningful.
 - **Prithviraj** → Phase 4 allocation engine + booking + scheduler + notifications + backend integration tests.
 
 ## Frozen contracts (don't drift without a reviewed change)
-1. **DB schema** — [`../../prisma/schema.prisma`](../../prisma/schema.prisma) (done, validated).
+1. **DB schema** — [`backend/prisma/schema.prisma`](../../backend/prisma/schema.prisma) (done, validated).
 2. **API contract** — `backend/openapi.yaml` (produced in Phase 3, frozen at M0).
 3. **Decisions** — [`../decisions.md`](../decisions.md) (quota model, scoring formula §3, no geolocation,
    Mon–Fri, configurable timings D8).
@@ -53,7 +53,7 @@ The plan and the code stay in sync, so a readiness check is always meaningful.
 Point an agent (or a teammate) at your codebase and this folder. Copy-paste prompt:
 
 > **Hi, I'm `<name>`.** Please read my codebase at `<repo path>` and check it against `docs/plan/` — our main
-> implementation plan — and the frozen contracts (`prisma/schema.prisma`, `backend/openapi.yaml`,
+> implementation plan — and the frozen contracts (`backend/prisma/schema.prisma`, `backend/openapi.yaml`,
 > `docs/decisions.md`).
 >
 > For **my assigned tasks** (Owner: `<name>`), report each task as **DONE / PARTIAL / MISSING** with

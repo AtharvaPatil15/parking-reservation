@@ -414,6 +414,7 @@ Secrets are placeholders for local; real secrets via env/secret manager in deplo
 
 ## 6.3 Database migrate + seed
 ```bash
+cd backend                                  # the schema + migrations live here
 npx prisma migrate dev --name init          # create schema
 psql "$DATABASE_URL" -f prisma/partial-unique.sql   # F7 addendum (optional in dev)
 npx prisma db seed                            # roles, Redbricks+SA, Assent+CA, users, slots, quota, config, templates

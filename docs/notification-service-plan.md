@@ -1,7 +1,7 @@
 # Notification & Email Service — Concrete Plan
 
 **Status:** design now (priority), **delivery implemented in Phase 4**. The data model
-(`NotificationTemplate`, `Notification`) already exists in [`prisma/schema.prisma`](../prisma/schema.prisma);
+(`NotificationTemplate`, `Notification`) already exists in [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma);
 this document specifies exactly how the service will use it so implementation is unambiguous.
 
 ---
@@ -55,7 +55,7 @@ interface NotificationChannelProvider {
   renders them, applies the dedupe check, and enqueues one job per channel.
 
 ## 5. Event catalog → template mapping
-All template `code`s below are already seeded in `prisma/seed.ts` (EMAIL channel; IN_APP rows added in
+All template `code`s below are already seeded in `backend/prisma/seed.ts` (EMAIL channel; IN_APP rows added in
 Phase 4). Trigger = where in the domain flow the event fires.
 
 | Event (`code`) | Trigger | Recipient | Key placeholders |

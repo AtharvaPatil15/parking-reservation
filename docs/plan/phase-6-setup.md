@@ -26,8 +26,8 @@ Services `postgres`, `redis`, `backend`, `frontend`; healthchecks; backend waits
 - **Status:** ☐
 
 #### P6-04 · Migrate/seed scripts + partial-unique SQL · Owner: Devashish · Tag: DEMO · Deps: P4-03
-- **AC:** documented commands: `prisma migrate dev`, apply `prisma/partial-unique.sql`, `prisma db seed`; `package.json` `prisma.seed` points to `prisma/seed.ts`.
-- **Evidence:** `package.json` (`prisma.seed`), `prisma/partial-unique.sql`.
+- **AC:** documented commands: `prisma migrate dev`, apply `backend/prisma/partial-unique.sql`, `prisma db seed`; `backend/package.json` `prisma.seed` points to `prisma/seed.ts` (resolved from `backend/`).
+- **Evidence:** `package.json` (`prisma.seed`), `backend/prisma/partial-unique.sql`.
 - **Status:** ☐
 
 #### P6-05 · README + seeded credentials · Owner: Devashish · Tag: DEMO · Deps: P6-02
