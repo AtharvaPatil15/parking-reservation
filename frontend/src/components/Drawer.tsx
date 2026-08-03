@@ -16,6 +16,11 @@ export interface DrawerProps {
    * `sheet` — wide panel for a form with its own actions (roomy padding, footer row).
    */
   variant?: 'sheet' | 'nav';
+  /**
+   * Drop the panel's own padding and fill so the child can run full-bleed —
+   * used by the nav rail, which carries its own plane and spacing.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -35,6 +40,7 @@ export function Drawer({
   footer,
   side = 'right',
   variant = 'sheet',
+  bare = false,
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -78,8 +84,9 @@ export function Drawer({
         aria-label={!title && isNav ? 'Navigation' : undefined}
         tabIndex={-1}
         className={cn(
-          'absolute inset-y-0 flex flex-col border-border bg-surface shadow-pop outline-none',
-          isNav ? 'w-64 max-w-[80vw]' : 'w-full max-w-md',
+          'absolute inset-y-0 flex flex-col border-border shadow-pop outline-none',
+          bare ? 'bg-transparent' : 'bg-surface',
+          isNav ? 'w-[248px] max-w-[80vw]' : 'w-full max-w-md',
           side === 'right' ? 'right-0 border-l' : 'left-0 border-r',
         )}
       >
@@ -98,7 +105,7 @@ export function Drawer({
           </div>
         )}
         {/* The body scrolls, so a long list never pushes the footer actions off-screen. */}
-        <div className={cn('flex-1 overflow-y-auto', isNav ? 'p-2' : 'px-6 py-5')}>{children}</div>
+        <div className={cn('flex-1 overflow-y-auto', bare ? '' : isNav ? 'p-2' : 'px-6 py-5')}>{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
       </div>
     </div>,

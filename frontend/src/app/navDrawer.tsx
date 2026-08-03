@@ -4,7 +4,25 @@ export interface NavDrawerItem {
   to: string;
   label: string;
   end?: boolean;
+  /** Key into the sidebar's icon set (see app/navIcons.tsx). Falls back to a generic mark. */
+  icon?: NavIconName;
+  /** Renders a divider above this item, grouping the cross-role booking links. */
+  dividerBefore?: boolean;
 }
+
+/** Names of the Lucide-derived glyphs the nav rail can draw. */
+export type NavIconName =
+  | 'dashboard'
+  | 'park'
+  | 'history'
+  | 'users'
+  | 'ban'
+  | 'building'
+  | 'sliders'
+  | 'grid'
+  | 'shield'
+  | 'play'
+  | 'calendar';
 
 interface NavDrawerContextValue {
   items: NavDrawerItem[];

@@ -22,7 +22,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const describedById = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       {label && (
         <label
           htmlFor={inputId}
@@ -45,11 +45,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         {...rest}
       />
       {error ? (
-        <p id={`${inputId}-error`} className="text-sm text-danger">
+        <p id={`${inputId}-error`} className="text-xs text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${inputId}-hint`} className="text-sm text-text-muted">
+        <p id={`${inputId}-hint`} className="text-xs text-text-muted">
           {hint}
         </p>
       ) : null}

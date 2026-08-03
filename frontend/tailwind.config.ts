@@ -42,13 +42,17 @@ export default {
           DEFAULT: withVar('--danger'),
           subtle: withVar('--danger-subtle'),
         },
-        /* The dark steel nav rail — its own plane, dark in both themes. */
+        /* The dark steel nav rail — its own plane, dark in both themes.
+           The two `ln` steps are rules drawn on that plane, so they are
+           alpha-on-ink rather than token channels. */
         field: {
           DEFAULT: withVar('--field'),
           ink: withVar('--field-ink'),
           'ink-2': withVar('--field-ink-2'),
           'ink-3': withVar('--field-ink-3'),
           accent: withVar('--field-accent'),
+          ln: 'rgb(231 234 238 / 0.14)',
+          ln2: 'rgb(231 234 238 / 0.3)',
         },
       },
       fontFamily: {

@@ -30,7 +30,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     placeholder && value === undefined && defaultValue === undefined ? '' : defaultValue;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       {label && (
         <label
           htmlFor={selectId}
@@ -66,11 +66,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         ))}
       </select>
       {error ? (
-        <p id={`${selectId}-error`} className="text-sm text-danger">
+        <p id={`${selectId}-error`} className="text-xs text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${selectId}-hint`} className="text-sm text-text-muted">
+        <p id={`${selectId}-hint`} className="text-xs text-text-muted">
           {hint}
         </p>
       ) : null}

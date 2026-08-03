@@ -46,4 +46,20 @@
   ::selection {
     background: rgb(var(--primary) / 0.3);
   }
+
+  /* Native date/time pickers ship a dark-on-light glyph that reads as a foreign
+     object on the steel ground — and disappears entirely in dark mode. Tint it
+     to the muted ink instead, and let it take the accent on hover. */
+  ::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+  }
+
+  ::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  :root[data-theme='dark'] ::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
 }
