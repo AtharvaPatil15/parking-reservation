@@ -59,4 +59,20 @@ describe('profile vehicles', () => {
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.error.message).toMatch(/already registered/i);
   });
+
+  it('does not let a user claim an active registry car with no linked account', async () => {
+    const aditi = await login('aditi@assent.example');
+
+    const duplicate = await request(app)
+      .post(`${API}/me/vehicles`)
+      .set(bearer(aditi))
+      .send({ vehicleNumber: 'MH 12 XY 7788' });
+
+    expect(duplicate.status).toBe(409);
+    expect(duplicate.body.error.message).toMatch(/already registered/i);
+    await expect(prisma.vehicle.findUniqueOrThrow({ where: { vehicleNumber: 'MH12XY7788' } })).resolves.toMatchObject({
+      ownerEmail: null,
+      userId: null,
+    });
+  });
 });
