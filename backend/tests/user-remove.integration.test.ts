@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { API, bearer, login } from './integration/helpers';
+import { API, bearer, futureBookableDate, login, resetTransactional } from './integration/helpers';
 
 const TEST_EMAILS = [
   'remove-user@assent.example',
@@ -11,6 +11,8 @@ const TEST_EMAILS = [
 ];
 
 beforeEach(async () => {
+  await resetTransactional();
+  await prisma.commonPoolSlot.deleteMany({});
   const users = await prisma.user.findMany({ where: { email: { in: TEST_EMAILS } }, select: { id: true } });
   const ids = users.map((u) => u.id);
   await prisma.companyAdmin.deleteMany({ where: { userId: { in: ids } } });
@@ -53,6 +55,59 @@ describe('DELETE /users/:id', () => {
     const row = await prisma.user.findUniqueOrThrow({ where: { id: target.id } });
     expect(row.deletedAt).not.toBeNull();
     expect(row.status).toBe('INACTIVE');
+  });
+
+  it('cancels live bookings and releases common-pool allocations for removed users', async () => {
+    const target = await createUser('remove-user@assent.example', 'USER');
+    const ca = await login('admin@assent.example');
+    const date = new Date(`${futureBookableDate()}T00:00:00.000Z`);
+    const slot = await prisma.parkingSlot.findFirstOrThrow({
+      where: { deletedAt: null },
+      select: { id: true },
+    });
+    const booking = await prisma.bookingRequest.create({
+      data: {
+        bookingDate: date,
+        userId: target.id,
+        companyId: target.companyId,
+        bookingType: 'COMMON_POOL',
+        status: 'ALLOCATED',
+        userAddress: target.address,
+        pinCode: target.pinCode,
+        vehicleNumber: 'KA051234',
+        vehicleType: 'CAR',
+        submittedAt: new Date(),
+        allocationTime: new Date(),
+      },
+    });
+    await prisma.commonPoolSlot.create({
+      data: { bookingDate: date, slotId: slot.id, sourceCompanyId: target.companyId, status: 'ALLOCATED' },
+    });
+    await prisma.parkingAllocation.create({
+      data: {
+        bookingRequestId: booking.id,
+        bookingDate: date,
+        slotId: slot.id,
+        companyId: target.companyId,
+        allocationType: 'COMMON_POOL',
+      },
+    });
+
+    await request(app).delete(`${API}/users/${target.id}`).set(bearer(ca)).expect(200);
+
+    await expect(prisma.parkingAllocation.findUnique({ where: { bookingRequestId: booking.id } })).resolves.toBeNull();
+    await expect(prisma.commonPoolSlot.findUniqueOrThrow({ where: { slotId_bookingDate: { slotId: slot.id, bookingDate: date } } })).resolves.toMatchObject({
+      status: 'AVAILABLE',
+    });
+    await expect(prisma.bookingRequest.findUniqueOrThrow({ where: { id: booking.id } })).resolves.toMatchObject({
+      status: 'CANCELLED',
+      cancellationReason: 'User removed',
+    });
+    await expect(
+      prisma.bookingRequest.count({
+        where: { userId: target.id, status: { in: ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'ALLOCATED'] } },
+      }),
+    ).resolves.toBe(0);
   });
 
   it('keeps company admins from removing privileged users', async () => {

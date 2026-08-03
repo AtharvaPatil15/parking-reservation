@@ -44,8 +44,11 @@ export async function createMyVehicle(userId: string, input: CreateMyVehicleInpu
   const user = await getProfile(userId);
   const vehicleNumber = normalizePlate(input.vehicleNumber);
   const existing = await prisma.vehicle.findUnique({ where: { vehicleNumber } });
-  if (existing && existing.userId && existing.userId !== userId) {
-    throw new ConflictError('This car number is already registered to another user');
+  if (existing) {
+    const ownerEmailMatches = existing.ownerEmail?.toLowerCase() === user.email.toLowerCase();
+    if ((existing.userId && existing.userId !== userId) || (!existing.userId && !ownerEmailMatches)) {
+      throw new ConflictError('This car number is already registered in the vehicle registry');
+    }
   }
 
   const data = {
