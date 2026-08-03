@@ -35,6 +35,8 @@ export function BookingStatus() {
   const [editOpen, setEditOpen] = useState(false);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
+  // No longer editable in the UI, but still round-tripped so saving an edit
+  // preserves any special requirement already on the booking rather than clearing it.
   const [special, setSpecial] = useState('');
   const [members, setMembers] = useState<{ name: string; employeeEmail: string }[]>([]);
 
@@ -236,7 +238,6 @@ export function BookingStatus() {
             )}
           </div>
 
-          <Input label="Special requirement" value={special} onChange={(e) => setSpecial(e.target.value)} />
           {editError && <p role="alert" className="text-sm text-danger">{editError}</p>}
         </div>
       </Modal>

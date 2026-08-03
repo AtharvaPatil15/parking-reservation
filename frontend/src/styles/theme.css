@@ -11,9 +11,12 @@
  */
 :root,
 :root[data-theme='light'] {
-  --canvas: 220 221 224; /* #DCDDE0 — page ground, recessive so line-drawing cards read */
+  /* The app's own ground is the near-white --sf. (The redesign's darker #dcdde0
+     is the design-doc desk the mockup frame sits on, not the app background —
+     panels are transparent and read as white against this.) */
+  --canvas: 242 242 243; /* #F2F2F3 — app ground */
   --surface: 242 242 243; /* #F2F2F3 */
-  --surface-2: 233 233 234; /* #E9E9EA */
+  --surface-2: 233 233 234; /* #E9E9EA — the crumb strip, a step down from the ground */
   --border: 208 208 209; /* #D0D0D1 — hairline */
   --text: 29 31 32; /* #1D1F20 */
   --text-muted: 92 93 96; /* #5C5D60 */
@@ -43,9 +46,9 @@
 }
 
 :root[data-theme='dark'] {
-  --canvas: 12 14 16; /* #0C0E10 */
+  --canvas: 21 24 27; /* #15181B — app ground (the redesign's dark --sf) */
   --surface: 21 24 27; /* #15181B */
-  --surface-2: 28 32 36; /* #1C2024 */
+  --surface-2: 28 32 36; /* #1C2024 — the crumb strip, a step up from the ground */
   --border: 75 75 77; /* #4B4B4D */
   --text: 232 234 236; /* #E8EAEC */
   --text-muted: 147 148 151; /* #939497 */

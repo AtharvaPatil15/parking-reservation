@@ -322,10 +322,6 @@ export function BookingForm() {
             </Button>
           </fieldset>
 
-          <div className="border-t border-border pt-5">
-            <Input label="Special requirement" {...register('specialRequirement')} error={errors.specialRequirement?.message} />
-          </div>
-
           <Button type="submit" loading={createBooking.isPending} disabled={submitBlocked} className="w-full">
             {/* Covers both "the chosen date is full" and "nothing in the window is open at all". */}
             {submitBlocked ? 'Pick an available date' : 'Submit request'}

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Drawer } from '../components';
 import { useAuth } from '../lib/auth';
 import type { Role } from '../lib/roles';
@@ -42,7 +42,9 @@ function ShellFrame({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <CrumbStrip onOpenNav={navItems.length > 0 ? () => setDrawerOpen(true) : undefined} />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 lg:px-11">{children}</main>
+        {/* Full-bleed: the content region fills the frame beside the rail rather
+            than sitting in a centred column, so panels reach the viewport edge. */}
+        <main className="w-full flex-1 px-6 py-6 lg:px-[26px]">{children}</main>
       </div>
 
       {/* Below lg the same rail rides in the drawer, so there is one nav to maintain. */}
@@ -67,6 +69,13 @@ const ROLE_LABEL: Record<Role, string> = {
  */
 function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user } = useAuth();
+  const { pathname } = useLocation();
+  const navItems = useNavDrawerItems();
+  // Name the section from the matching nav item, so the strip always uses the
+  // same wording as the rail rather than a second set of labels.
+  const section = navItems
+    .filter((i) => (i.end ? pathname === i.to : pathname.startsWith(i.to)))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.label;
 
   return (
     <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-border bg-surface-2 px-6 lg:px-11">
@@ -81,13 +90,14 @@ function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
             <MenuIcon />
           </button>
         )}
-        <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted">
+        <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap">
           {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
+          {section && <span className="text-text-muted/70"> / {section}</span>}
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {user?.companyName && (
-          <span className="hidden font-mono text-2xs uppercase tracking-[0.12em] text-text-muted sm:inline">
+          <span className="hidden font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap sm:inline">
             {user.companyName}
           </span>
         )}

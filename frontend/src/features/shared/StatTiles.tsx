@@ -17,9 +17,12 @@ export function StatTiles({ stats }: { stats: Stat[] }) {
     // A 1px gap over a border-coloured ground draws every internal rule at once,
     // so cell count and wrapping can't leave a stray or missing edge.
     <Blueprint className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
-      {stats.map((s) => (
+      {stats.map((s, i) => (
         <div key={s.label} className="bg-canvas px-3.5 py-3">
-          <p className="text-2xs uppercase tracking-[0.1em] text-text-muted">{s.label}</p>
+          {/* Numbered like a spec sheet: the index reads as a plate reference. */}
+          <p className="font-mono text-3xs uppercase tracking-[0.14em] text-text-muted">
+            <span className="text-primary">{String(i + 1).padStart(2, '0')}</span> · {s.label}
+          </p>
           <p className="mt-1 font-heading text-3xl tabular-nums text-text">{s.value}</p>
           {s.hint && <p className="mt-0.5 text-xs text-text-muted">{s.hint}</p>}
         </div>

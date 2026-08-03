@@ -30,7 +30,7 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
       <table className="w-full text-left text-sm">
         {/* Headers are monospace and letterspaced — the system reads them as
             spec-sheet column labels rather than as prose. */}
-        <thead className="font-mono text-2xs uppercase tracking-[0.11em] text-text-muted">
+        <thead className="font-mono text-3xs uppercase tracking-[0.11em] text-text-muted">
           <tr>
             {columns.map((col) => (
               <th

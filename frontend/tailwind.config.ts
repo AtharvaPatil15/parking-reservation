@@ -63,16 +63,19 @@ export default {
         mono: ['ui-monospace', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
-        /* Industry runs tighter than the previous scale: 13.5px body, and headings
-           that lean on the condensed face rather than on size alone. */
-        '2xs': ['0.625rem', { lineHeight: '0.875rem', letterSpacing: '0.1em' }],
-        xs: ['0.6875rem', { lineHeight: '1rem' }],
-        sm: ['0.8125rem', { lineHeight: '1.15rem' }],
-        base: ['0.84375rem', { lineHeight: '1.3rem' }],
-        lg: ['1rem', { lineHeight: '1.2' }],
-        xl: ['1.25rem', { lineHeight: '1.2' }],
-        '2xl': ['1.5rem', { lineHeight: '1.1' }],
-        '3xl': ['2.0625rem', { lineHeight: '1.04' }],
+        /* Matched to the redesign's own specs: 13.5px body (.sub/.inp), 13px table
+           cells (.dc2), 9.5px monospace column labels (.hc/.kick/.cm), 16px card
+           titles (.ct), 31px plate figures (.big), 33px page headings (.h1). */
+        '3xs': ['0.59375rem', { lineHeight: '1', letterSpacing: '0.14em' }], // 9.5px
+        '2xs': ['0.625rem', { lineHeight: '0.875rem', letterSpacing: '0.1em' }], // 10px
+        xs: ['0.71875rem', { lineHeight: '1rem' }], // 11.5px
+        sm: ['0.8125rem', { lineHeight: '1.15rem' }], // 13px
+        base: ['0.84375rem', { lineHeight: '1.5' }], // 13.5px
+        lg: ['1rem', { lineHeight: '1.2' }], // 16px
+        xl: ['1.25rem', { lineHeight: '1.2' }], // 20px
+        '2xl': ['1.5rem', { lineHeight: '1.1' }], // 24px
+        '3xl': ['1.9375rem', { lineHeight: '1' }], // 31px — .big
+        '4xl': ['2.0625rem', { lineHeight: '1.04' }], // 33px — .h1
       },
       borderRadius: {
         /* Square corners are the system's defining move — one change reskins
