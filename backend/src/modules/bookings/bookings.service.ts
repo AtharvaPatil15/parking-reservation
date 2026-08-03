@@ -2,11 +2,13 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { getNumber } from '../../config/systemConfig';
 import {
+  AppError,
   ValidationError,
   ConflictError,
   CapacityFullError,
   NotFoundError,
   WindowClosedError,
+  type ErrorCode,
 } from '../../lib/errors';
 import { parseCalendarDate, currentIstCalendarDate } from './bookings.time';
 import { checkRequestable, toIsoDate } from './bookings.window';
@@ -18,6 +20,7 @@ import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 import type {
   CreateBookingInput,
+  CreateBookingsBatchInput,
   UpdateBookingInput,
   ListBookingsQuery,
   ReleaseBookingInput,
@@ -112,22 +115,27 @@ async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => 
  * "no rejections" structural rather than a hope. Duplicate same-type request → 409 CONFLICT.
  * `now` is injectable for testing.
  */
-export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
-  // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
-  const windowCfg = await loadWindowConfig();
-  const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
-  if (!windowCheck.ok) {
-    if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
-    throw new WindowClosedError(windowCheck.message);
-  }
+/** The parts of a booking request that say nothing about *when* — shared by every date in a batch. */
+type TripDetails = Pick<CreateBookingInput, 'vehicleType' | 'carpoolPeople' | 'carpoolMembers'>;
 
-  // 2. Car-only POC: reject anything else, and persist the field explicitly even when a client omits it.
+/**
+ * Validate the date-independent trip details: car-only vehicle (POC), the live `carpool.maxPeople`
+ * cap (D8), member/seat consistency, and duplicate member emails (F4).
+ *
+ * Extracted so the batch endpoint can run these ONCE up front and answer 400. These rules give the
+ * same verdict for every date, so reporting them per date would repeat one mistake up to 20 times and
+ * bury the real message. Sharing the code (rather than re-implementing the checks in the batch path)
+ * is what keeps the two endpoints from drifting apart.
+ *
+ * Normalises `vehicleType` to 'CAR' in place, so the column is written explicitly even when a client
+ * omits it. Returns the trimmed member emails, which the caller needs for the same-company lookup.
+ */
+async function assertTripDetails(input: TripDetails): Promise<{ trimmedEmails: string[] }> {
   if (input.vehicleType && input.vehicleType !== 'CAR') {
     fail('vehicleType', 'Only normal car bookings are supported right now');
   }
   input.vehicleType = 'CAR';
 
-  // 3. Carpool headcount cap (D8) and member/seat consistency.
   const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
   if (input.carpoolPeople > maxPeople) {
     fail('carpoolPeople', `Must be between 1 and ${maxPeople}`);
@@ -137,13 +145,28 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     fail('carpoolMembers', `Cannot list more members than carpoolPeople - 1 (${input.carpoolPeople - 1})`);
   }
 
-  // 3b. Dedupe member emails within the request, case-insensitively (F4).
   const trimmedEmails = members
     .map((m) => m.employeeEmail?.trim())
     .filter((e): e is string => !!e);
   const lowered = trimmedEmails.map((e) => e.toLowerCase());
   const firstDupe = lowered.find((e, i) => lowered.indexOf(e) !== i);
   if (firstDupe) fail('carpoolMembers', `Duplicate carpool member email: ${firstDupe}`);
+
+  return { trimmedEmails };
+}
+
+export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
+  // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
+  const windowCfg = await loadWindowConfig();
+  const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
+  if (!windowCheck.ok) {
+    if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
+    throw new WindowClosedError(windowCheck.message);
+  }
+
+  // 2/3/3b. Vehicle + carpool rules (nothing here depends on the date).
+  const { trimmedEmails } = await assertTripDetails(input);
+  const members = input.carpoolMembers ?? [];
 
   // 4. Load the user for the distance/address snapshot (F6).
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -291,6 +314,65 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     }
     throw err;
   }
+}
+
+export type BookingBatchResult =
+  | { bookingDate: string; outcome: 'CREATED'; booking: Awaited<ReturnType<typeof createBooking>> }
+  | { bookingDate: string; outcome: 'FAILED'; code: ErrorCode; message: string };
+
+/**
+ * Multi-date booking (POST /bookings/batch). One PRIMARY request per date, same trip details on each.
+ *
+ * Deliberately NOT one transaction, and deliberately not parallel:
+ *
+ *  - **Independent outcomes.** Rolling the whole batch back because one date filled up would take
+ *    away slots the user had legitimately won. The phase exists to stop people being told "no" after
+ *    the fact (D12), so the honest answer is "you got these four, this one was full", not "start
+ *    again". A caller who wants all-or-nothing can still book dates one at a time.
+ *  - **Sequential, ascending.** Each date's capacity check is its own SERIALIZABLE transaction;
+ *    running them concurrently would make sibling dates of the same batch contend for the same
+ *    company's rows and burn `withSerializableRetry` attempts against each other. Ascending order
+ *    also makes scarcity deterministic — when quota is tight the earliest dates win, every time,
+ *    rather than depending on which transaction happened to commit first.
+ *
+ * Only `AppError` is caught per date. An unexpected failure is a bug, not a booking outcome, so it
+ * propagates and fails the whole request rather than being reported as "this date didn't work".
+ */
+export async function createBookings(
+  userId: string,
+  input: CreateBookingsBatchInput,
+  now: Date = new Date(),
+) {
+  const { bookingDates, ...shared } = input;
+
+  // Pre-flight the date-independent rules so a bad carpool is one 400, not the same VALIDATION_ERROR
+  // repeated for every date — and so a malformed request never books a partial set.
+  await assertTripDetails(shared);
+
+  const results: BookingBatchResult[] = [];
+
+  for (const bookingDate of bookingDates) {
+    try {
+      // Fresh object per date: createBooking mutates `input.vehicleType` (car-only normalisation), so
+      // sharing one would leak that write across iterations.
+      const booking = await createBooking(userId, { ...shared, bookingDate }, now);
+      results.push({ bookingDate, outcome: 'CREATED', booking });
+    } catch (err) {
+      if (err instanceof AppError) {
+        results.push({ bookingDate, outcome: 'FAILED', code: err.code, message: err.message });
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  const createdCount = results.filter((r) => r.outcome === 'CREATED').length;
+  return {
+    requested: results.length,
+    createdCount,
+    failedCount: results.length - createdCount,
+    results,
+  };
 }
 
 /**

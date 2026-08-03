@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
 import {
   createBookingSchema,
+  createBookingsBatchSchema,
   updateBookingSchema,
   releaseBookingSchema,
   listBookingsQuery,
@@ -22,6 +23,15 @@ availabilityRouter.get('/', authenticate, validate(availabilityQuery, 'query'), 
 // GET list is admin-only; GET/:id is visible to USER (own) / COMPANY_ADMIN (own company) / SUPER_ADMIN.
 const bookingsRouter = Router();
 bookingsRouter.post('/', authenticate, requireRole('USER', 'COMPANY_ADMIN', 'SUPER_ADMIN'), validate(createBookingSchema), c.createBooking);
+// Multi-date: one PRIMARY request per date, independent per-date outcomes (200, never 201). Declared
+// before '/:id' routes so "batch" is never parsed as a booking id.
+bookingsRouter.post(
+  '/batch',
+  authenticate,
+  requireRole('USER', 'COMPANY_ADMIN', 'SUPER_ADMIN'),
+  validate(createBookingsBatchSchema),
+  c.createBookingsBatch,
+);
 // Admin roster: COMPANY_ADMIN (own company) / SUPER_ADMIN (all, optional companyId filter).
 bookingsRouter.get(
   '/',

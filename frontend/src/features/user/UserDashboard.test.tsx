@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
 import { server } from '../../mocks/node';
+import { MOCK_UPCOMING_DATE } from '../../mocks/handlers';
 import { UserDashboard } from './UserDashboard';
 
 function renderDash() {
@@ -25,7 +26,7 @@ function renderDash() {
 describe('UserDashboard', () => {
   it('shows the upcoming booking + a book CTA', async () => {
     renderDash();
-    expect(await screen.findByText(/2026-08-03/)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(MOCK_UPCOMING_DATE))).toBeInTheDocument();
     expect(screen.getByText('ALLOCATED')).toBeInTheDocument();
     expect(screen.getByText(/next allocation run/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /book a slot/i })).toBeInTheDocument();

@@ -1,5 +1,12 @@
 export { useLogin, useLogout, useRegister, useActiveCompanies } from './auth';
-export { useCreateBooking, useUpdateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
+export {
+  useCreateBooking,
+  useCreateBookings,
+  useUpdateBooking,
+  useBooking,
+  useReleaseBooking,
+  useAdminBookings,
+} from './bookings';
 export type { AdminBookingsFilter } from './bookings';
 export {
   useRunPrimaryAllocation,
