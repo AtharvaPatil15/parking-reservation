@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { ToastProvider } from '../../components';
 import { AuthProvider, type AuthUser } from '../../lib/auth';
@@ -36,5 +36,13 @@ describe('Approvals', () => {
     await screen.findByText('Nadia Khan');
     await userEvent.click(screen.getAllByRole('button', { name: /approve/i })[0]);
     expect(await screen.findByText(/user approved/i)).toBeInTheDocument();
+  });
+
+  it('removes a member with the X action', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderApprovals();
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /remove priya rao/i }));
+    expect(await screen.findByText(/user removed/i)).toBeInTheDocument();
   });
 });

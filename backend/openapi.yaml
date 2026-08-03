@@ -1422,6 +1422,28 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [Company Users]
+      operationId: removeUser
+      summary: Remove a user
+      description: >
+        Soft-removes a user. Super Admin may remove company-admin and security users.
+        Company Admin may remove non-privileged users from their own company.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      responses:
+        '200': { $ref: '#/components/responses/MessageOk' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /companies/{id}/admins:
     parameters:
       - name: id
