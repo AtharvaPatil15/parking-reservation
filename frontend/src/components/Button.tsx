@@ -1,24 +1,8 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
-import { cn } from '../lib/cn';
 import { Spinner } from './Spinner';
+import { buttonClasses, type ButtonSize, type ButtonVariant } from './buttonStyles';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-export type ButtonSize = 'sm' | 'md';
-
-const base =
-  'inline-flex items-center justify-center gap-2 rounded-control font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60';
-
-const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-hover',
-  secondary: 'border border-border bg-surface text-text hover:bg-surface-2',
-  ghost: 'text-primary hover:bg-primary-subtle',
-  danger: 'bg-danger text-white hover:opacity-90',
-};
-
-const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
-};
+export type { ButtonSize, ButtonVariant };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -38,7 +22,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type ?? 'button'}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(base, variantClasses[variant], sizeClasses[size], className)}
+      className={buttonClasses(variant, size, className)}
       {...rest}
     >
       {loading && <Spinner />}

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, SlotGrid } from '../../components';
+import { Badge, Card, EmptyState, ErrorState, LoadingState, SlotGrid, buttonClasses } from '../../components';
 import { useAvailability, useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
 import { formatCountdown, formatLongCountdown, todayIstIso } from '../../lib/dates';
@@ -146,8 +146,8 @@ export function UserDashboard() {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4">
-        <Link to="/book">
-          <Button>Book a slot</Button>
+        <Link to="/book" className={buttonClasses()}>
+          Book a slot
         </Link>
         <p className="text-sm text-text-muted">
           {d.previousBookingsCount} past booking{d.previousBookingsCount === 1 ? '' : 's'} ·{' '}
