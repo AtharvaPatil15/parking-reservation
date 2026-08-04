@@ -81,12 +81,6 @@ export function validateConfigValue(key: string, valueType: string, v: string): 
       if (!Number.isInteger(n) || n < 1 || n > 6) return 'Must be an integer between 1 and 6';
       break;
     }
-    // ---- Phase 8: per-user weekly allocation cap (D20) ----
-    case 'allocation.maxDaysPerUserPerWeek': {
-      const n = Number(v);
-      if (!Number.isInteger(n) || n < 1) return 'Must be an integer ≥ 1';
-      break;
-    }
     default:
       break;
   }

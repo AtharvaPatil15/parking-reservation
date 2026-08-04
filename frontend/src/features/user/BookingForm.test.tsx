@@ -43,7 +43,7 @@ function availability(overrides: {
     phase?: 'OPEN' | 'DECIDED';
     mine?: boolean;
     myStatus?: 'SUBMITTED' | 'ALLOCATED' | 'WAITLISTED' | 'RELEASED' | null;
-    mySlotNumber?: number | null;
+    mySlotNumber?: string | null;
     requestable?: boolean;
     reason?: string | null;
     message?: string | null;
@@ -66,7 +66,7 @@ function availability(overrides: {
             index: i + 1,
             state:
               d.mine && i === 0 ? 'MINE' : i < allocatedCount ? 'TAKEN' : i < allocatedCount + blocked ? 'BLOCKED' : 'AVAILABLE',
-            slotNumber: i < allocatedCount ? i + 1 : null,
+            slotNumber: i < allocatedCount ? `A-${String(i + 1).padStart(2, '0')}` : null,
           }));
     return {
       date: d.date,

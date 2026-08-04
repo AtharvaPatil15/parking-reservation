@@ -1667,8 +1667,8 @@ export interface components {
             /** @description 1-based position in the grid. */
             index: number;
             state: components["schemas"]["SlotBoxState"];
-            /** @description The real `ParkingSlot.slotNumber`, populated only when `phase = DECIDED` and the box is `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes. */
-            slotNumber: number | null;
+            /** @description The real `ParkingSlot.slotNumber` (a free-form label, e.g. `B1-07` — not an ordinal), populated only when `phase = DECIDED` and the box is `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes. Not to be confused with `index`, which orders the grid. */
+            slotNumber: string | null;
         };
         /**
          * @description Why a date cannot be requested; `null` when it can.
@@ -1681,10 +1681,10 @@ export interface components {
          */
         DayAvailabilityPhase: "OPEN" | "DECIDED";
         /**
-         * @description The caller's own request status for this date, if any.
+         * @description The caller's **best** request status for this date, if any — a user can hold both a PRIMARY and a COMMON_POOL row for one day (the common-pool run enrolls the primary waitlist), and "you got a slot" is the answer that matters. Priority order: ALLOCATED, WAITLISTED, SUBMITTED, DRAFT, RELEASED, EXPIRED, CANCELLED, REJECTED.
          * @enum {string|null}
          */
-        DayAvailabilityMyStatus: "SUBMITTED" | "ALLOCATED" | "WAITLISTED" | "RELEASED" | null;
+        DayAvailabilityMyStatus: "DRAFT" | "SUBMITTED" | "CANCELLED" | "ALLOCATED" | "WAITLISTED" | "REJECTED" | "RELEASED" | "EXPIRED" | null;
         DayAvailability: {
             /** Format: date */
             date: string;
@@ -1701,7 +1701,7 @@ export interface components {
             mine: boolean;
             myStatus: components["schemas"]["DayAvailabilityMyStatus"] | null;
             /** @description Set when `myStatus = ALLOCATED` (including common-pool allocations, §5.3). */
-            mySlotNumber: number | null;
+            mySlotNumber: string | null;
             requestable: boolean;
             reason?: components["schemas"]["UnavailableReason"] | null;
             /** @description Human-readable explanation of `reason`. */

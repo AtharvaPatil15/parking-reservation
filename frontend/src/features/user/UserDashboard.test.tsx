@@ -33,7 +33,7 @@ function weekAvailability() {
       blocked?: number;
       allocatedCount?: number;
       myStatus?: 'SUBMITTED' | 'ALLOCATED' | 'WAITLISTED' | 'RELEASED' | null;
-      mySlotNumber?: number | null;
+      mySlotNumber?: string | null;
       quota?: number;
     } = {},
   ) => {
@@ -85,7 +85,7 @@ function weekAvailability() {
       },
       days: [
         day('2099-01-05', { myStatus: 'SUBMITTED', requestCount: 3 }),
-        day('2099-01-06', { phase: 'DECIDED', myStatus: 'ALLOCATED', mySlotNumber: 7, allocatedCount: 1 }),
+        day('2099-01-06', { phase: 'DECIDED', myStatus: 'ALLOCATED', mySlotNumber: 'A-07', allocatedCount: 1 }),
         day('2099-01-07', { phase: 'DECIDED', myStatus: 'WAITLISTED', allocatedCount: 12 }),
         day('2099-01-08', { blocked: 12, quota: 12 }),
       ],
@@ -118,7 +118,7 @@ describe('UserDashboard', () => {
 
     expect(await screen.findByText(/your week/i)).toBeInTheDocument();
     expect(screen.getByText('Queued')).toBeInTheDocument();
-    expect(screen.getByText(/you got slot 7/i)).toBeInTheDocument();
+    expect(screen.getByText(/you got slot a-07/i)).toBeInTheDocument();
     expect(screen.getByText('Waitlisted')).toBeInTheDocument();
     expect(screen.getByText('Blocked')).toBeInTheDocument();
   });

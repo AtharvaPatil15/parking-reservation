@@ -5,7 +5,7 @@ import type { components } from '../api/types';
 
 type SlotBox = components['schemas']['SlotBox'];
 
-const boxes = (states: SlotBox['state'][], slotNumbers?: (number | null)[]): SlotBox[] =>
+const boxes = (states: SlotBox['state'][], slotNumbers?: (string | null)[]): SlotBox[] =>
   states.map((state, i) => ({ index: i + 1, state, slotNumber: slotNumbers?.[i] ?? null }));
 
 describe('SlotGrid', () => {
@@ -54,15 +54,15 @@ describe('SlotGrid', () => {
     render(
       <SlotGrid
         phase="DECIDED"
-        boxes={boxes(['MINE', 'TAKEN', 'AVAILABLE'], [7, 12, null])}
+        boxes={boxes(['MINE', 'TAKEN', 'AVAILABLE'], ['A-07', 'A-12', null])}
       />,
     );
-    expect(screen.getByText('Slot 7: Your booking')).toBeInTheDocument();
-    expect(screen.getByText('Slot 12: Booked')).toBeInTheDocument();
-    // The visible glyph inside the box is the slot number, not the 1-based grid position.
+    expect(screen.getByText('Slot A-07: Your booking')).toBeInTheDocument();
+    expect(screen.getByText('Slot A-12: Booked')).toBeInTheDocument();
+    // The visible glyph inside the box is the slot number (a free-form label), not the grid position.
     const [mine, taken] = screen.getAllByRole('listitem');
-    expect(mine.textContent).toContain('7');
-    expect(taken.textContent).toContain('12');
+    expect(mine.textContent).toContain('A-07');
+    expect(taken.textContent).toContain('A-12');
   });
 
   it('falls back to the grid index for MINE/TAKEN when no slotNumber is present', () => {

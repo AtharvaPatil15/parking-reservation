@@ -429,7 +429,10 @@ function buildOpenBoxes(quota: number, blocked: number): SlotBox[] {
  * then everyone else's TAKEN allocations with their real slot numbers, then BLOCKED, then whatever
  * AVAILABLE remains.
  */
-function buildDecidedBoxes(quota: number, blocked: number, otherSlots: number[], mySlot: number | null): SlotBox[] {
+/** Mock slot labels match the real `ParkingSlot.slotNumber` format — a free-form label, not an ordinal. */
+const slotLabel = (n: number): string => `A-${String(n).padStart(2, '0')}`;
+
+function buildDecidedBoxes(quota: number, blocked: number, otherSlots: string[], mySlot: string | null): SlotBox[] {
   const boxes: SlotBox[] = [];
   if (mySlot !== null) boxes.push({ index: 0, state: 'MINE', slotNumber: mySlot });
   for (const slot of otherSlots) boxes.push({ index: 0, state: 'TAKEN', slotNumber: slot });
@@ -448,8 +451,8 @@ interface MockDayState {
   blocked: number;
   decided: boolean;
   myStatus: DayAvailability['myStatus'];
-  mySlotNumber: number | null;
-  otherSlots: number[];
+  mySlotNumber: string | null;
+  otherSlots: string[];
 }
 
 function seedAvailability(): Record<string, MockDayState> {
@@ -460,15 +463,15 @@ function seedAvailability(): Record<string, MockDayState> {
       // Already decided (demoable pre-built outcome): the caller won a slot.
       state[date] = {
         requestCount: MOCK_QUOTA - 1, blocked: 0, decided: true,
-        myStatus: 'ALLOCATED', mySlotNumber: 3,
-        otherSlots: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].slice(0, MOCK_QUOTA - 1),
+        myStatus: 'ALLOCATED', mySlotNumber: slotLabel(3),
+        otherSlots: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].slice(0, MOCK_QUOTA - 1).map(slotLabel),
       };
     } else if (i === 1) {
       // Already decided: the caller lost out to score and was waitlisted.
       state[date] = {
         requestCount: MOCK_QUOTA + 2, blocked: 0, decided: true,
         myStatus: 'WAITLISTED', mySlotNumber: null,
-        otherSlots: Array.from({ length: MOCK_QUOTA }, (_v, n) => n + 1),
+        otherSlots: Array.from({ length: MOCK_QUOTA }, (_v, n) => slotLabel(n + 1)),
       };
     } else if (i === 2) {
       // Still OPEN, with two boxes withheld by an admin.
@@ -489,7 +492,7 @@ function seedAvailability(): Record<string, MockDayState> {
 export function setMockDatePhase(
   date: string,
   phase: 'OPEN' | 'DECIDED',
-  outcome?: { myStatus?: DayAvailability['myStatus']; mySlotNumber?: number | null; otherSlots?: number[] },
+  outcome?: { myStatus?: DayAvailability['myStatus']; mySlotNumber?: string | null; otherSlots?: string[] },
 ): void {
   const st = availabilityState[date];
   if (!st) return;
@@ -1234,11 +1237,11 @@ const hero = [
         const iAmSubmitted = st.myStatus === 'SUBMITTED';
         const otherRequestCount = Math.max(0, st.requestCount - (iAmSubmitted ? 1 : 0));
         const otherAllocated = Math.min(otherRequestCount, capacity - (iAmSubmitted ? 1 : 0));
-        st.otherSlots = Array.from({ length: Math.max(0, otherAllocated) }, (_v, i) => i + 1);
+        st.otherSlots = Array.from({ length: Math.max(0, otherAllocated) }, (_v, i) => slotLabel(i + 1));
         if (iAmSubmitted) {
           const gotSlot = st.requestCount <= capacity;
           st.myStatus = gotSlot ? 'ALLOCATED' : 'WAITLISTED';
-          st.mySlotNumber = gotSlot ? st.otherSlots.length + 1 : null;
+          st.mySlotNumber = gotSlot ? slotLabel(st.otherSlots.length + 1) : null;
         }
         st.decided = true;
       }

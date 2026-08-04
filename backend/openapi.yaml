@@ -2902,11 +2902,13 @@ components:
         index: { type: integer, description: 1-based position in the grid. }
         state: { $ref: '#/components/schemas/SlotBoxState' }
         slotNumber:
-          type: integer
+          type: string
           nullable: true
           description: >
-            The real `ParkingSlot.slotNumber`, populated only when `phase = DECIDED` and the box is
-            `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes.
+            The real `ParkingSlot.slotNumber` (a free-form label, e.g. `B1-07` — not an ordinal),
+            populated only when `phase = DECIDED` and the box is `MINE` or `TAKEN`. `null` while
+            `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes. Not to be confused with `index`, which orders
+            the grid.
 
     UnavailableReason:
       type: string
@@ -2923,8 +2925,12 @@ components:
     DayAvailabilityMyStatus:
       type: string
       nullable: true
-      description: The caller's own request status for this date, if any.
-      enum: [SUBMITTED, ALLOCATED, WAITLISTED, RELEASED]
+      description: >
+        The caller's **best** request status for this date, if any — a user can hold both a PRIMARY
+        and a COMMON_POOL row for one day (the common-pool run enrolls the primary waitlist), and
+        "you got a slot" is the answer that matters. Priority order: ALLOCATED, WAITLISTED, SUBMITTED,
+        DRAFT, RELEASED, EXPIRED, CANCELLED, REJECTED.
+      enum: [DRAFT, SUBMITTED, CANCELLED, ALLOCATED, WAITLISTED, REJECTED, RELEASED, EXPIRED]
 
     DayAvailability:
       type: object
@@ -2952,7 +2958,7 @@ components:
           allOf: [ { $ref: '#/components/schemas/DayAvailabilityMyStatus' } ]
           nullable: true
         mySlotNumber:
-          type: integer
+          type: string
           nullable: true
           description: Set when `myStatus = ALLOCATED` (including common-pool allocations, §5.3).
         requestable: { type: boolean }
