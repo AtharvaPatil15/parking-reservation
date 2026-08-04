@@ -127,6 +127,13 @@ export function BookingStatus() {
           <p className="text-text">
             Allocated slot <span className="font-semibold text-accent">{b.allocatedSlotNumber}</span>.
           </p>
+        ) : b.status === 'WAITLISTED' ? (
+          // Phase 8 D19: waitlisted, never rejected — this is the "why didn't I get it?" screen, so
+          // point straight at the score breakdown rather than a bare status echo.
+          <p className="text-text-muted">
+            Not allocated this run — the score breakdown below shows how you ranked. You may still be
+            placed if a common-pool slot opens up.
+          </p>
         ) : (
           <p className="text-text-muted">No slot assigned ({b.status.toLowerCase()}).</p>
         )}

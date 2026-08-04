@@ -40,6 +40,18 @@ export function isBookableWeekday(value: string): boolean {
   return date.getTime() >= todayLocal().getTime();
 }
 
+/**
+ * Today's calendar date in the booking domain's timezone (IST), as yyyy-mm-dd.
+ *
+ * The rest of this module compares on the *browser's* local date, which is fine for validating what
+ * the user typed. This one is different: it is sent to the server as a range bound, so it has to
+ * agree with the server's notion of "today" — Asia/Kolkata — regardless of where the browser sits.
+ */
+export function todayIstIso(): string {
+  // `en-CA` formats as yyyy-mm-dd, which is exactly the wire format.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+
 /** Next Mon–Fri (today if it's a weekday), as yyyy-mm-dd. */
 export function nextBookableWeekday(): string {
   const d = todayLocal();
