@@ -31,11 +31,22 @@ export function SlotSplit({
   className,
 }: SlotSplitProps) {
   const sum = total ?? 0;
+  /**
+   * Fills are ordered so the bar always reads full → empty, in both themes.
+   *
+   * `bg-primary` alone did not survive dark mode: there the accent is a PALE blue,
+   * so "Booked" became the lightest segment and the ramp ran backwards, while
+   * Blocked and Free (a subtle fill and no fill) both disappeared into the track.
+   * Opacity steps off the ink colour keep the ordering regardless of which way the
+   * palette flips, and Free carries a hairline so it reads as a segment, not a gap.
+   */
   const rows = [
-    { key: 'Booked', n: booked ?? 0, fill: 'bg-primary' },
-    ...(pool == null ? [] : [{ key: 'Common pool', n: pool, fill: 'bg-primary/45' }]),
-    { key: 'Blocked', n: blocked ?? 0, fill: 'bg-surface-2' },
-    { key: 'Free', n: free ?? 0, fill: 'bg-transparent' },
+    { key: 'Booked', n: booked ?? 0, fill: 'bg-primary', swatch: 'bg-primary' },
+    ...(pool == null
+      ? []
+      : [{ key: 'Common pool', n: pool, fill: 'bg-primary/55', swatch: 'bg-primary/55' }]),
+    { key: 'Blocked', n: blocked ?? 0, fill: 'bg-text/25', swatch: 'bg-text/25' },
+    { key: 'Free', n: free ?? 0, fill: 'bg-text/[0.06]', swatch: 'bg-text/[0.06]' },
   ];
   const share = (n: number) => (sum > 0 ? Math.round((n / sum) * 100) : 0);
 

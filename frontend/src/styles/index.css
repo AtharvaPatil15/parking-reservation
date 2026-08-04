@@ -19,6 +19,18 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Tell the browser which chrome to render for native controls. Without this a
+     date/time input keeps its light UA styling in dark mode — a white box with a
+     black glyph, which was the brightest object on several dark screens — and the
+     select dropdown list stayed light too. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-canvas text-text text-base;
     margin: 0;

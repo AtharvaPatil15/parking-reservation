@@ -16,7 +16,7 @@ const columns = (
   onQuota: (c: Company) => void,
   assignedFor: (companyId: string) => number | null,
 ): Column<Company>[] => [
-  { key: 'name', header: 'Company', render: (c) => <span className="font-medium text-text">{c.name}</span> },
+  { key: 'name', header: 'Company', stackedBare: true, render: (c) => <span className="font-medium text-text">{c.name}</span> },
   { key: 'code', header: 'Code', render: (c) => <span className="tabular-nums">{c.code}</span> },
   {
     key: 'status', header: 'Status',
@@ -30,7 +30,7 @@ const columns = (
     },
   },
   {
-    key: 'actions', header: '', align: 'right',
+    key: 'actions', header: '', align: 'right', stackedBare: true,
     render: (c) => (
       <Button size="sm" variant="secondary" onClick={() => onQuota(c)}>
         Manage quota

@@ -49,9 +49,9 @@ export function AdminApprovals() {
   }
 
   const columns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    { key: 'name', header: 'Name', stackedBare: true, render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
     { key: 'email', header: 'Email', render: (u) => u.email },
-    { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
+    { key: 'company', header: 'Company', stackedBare: true, render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',
       header: 'Requested as',
@@ -64,20 +64,19 @@ export function AdminApprovals() {
       ),
     },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (u) => (
         <div className="flex justify-end gap-2">
           <Button
             size="sm"
             variant="danger"
-            className="w-8 px-0"
             loading={pendingId === u.id && removeUser.isPending}
             disabled={pendingId !== null}
             aria-label={`Remove ${u.fullName}`}
             title={`Remove ${u.fullName}`}
             onClick={() => remove(u.id, u.fullName)}
           >
-            X
+            Remove
           </Button>
           <Button size="sm" variant="secondary" loading={pendingId === u.id && approval.isPending} disabled={pendingId !== null} onClick={() => decide(u.id, 'REJECT')}>
             Reject
@@ -92,9 +91,9 @@ export function AdminApprovals() {
 
   // Approval history: a processed request is APPROVED when its user is ACTIVE, else REJECTED.
   const historyColumns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    { key: 'name', header: 'Name', stackedBare: true, render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
     { key: 'email', header: 'Email', render: (u) => u.email },
-    { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
+    { key: 'company', header: 'Company', stackedBare: true, render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',
       header: 'Requested as',
@@ -115,19 +114,18 @@ export function AdminApprovals() {
       ),
     },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (u) => (
         <Button
           size="sm"
           variant="danger"
-          className="w-8 px-0"
           loading={pendingId === u.id && removeUser.isPending}
           disabled={pendingId !== null}
           aria-label={`Remove ${u.fullName}`}
           title={`Remove ${u.fullName}`}
           onClick={() => remove(u.id, u.fullName)}
         >
-          X
+          Remove
         </Button>
       ),
     },

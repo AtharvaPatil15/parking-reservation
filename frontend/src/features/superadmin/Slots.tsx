@@ -104,7 +104,7 @@ export function Slots() {
     { key: 'area', header: 'Area', render: (s) => areaName(s.parkingAreaId) },
     { key: 'status', header: 'Status', render: (s) => <Badge tone={statusTone(s.status)}>{s.status}</Badge> },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (s) => (
         <div className="flex justify-end gap-2">
           <Button

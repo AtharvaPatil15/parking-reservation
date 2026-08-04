@@ -71,9 +71,9 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
 
   const columns: Column<AdminBooking>[] = [
     ...(showCompany
-      ? [{ key: 'company', header: 'Company', render: (b: AdminBooking) => b.companyName }]
+      ? [{ key: 'company', header: 'Company', stackedBare: true, render: (b: AdminBooking) => b.companyName }]
       : []),
-    { key: 'employee', header: 'Employee', render: (b) => (
+    { key: 'employee', header: 'Employee', stackedBare: true, render: (b) => (
       <div>
         <div className="font-medium">{b.employeeName}</div>
         <div className="text-xs text-text-muted">{b.employeeEmail}</div>

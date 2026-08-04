@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Select, Table, type Column, type SelectOption } from '../../components';
+import { enumLabel } from '../../lib/enumLabel';
 import { useMyBookings } from '../../api/hooks';
 import { BackLink } from '../shared/BackLink';
 import { statusTone } from './statusTone';
@@ -21,7 +22,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 
 const columns: Column<Booking>[] = [
   { key: 'date', header: 'Date', render: (b) => b.bookingDate },
-  { key: 'type', header: 'Type', render: (b) => b.bookingType },
+  { key: 'type', header: 'Type', render: (b) => enumLabel(b.bookingType) },
   { key: 'status', header: 'Status', render: (b) => <Badge tone={statusTone(b.status)}>{b.status}</Badge> },
   { key: 'view', header: '', align: 'right', render: (b) => (
       <Link to={`/booking/${b.id}`} className="text-primary hover:underline">

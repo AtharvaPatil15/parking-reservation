@@ -51,25 +51,24 @@ export function Approvals() {
   }
 
   const columns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    { key: 'name', header: 'Name', stackedBare: true, render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
     { key: 'email', header: 'Email', render: (u) => u.email },
     { key: 'status', header: 'Status', render: (u) => <Badge tone={statusTone(u.status)}>{u.status}</Badge> },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (u) =>
         u.role === 'USER' ? (
           <div className="flex justify-end gap-2">
             <Button
               size="sm"
               variant="danger"
-              className="w-8 px-0"
               loading={pendingId === u.id && removeUser.isPending}
               disabled={pendingId !== null}
               aria-label={`Remove ${u.fullName}`}
               title={`Remove ${u.fullName}`}
               onClick={() => remove(u.id, u.fullName)}
             >
-              X
+              Remove
             </Button>
             {u.status === 'PENDING' && (
               <>

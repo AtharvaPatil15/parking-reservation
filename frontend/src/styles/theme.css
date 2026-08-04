@@ -23,6 +23,10 @@
 
   --primary: 65 97 128; /* #416180 — steel accent, the one solid object */
   --primary-hover: 44 69 93; /* #2C455D */
+  /* Ink that sits ON the primary fill. Its own token because --surface is the
+     wrong answer in dark mode: there the fill is a pale blue, so --surface ink
+     (#15181B) made the primary button read as ghosted/disabled. */
+  --primary-ink: 242 242 243; /* #F2F2F3 */
   --primary-subtle: 238 246 255; /* #EEF6FF */
 
   /* Ramp step 700, not the 500 base. The design system's readme is explicit that
@@ -61,6 +65,7 @@
 
   --primary: 123 163 204; /* #7BA3CC */
   --primary-hover: 143 179 216; /* #8FB3D8 */
+  --primary-ink: 14 18 21; /* #0E1215 — dark ink on the pale dark-mode fill */
   --primary-subtle: 27 40 54; /* #1B2836 */
 
   --accent: 148 188 227; /* #94BCE3 — accent step 400, which the guide names for dark grounds */

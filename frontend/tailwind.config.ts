@@ -25,6 +25,8 @@ export default {
           DEFAULT: withVar('--primary'),
           hover: withVar('--primary-hover'),
           subtle: withVar('--primary-subtle'),
+          /* Ink that sits on the primary fill — see theme.css. */
+          ink: withVar('--primary-ink'),
         },
         accent: {
           DEFAULT: withVar('--accent'),
