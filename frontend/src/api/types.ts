@@ -296,7 +296,7 @@ export interface paths {
          * Submit parking requests for several dates at once
          * @description Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`, applying the same trip details (vehicle, carpool, special requirement) to every date.
          *
-         *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+         *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
          *
          *     A 200 with every result `FAILED` is a valid response. Request-level problems — an empty or oversized `bookingDates`, a malformed date, a carpool that breaks the cap — are rejected as 400 before any booking is attempted, so a bad payload never books a partial set.
          */
@@ -995,7 +995,7 @@ export interface paths {
         };
         /**
          * Per-date slot grid for the caller's company + booking-window summary
-         * @description Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the currently-open window) with the company's quota, how much is blocked/taken, and a `boxes` array to render as the slot grid. The company always comes from the principal, never the query. `taken` counts LIVE REQUESTS, not just allocations (D12) — a submitted request holds a box immediately, which is what keeps demand within supply so nobody is rejected later.
+         * @description Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the currently-open window) with the company's quota, how much is blocked, and a `boxes` array to render as the slot grid. The company always comes from the principal, never the query. Requests never consume capacity (D18): each date has a `phase` — `OPEN` (before that date's weekly run) shows only AVAILABLE/BLOCKED boxes plus a `requestCount` of live requests as a count, not boxes; `DECIDED` (after the run) shows real allocations via `allocatedCount` and MINE/TAKEN boxes with `slotNumber` (D22).
          */
         get: operations["getAvailability"];
         put?: never;
@@ -1235,7 +1235,7 @@ export interface components {
          * @description Canonical error codes (docs/phases-3-6-plan.md §3.2).
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "CAPACITY_FULL" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
+        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
         Pagination: {
             page: number;
             pageSize: number;
@@ -1645,6 +1645,18 @@ export interface components {
             requestableDates: string[];
             /** @description Next five automatic allocation run instants. */
             nextRuns: string[];
+            scoring: components["schemas"]["BookingWindowScoring"];
+        };
+        /** @description Live scoring inputs (§4, D3) so the booking form can compute a user's score client-side with no extra round-trip as they add carpool members. Super-Admin editable; not a promise of outcome — ranking and tie-breakers still decide. */
+        BookingWindowScoring: {
+            /** @description Weight applied to distanceScore (default 0.60). */
+            distanceWeight: number;
+            /** @description Weight applied to carpoolScore (default 0.40). */
+            carpoolWeight: number;
+            /** @description Distance at which distanceScore caps at 100 (default 40). */
+            maxDistanceKm: number;
+            /** @description Carpool size at which carpoolScore caps at 100 (default 4). */
+            maxPeople: number;
         };
         /**
          * @description MINE = the caller's own reservation, TAKEN = someone else's, BLOCKED = withheld by an admin, AVAILABLE = free. Render AVAILABLE green and everything else grey.
@@ -1655,23 +1667,41 @@ export interface components {
             /** @description 1-based position in the grid. */
             index: number;
             state: components["schemas"]["SlotBoxState"];
+            /** @description The real `ParkingSlot.slotNumber`, populated only when `phase = DECIDED` and the box is `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes. */
+            slotNumber: number | null;
         };
         /**
          * @description Why a date cannot be requested; `null` when it can.
          * @enum {string}
          */
-        UnavailableReason: "INVALID_DATE" | "NOT_WEEKDAY" | "TOO_SOON" | "BEYOND_WINDOW" | "NO_QUOTA" | "FULL" | "ALREADY_BOOKED";
+        UnavailableReason: "INVALID_DATE" | "NOT_WEEKDAY" | "TOO_SOON" | "BEYOND_WINDOW" | "NO_QUOTA" | "ALREADY_BOOKED";
+        /**
+         * @description OPEN = before the date's weekly run; grid shows only AVAILABLE/BLOCKED and demand is a count. DECIDED = after the run; grid shows real allocations (D22).
+         * @enum {string}
+         */
+        DayAvailabilityPhase: "OPEN" | "DECIDED";
+        /**
+         * @description The caller's own request status for this date, if any.
+         * @enum {string|null}
+         */
+        DayAvailabilityMyStatus: "SUBMITTED" | "ALLOCATED" | "WAITLISTED" | "RELEASED" | null;
         DayAvailability: {
             /** Format: date */
             date: string;
+            phase: components["schemas"]["DayAvailabilityPhase"];
             /** @description The company's effective quota for this date — also the number of boxes (D14). */
             quota: number;
             blocked: number;
-            /** @description Live requests holding a box (D12), not merely completed allocations. */
-            taken: number;
+            /** @description Live SUBMITTED/DRAFT PRIMARY requests for this date — demand, not reservation. Informational only; never gates a submission (D18). */
+            requestCount: number;
+            /** @description Rows actually allocated for this date. 0 while `phase = OPEN`. */
+            allocatedCount: number;
             available: number;
             /** @description True when the caller already holds a request for this date. */
             mine: boolean;
+            myStatus: components["schemas"]["DayAvailabilityMyStatus"] | null;
+            /** @description Set when `myStatus = ALLOCATED` (including common-pool allocations, §5.3). */
+            mySlotNumber: number | null;
             requestable: boolean;
             reason?: components["schemas"]["UnavailableReason"] | null;
             /** @description Human-readable explanation of `reason`. */
@@ -1853,7 +1883,7 @@ export interface components {
             outcome: "CREATED" | "FAILED";
             /** @description Present when `outcome` is CREATED. */
             booking?: components["schemas"]["BookingCreatedData"] | null;
-            /** @description Present when `outcome` is FAILED — the same error code the single-date endpoint would have returned for this date (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR). */
+            /** @description Present when `outcome` is FAILED — the same error code the single-date endpoint would have returned for this date (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR). */
             code?: string | null;
             /** @description Present when `outcome` is FAILED — human-readable reason, safe to show the user. */
             message?: string | null;
@@ -2755,8 +2785,8 @@ export interface operations {
                      *           {
                      *             "bookingDate": "2026-08-13",
                      *             "outcome": "FAILED",
-                     *             "code": "CAPACITY_FULL",
-                     *             "message": "All 12 slot(s) for 2026-08-13 are already taken — please choose another date"
+                     *             "code": "CONFLICT",
+                     *             "message": "You already have a request for 2026-08-13"
                      *           },
                      *           {
                      *             "bookingDate": "2026-08-14",

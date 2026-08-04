@@ -371,6 +371,18 @@ function mockNextRun(now = new Date()): Date {
   return run;
 }
 
+/** Live scoring inputs (§4/D3) read from the mutable config store, so P8-12's score panel reacts to
+ *  Super-Admin edits the same way the real `bookingWindowSummary` would. */
+function mockScoring(): { distanceWeight: number; carpoolWeight: number; maxDistanceKm: number; maxPeople: number } {
+  const num = (key: string, fallback: number) => Number(configState.find((c) => c.key === key)?.value ?? fallback);
+  return {
+    distanceWeight: num('allocation.distanceWeight', 0.6),
+    carpoolWeight: num('allocation.carpoolWeight', 0.4),
+    maxDistanceKm: num('allocation.maxDistanceKm', 40),
+    maxPeople: num('carpool.maxPeople', 4),
+  };
+}
+
 function mockWindow(now = new Date()): BookingWindow {
   const nextRun = mockNextRun(now);
   const earliest = addDaysTo(nextRun, LEAD_DAYS);
@@ -397,35 +409,94 @@ function mockWindow(now = new Date()): BookingWindow {
     latestDate: isoOf(latest),
     requestableDates: dates,
     nextRuns: Array.from({ length: 5 }, (_, i) => addDaysTo(nextRun, i * 7).toISOString()),
+    scoring: mockScoring(),
   };
 }
 
-/** Mirrors backend `buildBoxes`: mine first (so it survives the clamp), then taken, blocked, free. */
-function mockBoxes(quota: number, blocked: number, taken: number, mine: boolean): SlotBox[] {
-  const states: SlotBox['state'][] = [];
-  if (mine) states.push('MINE');
-  for (let i = 0; i < taken - (mine ? 1 : 0); i++) states.push('TAKEN');
-  for (let i = 0; i < blocked; i++) states.push('BLOCKED');
-  while (states.length < quota) states.push('AVAILABLE');
-  return states.slice(0, quota).map((state, i) => ({ index: i + 1, state }));
+/**
+ * Phase 8 (D22): before a date's run, the grid shows only AVAILABLE/BLOCKED — requests never take a
+ * box (D18). `blocked` first so the count is stable regardless of quota, then AVAILABLE fills the rest.
+ */
+function buildOpenBoxes(quota: number, blocked: number): SlotBox[] {
+  const boxes: SlotBox[] = [];
+  for (let i = 0; i < blocked; i++) boxes.push({ index: 0, state: 'BLOCKED', slotNumber: null });
+  while (boxes.length < quota) boxes.push({ index: 0, state: 'AVAILABLE', slotNumber: null });
+  return boxes.slice(0, quota).map((b, i) => ({ ...b, index: i + 1 }));
 }
 
-/** Per-date occupancy the mock mutates when a booking is submitted. */
-interface MockDayState { taken: number; blocked: number; mine: boolean; decided: boolean }
+/**
+ * After the run: MINE first (so it survives the clamp — mirrors the backend's "own box first" rule),
+ * then everyone else's TAKEN allocations with their real slot numbers, then BLOCKED, then whatever
+ * AVAILABLE remains.
+ */
+function buildDecidedBoxes(quota: number, blocked: number, otherSlots: number[], mySlot: number | null): SlotBox[] {
+  const boxes: SlotBox[] = [];
+  if (mySlot !== null) boxes.push({ index: 0, state: 'MINE', slotNumber: mySlot });
+  for (const slot of otherSlots) boxes.push({ index: 0, state: 'TAKEN', slotNumber: slot });
+  for (let i = 0; i < blocked; i++) boxes.push({ index: 0, state: 'BLOCKED', slotNumber: null });
+  while (boxes.length < quota) boxes.push({ index: 0, state: 'AVAILABLE', slotNumber: null });
+  return boxes.slice(0, quota).map((b, i) => ({ ...b, index: i + 1 }));
+}
+
+/**
+ * Per-date state the mock mutates as requests are submitted and (via `setMockDatePhase`) decided.
+ * `requestCount` is demand only — it never gates a submission (D18). `decided` drives `phase`; once
+ * true, `otherSlots`/`mySlotNumber` describe the real allocation the grid renders.
+ */
+interface MockDayState {
+  requestCount: number;
+  blocked: number;
+  decided: boolean;
+  myStatus: DayAvailability['myStatus'];
+  mySlotNumber: number | null;
+  otherSlots: number[];
+}
 
 function seedAvailability(): Record<string, MockDayState> {
   const win = mockWindow();
   const state: Record<string, MockDayState> = {};
   win.requestableDates.forEach((date, i) => {
-    // A spread of occupancy so the grid is visibly interesting: one nearly-full day, one blocked day.
-    state[date] = {
-      taken: i === 0 ? MOCK_QUOTA - 1 : i === 1 ? 4 : i % 3,
-      blocked: i === 2 ? 2 : 0,
-      mine: false,
-      decided: false,
-    };
+    if (i === 0) {
+      // Already decided (demoable pre-built outcome): the caller won a slot.
+      state[date] = {
+        requestCount: MOCK_QUOTA - 1, blocked: 0, decided: true,
+        myStatus: 'ALLOCATED', mySlotNumber: 3,
+        otherSlots: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].slice(0, MOCK_QUOTA - 1),
+      };
+    } else if (i === 1) {
+      // Already decided: the caller lost out to score and was waitlisted.
+      state[date] = {
+        requestCount: MOCK_QUOTA + 2, blocked: 0, decided: true,
+        myStatus: 'WAITLISTED', mySlotNumber: null,
+        otherSlots: Array.from({ length: MOCK_QUOTA }, (_v, n) => n + 1),
+      };
+    } else if (i === 2) {
+      // Still OPEN, with two boxes withheld by an admin.
+      state[date] = { requestCount: 4, blocked: 2, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [] };
+    } else {
+      // A spread of demand so the count is visibly interesting, all still OPEN.
+      state[date] = { requestCount: i % 5, blocked: 0, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [] };
+    }
   });
   return state;
+}
+
+/**
+ * Mock-only dev/test toggle (P8-10): flips a date between the `OPEN` and `DECIDED` grid phases so the
+ * frontend can be built and exercised against the two-phase model without a real backend run. Optionally
+ * sets the caller's own outcome for the date at the same time. No-op for a date outside the seeded window.
+ */
+export function setMockDatePhase(
+  date: string,
+  phase: 'OPEN' | 'DECIDED',
+  outcome?: { myStatus?: DayAvailability['myStatus']; mySlotNumber?: number | null; otherSlots?: number[] },
+): void {
+  const st = availabilityState[date];
+  if (!st) return;
+  st.decided = phase === 'DECIDED';
+  if (outcome?.myStatus !== undefined) st.myStatus = outcome.myStatus;
+  if (outcome?.mySlotNumber !== undefined) st.mySlotNumber = outcome.mySlotNumber;
+  if (outcome?.otherSlots !== undefined) st.otherSlots = outcome.otherSlots;
 }
 
 function seedVehicles(): VehicleSummary[] {
@@ -629,25 +700,17 @@ const hero = [
         { status: 400 },
       );
     }
-    // Phase 7 D12: a request reserves a slot immediately. Mirror the server so the mock demo shows
-    // the grid filling up, and can actually reach the "date is full" refusal.
+    // Phase 8 D18: a request is a queue entry, not a reservation. It never consumes capacity and can
+    // never fail for fullness — only a closed window or a duplicate stop it (mirrors the real server).
     const date = b.bookingDate ?? isoOf(new Date());
     const day = availabilityState[date];
     if (day) {
       if (day.decided) {
         return fail(422, 'WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
       }
-      if (day.mine) return fail(409, 'CONFLICT', 'You already have a PRIMARY booking for this date');
-      const capacity = MOCK_QUOTA - day.blocked;
-      if (day.taken >= capacity) {
-        return fail(
-          409,
-          'CAPACITY_FULL',
-          `All ${capacity} slot(s) for ${date} are already taken — please choose another date`,
-        );
-      }
-      day.taken += 1;
-      day.mine = true;
+      if (day.myStatus !== null) return fail(409, 'CONFLICT', 'You already have a PRIMARY booking for this date');
+      day.requestCount += 1;
+      day.myStatus = 'SUBMITTED';
     }
     return ok<BookingCreatedData>(
       {
@@ -692,17 +755,10 @@ const hero = [
       if (day?.decided) {
         return refuse('WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
       }
-      if (day?.mine) return refuse('CONFLICT', 'You already have a PRIMARY booking for this date');
+      if (day && day.myStatus !== null) return refuse('CONFLICT', 'You already have a PRIMARY booking for this date');
       if (day) {
-        const capacity = MOCK_QUOTA - day.blocked;
-        if (day.taken >= capacity) {
-          return refuse(
-            'CAPACITY_FULL',
-            `All ${capacity} slot(s) for ${date} are already taken — please choose another date`,
-          );
-        }
-        day.taken += 1;
-        day.mine = true;
+        day.requestCount += 1;
+        day.myStatus = 'SUBMITTED';
       }
       const id = nextId('bkg');
       const booking = {
@@ -1103,37 +1159,49 @@ const hero = [
     const win = mockWindow();
     const from = url.searchParams.get('from') ?? win.earliestDate;
     const to = url.searchParams.get('to') ?? win.latestDate;
+    // Dev/test-only query-param toggle (P8-10): force these dates to render DECIDED for this response,
+    // without mutating the shared mock store — a lighter-weight alternative to `setMockDatePhase`.
+    const forceDecided = new Set((url.searchParams.get('mockDecide') ?? '').split(',').filter(Boolean));
     const days: DayAvailability[] = [];
     for (let d = new Date(`${from}T00:00:00`); isoOf(d) <= to; d = addDaysTo(d, 1)) {
       const date = isoOf(d);
       if (!isWeekday(date)) {
         days.push({
-          date, quota: MOCK_QUOTA, blocked: 0, taken: 0, available: 0, mine: false,
+          date, phase: 'OPEN', quota: MOCK_QUOTA, blocked: 0, requestCount: 0, allocatedCount: 0,
+          available: 0, mine: false, myStatus: null, mySlotNumber: null,
           requestable: false, reason: 'NOT_WEEKDAY',
           message: 'Booking date must be a bookable weekday (Mon–Fri)',
           boxes: [],
         });
         continue;
       }
-      const st = availabilityState[date] ?? { taken: 0, blocked: 0, mine: false, decided: false };
-      const available = Math.max(0, MOCK_QUOTA - st.blocked - st.taken);
+      const st: MockDayState = availabilityState[date] ?? {
+        requestCount: 0, blocked: 0, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [],
+      };
+      const phase: DayAvailability['phase'] = st.decided || forceDecided.has(date) ? 'DECIDED' : 'OPEN';
+      const allocatedCount = phase === 'DECIDED' ? st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0) : 0;
+      const available =
+        phase === 'DECIDED' ? Math.max(0, MOCK_QUOTA - st.blocked - allocatedCount) : Math.max(0, MOCK_QUOTA - st.blocked);
       const inWindow = date >= win.earliestDate && date <= win.latestDate;
+      const mine = st.myStatus !== null;
       const reason: DayAvailability['reason'] =
         !inWindow ? (date < win.earliestDate ? 'TOO_SOON' : 'BEYOND_WINDOW')
-        : st.decided ? 'TOO_SOON'
-        : st.mine ? 'ALREADY_BOOKED'
-        : available === 0 ? 'FULL'
+        : mine ? 'ALREADY_BOOKED'
+        : phase === 'DECIDED' ? 'TOO_SOON'
         : null;
       const message =
         reason === 'TOO_SOON' ? `${date} has already been allocated.`
         : reason === 'BEYOND_WINDOW' ? `${date} is beyond the ${WINDOW_WEEKS}-week booking window.`
         : reason === 'ALREADY_BOOKED' ? 'You already have a request for this date.'
-        : reason === 'FULL' ? 'All slots for this date are taken — pick another date.'
         : null;
+      const boxes =
+        phase === 'OPEN'
+          ? buildOpenBoxes(MOCK_QUOTA, st.blocked)
+          : buildDecidedBoxes(MOCK_QUOTA, st.blocked, st.otherSlots, st.myStatus === 'ALLOCATED' ? st.mySlotNumber : null);
       days.push({
-        date, quota: MOCK_QUOTA, blocked: st.blocked, taken: st.taken, available,
-        mine: st.mine, requestable: reason === null, reason, message,
-        boxes: mockBoxes(MOCK_QUOTA, st.blocked, st.taken, st.mine),
+        date, phase, quota: MOCK_QUOTA, blocked: st.blocked, requestCount: st.requestCount, allocatedCount,
+        available, mine, myStatus: st.myStatus, mySlotNumber: st.mySlotNumber,
+        requestable: reason === null, reason, message, boxes,
       });
     }
     return ok<AvailabilityResponse>({ window: win, days });
@@ -1149,7 +1217,7 @@ const hero = [
       dates: band.dates.map((date) => ({
         bookingDate: date,
         runStatus: availabilityState[date]?.decided ? 'COMPLETED' : null,
-        pendingRequests: availabilityState[date]?.taken ?? 0,
+        pendingRequests: availabilityState[date]?.requestCount ?? 0,
       })),
     });
   }),
@@ -1160,15 +1228,28 @@ const hero = [
       const st = availabilityState[date];
       const alreadyDecided = st?.decided ?? false;
       const capacity = st ? MOCK_QUOTA - st.blocked : MOCK_QUOTA;
-      const allocated = st ? Math.min(st.taken, capacity) : 0;
-      if (st) st.decided = true; // a decided date closes for requests, as on the server
+      if (st && !alreadyDecided) {
+        // Score-decided allocation (D18/D22): fill up to capacity, the caller's own SUBMITTED request
+        // included in the ranking like anyone else's — this mock just approximates "earlier = better".
+        const iAmSubmitted = st.myStatus === 'SUBMITTED';
+        const otherRequestCount = Math.max(0, st.requestCount - (iAmSubmitted ? 1 : 0));
+        const otherAllocated = Math.min(otherRequestCount, capacity - (iAmSubmitted ? 1 : 0));
+        st.otherSlots = Array.from({ length: Math.max(0, otherAllocated) }, (_v, i) => i + 1);
+        if (iAmSubmitted) {
+          const gotSlot = st.requestCount <= capacity;
+          st.myStatus = gotSlot ? 'ALLOCATED' : 'WAITLISTED';
+          st.mySlotNumber = gotSlot ? st.otherSlots.length + 1 : null;
+        }
+        st.decided = true;
+      }
+      const allocated = st ? st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0) : 0;
       return {
         bookingDate: date,
         runId: `mock-run-${date}`,
         status: 'COMPLETED' as const,
         alreadyDecided,
         allocated,
-        waitlisted: st ? Math.max(0, st.taken - capacity) : 0,
+        waitlisted: st ? Math.max(0, st.requestCount - allocated) : 0,
         error: null,
       };
     });

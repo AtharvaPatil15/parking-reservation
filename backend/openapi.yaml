@@ -572,7 +572,7 @@ paths:
         outside the window does NOT discard the others; that would defeat the point of the
         no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the
         booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have
-        returned (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+        returned (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
 
 
         A 200 with every result `FAILED` is a valid response. Request-level problems — an empty or
@@ -623,8 +623,8 @@ paths:
                         submittedAt: "2026-08-04T11:20:00Z"
                     - bookingDate: "2026-08-13"
                       outcome: FAILED
-                      code: CAPACITY_FULL
-                      message: All 12 slot(s) for 2026-08-13 are already taken — please choose another date
+                      code: CONFLICT
+                      message: You already have a request for 2026-08-13
                     - bookingDate: "2026-08-14"
                       outcome: CREATED
                       booking:
@@ -1918,10 +1918,12 @@ paths:
       summary: Per-date slot grid for the caller's company + booking-window summary
       description: >
         Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the
-        currently-open window) with the company's quota, how much is blocked/taken, and a `boxes`
-        array to render as the slot grid. The company always comes from the principal, never the
-        query. `taken` counts LIVE REQUESTS, not just allocations (D12) — a submitted request holds a
-        box immediately, which is what keeps demand within supply so nobody is rejected later.
+        currently-open window) with the company's quota, how much is blocked, and a `boxes` array to
+        render as the slot grid. The company always comes from the principal, never the query.
+        Requests never consume capacity (D18): each date has a `phase` — `OPEN` (before that date's
+        weekly run) shows only AVAILABLE/BLOCKED boxes plus a `requestCount` of live requests as a
+        count, not boxes; `DECIDED` (after the run) shows real allocations via `allocatedCount` and
+        MINE/TAKEN boxes with `slotNumber` (D22).
       x-maturity: MVP
       x-required-roles: [USER, COMPANY_ADMIN, SUPER_ADMIN, SECURITY]
       parameters:
@@ -2374,7 +2376,6 @@ components:
         - FORBIDDEN          # 403
         - NOT_FOUND          # 404
         - CONFLICT           # 409
-        - CAPACITY_FULL      # 409 — every slot for the date is held (Phase 7 D12)
         - WINDOW_CLOSED      # 422
         - RATE_LIMITED       # 429
         - INTERNAL           # 500
@@ -2849,7 +2850,7 @@ components:
       required:
         [nextRunAt, nextRunCountdownSeconds, requestCloseAt, requestCloseCountdownSeconds, resultsRunAt,
          runDay, runFrequency, runTime, windowWeeks, approvalLeadDays, earliestDate, latestDate,
-         requestableDates, nextRuns]
+         requestableDates, nextRuns, scoring]
       properties:
         nextRunAt: { type: string, format: date-time, description: When the next automatic batch runs. }
         nextRunCountdownSeconds: { type: integer, description: Seconds until `nextRunAt`; 0 once passed. }
@@ -2871,6 +2872,21 @@ components:
           type: array
           description: Next five automatic allocation run instants.
           items: { type: string, format: date-time }
+        scoring:
+          $ref: '#/components/schemas/BookingWindowScoring'
+
+    BookingWindowScoring:
+      type: object
+      description: >
+        Live scoring inputs (§4, D3) so the booking form can compute a user's score client-side with no
+        extra round-trip as they add carpool members. Super-Admin editable; not a promise of outcome —
+        ranking and tie-breakers still decide.
+      required: [distanceWeight, carpoolWeight, maxDistanceKm, maxPeople]
+      properties:
+        distanceWeight: { type: number, description: 'Weight applied to distanceScore (default 0.60).' }
+        carpoolWeight: { type: number, description: 'Weight applied to carpoolScore (default 0.40).' }
+        maxDistanceKm: { type: number, description: 'Distance at which distanceScore caps at 100 (default 40).' }
+        maxPeople: { type: integer, description: 'Carpool size at which carpoolScore caps at 100 (default 4).' }
 
     SlotBoxState:
       type: string
@@ -2881,30 +2897,64 @@ components:
 
     SlotBox:
       type: object
-      required: [index, state]
+      required: [index, state, slotNumber]
       properties:
         index: { type: integer, description: 1-based position in the grid. }
         state: { $ref: '#/components/schemas/SlotBoxState' }
+        slotNumber:
+          type: integer
+          nullable: true
+          description: >
+            The real `ParkingSlot.slotNumber`, populated only when `phase = DECIDED` and the box is
+            `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes.
 
     UnavailableReason:
       type: string
       description: Why a date cannot be requested; `null` when it can.
-      enum: [INVALID_DATE, NOT_WEEKDAY, TOO_SOON, BEYOND_WINDOW, NO_QUOTA, FULL, ALREADY_BOOKED]
+      enum: [INVALID_DATE, NOT_WEEKDAY, TOO_SOON, BEYOND_WINDOW, NO_QUOTA, ALREADY_BOOKED]
+
+    DayAvailabilityPhase:
+      type: string
+      description: >
+        OPEN = before the date's weekly run; grid shows only AVAILABLE/BLOCKED and demand is a count.
+        DECIDED = after the run; grid shows real allocations (D22).
+      enum: [OPEN, DECIDED]
+
+    DayAvailabilityMyStatus:
+      type: string
+      nullable: true
+      description: The caller's own request status for this date, if any.
+      enum: [SUBMITTED, ALLOCATED, WAITLISTED, RELEASED]
 
     DayAvailability:
       type: object
-      required: [date, quota, blocked, taken, available, mine, requestable, boxes]
+      required:
+        [date, phase, quota, blocked, requestCount, allocatedCount, available, mine, myStatus,
+         mySlotNumber, requestable, boxes]
       properties:
         date: { type: string, format: date }
+        phase: { $ref: '#/components/schemas/DayAvailabilityPhase' }
         quota:
           type: integer
           description: The company's effective quota for this date — also the number of boxes (D14).
         blocked: { type: integer }
-        taken:
+        requestCount:
           type: integer
-          description: Live requests holding a box (D12), not merely completed allocations.
+          description: >
+            Live SUBMITTED/DRAFT PRIMARY requests for this date — demand, not reservation. Informational
+            only; never gates a submission (D18).
+        allocatedCount:
+          type: integer
+          description: Rows actually allocated for this date. 0 while `phase = OPEN`.
         available: { type: integer }
         mine: { type: boolean, description: True when the caller already holds a request for this date. }
+        myStatus:
+          allOf: [ { $ref: '#/components/schemas/DayAvailabilityMyStatus' } ]
+          nullable: true
+        mySlotNumber:
+          type: integer
+          nullable: true
+          description: Set when `myStatus = ALLOCATED` (including common-pool allocations, §5.3).
         requestable: { type: boolean }
         reason:
           allOf: [ { $ref: '#/components/schemas/UnavailableReason' } ]
@@ -3180,7 +3230,7 @@ components:
           nullable: true
           description: >
             Present when `outcome` is FAILED — the same error code the single-date endpoint would have
-            returned for this date (CAPACITY_FULL, CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+            returned for this date (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
         message:
           type: string
           nullable: true
