@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Badge, Button, Card, EmptyState, ErrorState, LoadingState, Modal, Pager, Select, Table,
   type BadgeTone, type Column, type SelectOption,
@@ -30,9 +30,20 @@ function displayTypeLabel(row: AdminBooking) {
   return displayType(row).replace('_', ' ');
 }
 
-type DetailLine = (label: string, value: string | number | null | undefined) => ReactNode;
-
 const dateTime = (v: string | null | undefined) => (v ? new Date(v).toLocaleString() : null);
+
+/**
+ * One label/value pair in the details popup. Blank strings count as missing too, so a cleared
+ * field reads '-' rather than as an empty row.
+ */
+function DetailLine({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase text-text-muted">{label}</dt>
+      <dd className="mt-0.5 font-medium">{value === null || value === undefined || value === '' ? '-' : value}</dd>
+    </div>
+  );
+}
 
 /**
  * Everything the API knows about one booking, for the admin details popup: the driver's own
@@ -41,33 +52,25 @@ const dateTime = (v: string | null | undefined) => (v ? new Date(v).toLocaleStri
  * `sameCompany` and `isScored` are reported separately because they answer different questions -
  * whether the passenger resolved to a colleague, and whether they counted toward the carpool score.
  */
-function BookingDetails({
-  booking: b,
-  showCompany,
-  detailLine,
-}: {
-  booking: AdminBooking;
-  showCompany: boolean;
-  detailLine: DetailLine;
-}) {
+function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; showCompany: boolean }) {
   const members = b.carpoolMembers ?? [];
   return (
     <div className="text-left">
       {/* One column on a phone, widening with the viewport — 3 across is unreadable at 360px. */}
-      <dl className="grid grid-cols-1 gap-3 text-sm min-[420px]:grid-cols-2 sm:grid-cols-3">
-        {detailLine('Employee', b.employeeName)}
-        {detailLine('Email', b.employeeEmail)}
-        {showCompany && detailLine('Company', b.companyName)}
-        {detailLine('Booking date', b.bookingDate)}
-        {detailLine('Status', b.status)}
-        {detailLine('Type', displayTypeLabel(b))}
-        {detailLine('People carried', b.carpoolPeople)}
-        {detailLine('Passengers', Math.max(0, b.carpoolPeople - 1))}
-        {detailLine('Distance', b.travelDistanceKm != null ? `${b.travelDistanceKm} km` : null)}
-        {detailLine('Score', b.allocationScore != null ? b.allocationScore.toFixed(1) : null)}
-        {detailLine('Vehicle slot', b.allocatedSlotNumber)}
-        {detailLine('Submitted', dateTime(b.submittedAt))}
-        {detailLine('Created', dateTime(b.createdAt))}
+      <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <DetailLine label="Employee" value={b.employeeName} />
+        <DetailLine label="Email" value={b.employeeEmail} />
+        {showCompany && <DetailLine label="Company" value={b.companyName} />}
+        <DetailLine label="Booking date" value={b.bookingDate} />
+        <DetailLine label="Status" value={b.status} />
+        <DetailLine label="Type" value={displayTypeLabel(b)} />
+        <DetailLine label="People carried" value={b.carpoolPeople} />
+        <DetailLine label="Passengers" value={Math.max(0, b.carpoolPeople - 1)} />
+        <DetailLine label="Distance" value={b.travelDistanceKm != null ? `${b.travelDistanceKm} km` : null} />
+        <DetailLine label="Score" value={b.allocationScore != null ? b.allocationScore.toFixed(1) : null} />
+        <DetailLine label="Vehicle slot" value={b.allocatedSlotNumber} />
+        <DetailLine label="Submitted" value={dateTime(b.submittedAt)} />
+        <DetailLine label="Created" value={dateTime(b.createdAt)} />
       </dl>
 
       <div className="mt-5 border-t border-border pt-4">
@@ -129,13 +132,16 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   const showCompany = scope === 'all';
   const [companyId, setCompanyId] = useState('');
   const [page, setPage] = useState(1);
-  const [openBookingId, setOpenBookingId] = useState<string | null>(null);
+  // The row itself, not just its id: a background refetch can transiently empty `items`, and
+  // re-deriving from the current page would make the popup vanish mid-read. The snapshot is
+  // refreshed below while the row is still on the page, so edits are not shown stale.
+  const [openBooking, setOpenBooking] = useState<AdminBooking | null>(null);
 
   // The date is driven by the dashboard-level picker; reset paging when it changes.
   useEffect(() => setPage(1), [date]);
 
-  // Close the details popup when the visible rows change under it, so it can't outlive its row.
-  useEffect(() => setOpenBookingId(null), [page, date, companyId]);
+  // Close the details popup when the user navigates or filters away from the row it describes.
+  useEffect(() => setOpenBooking(null), [page, date, companyId]);
 
   const companies = useActiveCompanies();
   const bookings = useAdminBookings({
@@ -151,17 +157,6 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   ];
 
   const rows = bookings.data?.items ?? [];
-
-  // Blank strings count as missing too, so a cleared field reads '-' rather than an empty row.
-  function detailLine(label: string, value: string | number | null | undefined) {
-    const shown = value === null || value === undefined || value === '' ? '-' : value;
-    return (
-      <div>
-        <dt className="text-xs uppercase text-text-muted">{label}</dt>
-        <dd className="mt-0.5 font-medium">{shown}</dd>
-      </div>
-    );
-  }
 
   const columns: Column<AdminBooking>[] = [
     ...(showCompany
@@ -196,7 +191,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
       // The panel itself is rendered once, outside the table, as a modal. A fixed-width block
       // inside a horizontally-scrolling cell could never lay out correctly.
       render: (b) => (
-        <Button variant="secondary" size="sm" onClick={() => setOpenBookingId(b.id)}>
+        <Button variant="secondary" size="sm" onClick={() => setOpenBooking(b)}>
           Details
         </Button>
       ),
@@ -208,7 +203,15 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   // Reset to page 1 whenever a filter changes (avoids landing on an out-of-range page).
   function onCompany(v: string) { setCompanyId(v); setPage(1); }
 
-  const openBooking = rows.find((b) => b.id === openBookingId) ?? null;
+  // Prefer the live row so an in-place update is reflected; fall back to the snapshot when a
+  // refetch is in flight and `rows` is momentarily empty.
+  const shownBooking = openBooking
+    ? (rows.find((b) => b.id === openBooking.id) ?? openBooking)
+    : null;
+
+  // Stable identity so Modal's keydown/scroll-lock effect doesn't tear down on every re-render
+  // (the dashboard re-renders once a second while a countdown is on screen).
+  const closeDetails = useCallback(() => setOpenBooking(null), []);
 
   return (
     <Card title="Bookings" padded={false}>
@@ -239,17 +242,17 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
       )}
 
       <Modal
-        open={openBooking !== null}
-        onClose={() => setOpenBookingId(null)}
-        title={openBooking ? `${openBooking.employeeName} · ${openBooking.bookingDate}` : ''}
+        open={shownBooking !== null}
+        onClose={closeDetails}
+        title={shownBooking ? shownBooking.employeeName : ''}
         size="lg"
         footer={
-          <Button variant="secondary" onClick={() => setOpenBookingId(null)}>
+          <Button variant="secondary" onClick={closeDetails}>
             Close
           </Button>
         }
       >
-        {openBooking && <BookingDetails booking={openBooking} showCompany={showCompany} detailLine={detailLine} />}
+        {shownBooking && <BookingDetails booking={shownBooking} showCompany={showCompany} />}
       </Modal>
     </Card>
   );

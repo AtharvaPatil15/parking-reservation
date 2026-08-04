@@ -74,11 +74,14 @@ describe('BookingList (admin roster)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('shows a range summary from the shared pager', async () => {
+  it('shows a range summary from the shared pager, with both controls disabled on a single page', async () => {
     renderList();
 
     expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
-    expect(screen.getByText(/of \d+$/)).toBeInTheDocument();
+    // Pin the numbers: the mock seed has 5 bookings and PAGE_SIZE is 20, so one full page.
+    expect(screen.getByText('1–5 of 5')).toBeInTheDocument();
+    expect(screen.getByText('Page 1 / 1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Prev' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 });

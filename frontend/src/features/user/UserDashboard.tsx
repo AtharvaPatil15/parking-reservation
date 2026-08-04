@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState } from '../../components';
 import { useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
-import { formatCountdown } from '../../lib/dates';
+import { formatCountdown, formatLongCountdown } from '../../lib/dates';
 import { statusTone } from './statusTone';
 
 function formatRun(value: string) {
@@ -70,7 +70,7 @@ export function UserDashboard() {
             <p className="text-text">{formatRun(d.nextAllocationRunAt)} IST</p>
             {runSecondsLeft != null && (
               <p className="text-sm text-text-muted">
-                {runSecondsLeft <= 0 ? 'Running now…' : `Runs in ${formatCountdown(runSecondsLeft)}`}
+                {runSecondsLeft <= 0 ? 'Running now…' : `Runs in ${formatLongCountdown(runSecondsLeft)}`}
               </p>
             )}
           </div>

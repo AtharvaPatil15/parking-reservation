@@ -54,13 +54,13 @@ describe('UserDashboard', () => {
     );
     renderDash();
 
-    expect(await screen.findByText(/runs in 2:00/i)).toBeInTheDocument();
+    expect(await screen.findByText(/runs in 2m 00s/i)).toBeInTheDocument();
 
     // The payload value must not be rendered frozen — the display re-reads a ticking clock.
     await act(async () => {
       vi.advanceTimersByTime(3000);
     });
-    expect(screen.getByText(/runs in 1:57/i)).toBeInTheDocument();
+    expect(screen.getByText(/runs in 1m 57s/i)).toBeInTheDocument();
   });
 
   it('shows an empty state when there is no upcoming booking', async () => {
