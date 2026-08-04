@@ -618,7 +618,7 @@ around them. Full detail in [`phase-7-e2e-test-flow.md`](phase-7-e2e-test-flow.m
 | 5 | Edit before the run | `PATCH /bookings/{id}` works while `SUBMITTED`; `422` once decided |
 | 6 | Release → reallocate (F3) | released slot goes to the own-company waitlist first, then cross-company by score |
 | 7 | Common-pool run | primary waitlist is auto-enrolled and ranked cross-company |
-| 8 | Scheduler fires on the configured day only | `allocation.scheduler.test.ts` green |
+| 8 | Scheduler fires on the configured day only, and decides the band it fired for | `allocation.scheduler.test.ts` + `scheduler-band.integration.test.ts` green |
 | 9 | Run idempotency | re-running a COMPLETED date changes nothing; the button relabels and disables |
 | 10 | Weekends never bookable | Sat/Sun → `NOT_WEEKDAY`, absent from the picker |
 | 11 | Tenant isolation | Assent's requests invisible in another company's grid |
@@ -641,5 +641,10 @@ around them. Full detail in [`phase-7-e2e-test-flow.md`](phase-7-e2e-test-flow.m
   decides, and if the same person scores highest all week they park all week. Retune
   `allocation.distanceWeight` / `allocation.carpoolWeight` if the outcome looks wrong — do not add a
   cap without revisiting D20.
+- **"Requests close at" is hardcoded to 19:00 IST.** `REQUEST_CLOSE_TIME` in `bookings.window.ts`
+  assumes the 20:00 run and is not derived from `booking.allocationRunTime`. Set the run to 13:00 for a
+  demo and the countdown still claims requests close at 19:00 — six hours after the run has already
+  decided. The gate itself (`earliestRequestableDate`) stays correct, so this is a display defect only,
+  but it makes any custom-run-time test look broken. Fix is to derive it from the run time.
 - **`requestCount` reveals aggregate demand** for your own company's dates. Intentional, and no
   per-user detail leaks — but it is new information a user did not have before.

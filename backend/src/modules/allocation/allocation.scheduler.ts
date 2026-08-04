@@ -59,7 +59,11 @@ async function tick(now = new Date()): Promise<void> {
     if (toIsoDate(currentIstCalendarDate(due)) !== today) return;
     if (lastRunIstDate === today) return;
 
-    const result = await runWeeklyAllocation();
+    // `due`, not `now`: the batch must decide the band belonging to the slot it is fulfilling. Anchored
+    // on the fire time it would skip a week, because "the next run" is already next week's by then.
+    // `due`, not `now`: the batch must decide the band belonging to the slot it is fulfilling. Anchored
+    // on the fire time it would skip a week, because "the next run" is already next week's by then.
+    const result = await runWeeklyAllocation(undefined, now, due);
     lastRunIstDate = today;
     logger.info(
       {

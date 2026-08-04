@@ -3,7 +3,12 @@ import { prisma } from '../../lib/prisma';
 import { getNumber } from '../../config/systemConfig';
 import { NotFoundError, ValidationError } from '../../lib/errors';
 import { isValidCalendarDate, parseCalendarDate } from '../bookings/bookings.time';
-import { bookingWindowSummary, upcomingAllocationBand, type AllocationBand } from '../bookings/bookings.window';
+import {
+  allocationBand,
+  bookingWindowSummary,
+  upcomingAllocationBand,
+  type AllocationBand,
+} from '../bookings/bookings.window';
 import { loadScoringConfig, loadWindowConfig } from '../bookings/bookings.windowConfig';
 import { score, rankCandidates, type RankCandidate } from './score';
 import type { PageArgs } from '../../lib/pagination';
@@ -631,13 +636,23 @@ export interface WeeklyRunResult {
  * Dates already COMPLETED by an earlier run short-circuit inside `runPrimaryAllocation` and are
  * reported as `alreadyDecided`, so re-invoking the batch is safe. One date failing does not abort the
  * rest — each date is independent, and its error is reported in that date's row.
+ *
+ * `runInstant` is the scheduled slot this invocation is fulfilling, and callers who *are* that slot must
+ * pass it. Without it the band is anchored on `upcomingAllocationBand(now)` — the band of the next run
+ * *after* `now` — which is right for a Super Admin clicking ahead of schedule but wrong for the
+ * scheduler, which by definition fires at or after its slot: `nextAllocationRunAt` treats an instant
+ * exactly at the run as already under way, so the anchor has rolled a week forward by then. The batch
+ * would decide next week's dates and leave the requests whose window just closed permanently
+ * undecided — closed to new requests (`earliestRequestableDate` moved past them too) and owned by no
+ * future run.
  */
 export async function runWeeklyAllocation(
   triggeredById?: string,
   now: Date = new Date(),
+  runInstant?: Date,
 ): Promise<WeeklyRunResult> {
   const cfg = await loadWindowConfig();
-  const band = upcomingAllocationBand(now, cfg);
+  const band = runInstant ? allocationBand(runInstant, cfg) : upcomingAllocationBand(now, cfg);
 
   const dates: WeeklyRunDateResult[] = [];
   for (const bookingDate of band.dates) {

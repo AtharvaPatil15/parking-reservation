@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_WINDOW_CONFIG,
+  allocationBand,
+  earliestRequestableDate,
   nextAllocationRunAt,
   toIsoDate,
   upcomingAllocationBand,
@@ -80,6 +82,45 @@ describe('scheduler run-due rule', () => {
       '2026-08-17',
       '2026-08-18',
     ]);
+  });
+
+  it('anchors the band on the slot it fires for, not on the fire time', () => {
+    // The bug this pins: the scheduler called `runWeeklyAllocation()` with no arguments, so the band
+    // came from `upcomingAllocationBand(fireTime)`. `nextAllocationRunAt` treats an instant exactly at
+    // the run as already under way — and the scheduler only ever fires at or after its slot — so the
+    // anchor had already rolled a week forward. The batch ran, reported success, and decided nothing.
+    const correct = upcomingAllocationBand(new Date('2026-08-08T14:30:00.000Z'), cfg).dates;
+
+    for (const fireTime of ['2026-08-09T14:30:00.000Z', '2026-08-09T17:00:00.000Z']) {
+      const now = new Date(fireTime);
+      const due = dueRunInstant(now, cfg);
+      expect(allocationBand(due!, cfg).dates).toEqual(correct);
+      // What the un-anchored call produced: next week's band, a week past the dates just closed.
+      expect(upcomingAllocationBand(now, cfg).dates).not.toEqual(correct);
+    }
+  });
+
+  it('starts the band exactly where the request window closed', () => {
+    // The contract binding the two halves together: whatever a user could still request while the
+    // window was open must be decided by the run that closes it. Break this and those requests are
+    // orphaned — closed to new requests *and* owned by no run.
+    const due = dueRunInstant(new Date('2026-08-09T14:30:00.000Z'), cfg);
+    const openInstants = [
+      '2026-08-05T04:30:00.000Z', // Wed 10:00 IST, mid-window
+      '2026-08-08T14:30:00.000Z', // Sat 20:00 IST
+      '2026-08-09T13:00:00.000Z', // Sun 18:30 IST, the last hour before requests close
+    ];
+    for (const open of openInstants) {
+      expect(toIsoDate(earliestRequestableDate(new Date(open), cfg))).toBe(allocationBand(due!, cfg).from);
+    }
+  });
+
+  it('leaves no date unowned between consecutive runs', () => {
+    const first = allocationBand(new Date('2026-08-09T14:30:00.000Z'), cfg);
+    const second = allocationBand(new Date('2026-08-16T14:30:00.000Z'), cfg);
+    // Half-open bands: the next run picks up precisely where this one stopped, so a skipped week is
+    // observable as a gap here.
+    expect(second.from).toBe(first.toExclusive);
   });
 
   it('never decides a date with less than the configured lead time (the old nightly bug)', () => {
