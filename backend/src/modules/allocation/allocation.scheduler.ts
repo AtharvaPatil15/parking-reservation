@@ -2,7 +2,7 @@ import { logger } from '../../lib/logger';
 import { currentIstCalendarDate } from '../bookings/bookings.time';
 import { nextAllocationRunAt, toIsoDate } from '../bookings/bookings.window';
 import { loadWindowConfig } from '../bookings/bookings.windowConfig';
-import { runCommonPoolAllocation, runWeeklyAllocation } from './allocation.service';
+import { runWeeklyAllocation, runWeeklyCommonPoolAllocation } from './allocation.service';
 
 /**
  * Automatic allocation scheduler.
@@ -76,14 +76,18 @@ async function tick(now = new Date()): Promise<void> {
     );
 
     // Hand any leftover waitlist for those dates to the common pool, as the nightly pairing did.
-    for (const date of result.band.dates) {
-      try {
-        await runCommonPoolAllocation(date);
-      } catch (error) {
-        // One date failing must not stop the others — each run is independent and idempotent.
-        logger.error({ err: error, bookingDate: date }, 'Automatic common-pool run failed for a date');
-      }
-    }
+    // Same band-scoped call the Super Admin's "Run common pool" button makes, so the automatic and
+    // manual paths cannot drift: a per-date loop here was how they diverged before.
+    const pool = await runWeeklyCommonPoolAllocation();
+    logger.info(
+      {
+        band: `${pool.band.from}..${pool.band.toExclusive}`,
+        allocated: pool.totalAllocated,
+        stillWaitlisted: pool.totalWaitlisted,
+        failed: pool.dates.filter((d) => d.status === 'FAILED').map((d) => d.bookingDate),
+      },
+      'Automatic common-pool batch completed',
+    );
   } catch (error) {
     logger.error({ err: error }, 'Automatic allocation scheduler tick failed');
   } finally {

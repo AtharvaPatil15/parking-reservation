@@ -704,29 +704,109 @@ export async function runWeeklyAllocation(
   };
 }
 
+/**
+ * Run the common pool across the whole band the weekly batch owns — the band-scoped sibling of
+ * `runWeeklyAllocation`, and the second half of a weekly decision.
+ *
+ * Same shape and same reasoning as the primary batch: a thin loop over the already-idempotent,
+ * already-transactional per-date `runCommonPoolAllocation`, adding only *which* dates are in scope.
+ * One date failing is reported in that date's row and does not abort the rest.
+ *
+ * Counting note — the numbers here are NOT the primary run's. The common-pool run enrolls each
+ * primary-waitlisted user as a *separate* `COMMON_POOL` booking and leaves the original `PRIMARY` row
+ * `WAITLISTED` for good. So `allocated`/`waitlisted` must both be read off the COMMON_POOL rows;
+ * counting PRIMARY waitlist here would report the pool as having achieved nothing.
+ */
+export async function runWeeklyCommonPoolAllocation(
+  triggeredById?: string,
+  now: Date = new Date(),
+): Promise<WeeklyRunResult> {
+  const cfg = await loadWindowConfig();
+  const band = upcomingAllocationBand(now, cfg);
+
+  const dates: WeeklyRunDateResult[] = [];
+  for (const bookingDate of band.dates) {
+    const parsed = parseCalendarDate(bookingDate);
+    const before = await prisma.allocationRun.findUnique({
+      where: { runType_bookingDate: { runType: 'COMMON_POOL', bookingDate: parsed } },
+      select: { status: true },
+    });
+    const alreadyDecided = before?.status === 'COMPLETED';
+
+    let runId: string;
+    try {
+      runId = await runCommonPoolAllocation(bookingDate, triggeredById);
+    } catch (err) {
+      dates.push({
+        bookingDate,
+        runId: '',
+        status: 'FAILED',
+        alreadyDecided,
+        allocated: 0,
+        waitlisted: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
+
+    const [run, allocated, waitlisted] = await Promise.all([
+      prisma.allocationRun.findUnique({ where: { id: runId }, select: { status: true, error: true } }),
+      prisma.parkingAllocation.count({ where: { allocationRunId: runId } }),
+      prisma.bookingRequest.count({
+        where: { bookingDate: parsed, bookingType: 'COMMON_POOL', status: 'WAITLISTED' },
+      }),
+    ]);
+    dates.push({
+      bookingDate,
+      runId,
+      status: run?.status ?? 'FAILED',
+      alreadyDecided,
+      allocated,
+      waitlisted,
+      error: run?.error ?? null,
+    });
+  }
+
+  return {
+    runAt: now.toISOString(),
+    band,
+    dates,
+    totalAllocated: dates.reduce((s, d) => s + d.allocated, 0),
+    totalWaitlisted: dates.reduce((s, d) => s + d.waitlisted, 0),
+  };
+}
+
 /** Preview the band the next (or current) weekly batch owns — lets the SA see it before running. */
 export async function getWeeklyRunPreview(now: Date = new Date()) {
   const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
   const band = upcomingAllocationBand(now, cfg);
+  const inBand = { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) };
   const runs = await prisma.allocationRun.findMany({
-    where: {
-      runType: 'PRIMARY',
-      bookingDate: { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) },
-    },
-    select: { bookingDate: true, status: true },
+    where: { runType: { in: ['PRIMARY', 'COMMON_POOL'] }, bookingDate: inBand },
+    select: { runType: true, bookingDate: true, status: true },
   });
-  const statusByDate = new Map(runs.map((r) => [isoDate(r.bookingDate), r.status]));
+  const statusByDate = new Map(
+    runs.filter((r) => r.runType === 'PRIMARY').map((r) => [isoDate(r.bookingDate), r.status]),
+  );
+  const cpStatusByDate = new Map(
+    runs.filter((r) => r.runType === 'COMMON_POOL').map((r) => [isoDate(r.bookingDate), r.status]),
+  );
 
   const pending = await prisma.bookingRequest.groupBy({
     by: ['bookingDate'],
-    where: {
-      bookingType: 'PRIMARY',
-      status: 'SUBMITTED',
-      bookingDate: { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) },
-    },
+    where: { bookingType: 'PRIMARY', status: 'SUBMITTED', bookingDate: inBand },
     _count: { _all: true },
   });
   const pendingByDate = new Map(pending.map((p) => [isoDate(p.bookingDate), p._count._all]));
+
+  // The pool's population: users primary left WAITLISTED. This is what the common-pool run has to
+  // work with, so it is the count that tells the operator whether running it would achieve anything.
+  const waiting = await prisma.bookingRequest.groupBy({
+    by: ['bookingDate'],
+    where: { bookingType: 'PRIMARY', status: 'WAITLISTED', bookingDate: inBand },
+    _count: { _all: true },
+  });
+  const waitingByDate = new Map(waiting.map((w) => [isoDate(w.bookingDate), w._count._all]));
 
   return {
     window: bookingWindowSummary(now, cfg, scoring),
@@ -735,6 +815,8 @@ export async function getWeeklyRunPreview(now: Date = new Date()) {
       bookingDate: d,
       runStatus: statusByDate.get(d) ?? null,
       pendingRequests: pendingByDate.get(d) ?? 0,
+      commonPoolStatus: cpStatusByDate.get(d) ?? null,
+      waitlistedRequests: waitingByDate.get(d) ?? 0,
     })),
   };
 }

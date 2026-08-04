@@ -43,8 +43,9 @@ export function AppRouter() {
       <Route element={<RequireRole role="SUPER_ADMIN" />}>
         <Route element={<AppShell />}>
           <Route path="/admin" element={<AdminShell />}>
-            {/* Phase 7: the weekly batch is the default landing page; the per-date run keeps a route. */}
-            <Route index element={<WeeklyRun />} />
+            {/* Every persona lands on their dashboard; the weekly batch keeps its own route. */}
+            <Route index element={<SuperAdminDashboard />} />
+            <Route path="weekly-run" element={<WeeklyRun />} />
             <Route path="allocation" element={<AllocationRun />} />
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="config" element={<ConfigTimings />} />

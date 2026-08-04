@@ -40,6 +40,18 @@ export function isBookableWeekday(value: string): boolean {
   return date.getTime() >= todayLocal().getTime();
 }
 
+/**
+ * Today's calendar date in the booking domain's timezone (IST), as yyyy-mm-dd.
+ *
+ * The rest of this module compares on the *browser's* local date, which is fine for validating what
+ * the user typed. This one is different: it is sent to the server as a range bound, so it has to
+ * agree with the server's notion of "today" — Asia/Kolkata — regardless of where the browser sits.
+ */
+export function todayIstIso(): string {
+  // `en-CA` formats as yyyy-mm-dd, which is exactly the wire format.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+}
+
 /** Next Mon–Fri (today if it's a weekday), as yyyy-mm-dd. */
 export function nextBookableWeekday(): string {
   const d = todayLocal();
@@ -49,12 +61,36 @@ export function nextBookableWeekday(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
-/** Format a countdown as `h:mm:ss` (or `m:ss` under an hour); clamps negatives to 0. */
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Format a countdown as `h:mm:ss` (or `m:ss` under an hour); clamps negatives to 0.
+ * Floors the input so a fractional second can't render as `59.90000000000009`.
+ */
 export function formatCountdown(totalSeconds: number): string {
-  const s = Math.max(0, totalSeconds);
+  const s = Math.floor(Math.max(0, totalSeconds)) || 0;
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(sec)}` : `${m}:${pad2(sec)}`;
+}
+
+/**
+ * Format a countdown that can span days, e.g. `5d 6h`, `6h 21m`, `21m 49s`.
+ *
+ * `formatCountdown` rolls days into the hour field, which is fine for a cutoff hours away but
+ * renders a multi-day allocation wait as an unreadable `126:21:49`. Only the two most significant
+ * units are shown — nobody reads seconds off a five-day countdown.
+ *
+ * Floors the input (and maps NaN to 0) so a fractional second can't leak into the output.
+ */
+export function formatLongCountdown(totalSeconds: number): string {
+  const s = Math.floor(Math.max(0, totalSeconds)) || 0;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${pad2(m)}m`;
+  return `${m}m ${pad2(sec)}s`;
 }

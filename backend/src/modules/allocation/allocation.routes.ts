@@ -11,6 +11,7 @@ allocationRouter.post('/primary/run', authenticate, requireRole('SUPER_ADMIN'), 
 allocationRouter.post('/common-pool/run', authenticate, requireRole('SUPER_ADMIN'), validate(primaryRunSchema), c.runCommonPool);
 // Phase 7 weekly weekend batch: the band is derived from config, so the request carries no date.
 allocationRouter.post('/weekly/run', authenticate, requireRole('SUPER_ADMIN'), c.runWeekly);
+allocationRouter.post('/weekly/common-pool/run', authenticate, requireRole('SUPER_ADMIN'), c.runWeeklyCommonPool);
 allocationRouter.get('/weekly', authenticate, requireRole('SUPER_ADMIN'), c.weeklyPreview);
 // Lookup by date+type (registered before /runs/:id so the literal path wins). Null when not yet run.
 // Merge note: PR #33's `/runs/by-date` did the same job and was dropped in favour of this one.

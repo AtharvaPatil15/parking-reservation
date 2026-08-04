@@ -409,6 +409,95 @@ describe('a waitlisted user is picked up by the common-pool run', () => {
     expect(day.boxes).toHaveLength(12);
   });
 
+  /**
+   * The band-scoped sibling of the per-date run. It exists because the manual and automatic paths had
+   * drifted: the scheduler looped the band handing each date to the common pool, but the Super Admin's
+   * weekly button ran primary only — so a manually-run week left its waitlist stranded with no way to
+   * see or fix it from the weekly screen.
+   */
+  it('runs the common pool across the whole band in one call, and reports COMMON_POOL counts', async () => {
+    const sa = await login(SA);
+    const preview = await request(app).get(`${API}/allocation/weekly`).set(bearer(sa)).expect(200);
+    const bandDates: string[] = preview.body.data.band.dates;
+    expect(bandDates.length).toBeGreaterThan(1); // a band, not a single date — that is the point
+
+    // Two dates, each squeezed to one slot with two bidders, so each waitlists exactly one person.
+    const [d1, d2] = bandDates;
+    for (const date of [d1, d2]) {
+      await squeezeTo(1, date);
+      await queueOk(SARA, date);
+      await queueOk(RAHUL, date);
+    }
+    await request(app).post(`${API}/allocation/weekly/run`).set(bearer(sa)).expect(200);
+    expect(await statusOf(RAHUL, d1)).toBe('WAITLISTED');
+    expect(await statusOf(RAHUL, d2)).toBe('WAITLISTED');
+
+    // One lent slot is enough for one date's waitlist; the quota row has no end date, so it applies to
+    // every date in the band.
+    await lendRedbricksQuota(1);
+
+    const pool = await request(app)
+      .post(`${API}/allocation/weekly/common-pool/run`)
+      .set(bearer(sa))
+      .expect(200);
+
+    // Every band date got its own run — not just the first.
+    expect(pool.body.data.dates).toHaveLength(bandDates.length);
+    expect(pool.body.data.dates.every((d: { status: string }) => d.status === 'COMPLETED')).toBe(true);
+
+    // The counts describe the COMMON_POOL rows. Reading them off the PRIMARY waitlist instead would
+    // report totalAllocated: 0 here, because a pooled user's primary row stays WAITLISTED for good.
+    expect(pool.body.data.totalAllocated).toBe(2); // one placement on each of the two dates
+    const placed = await prisma.parkingAllocation.count({ where: { allocationType: 'COMMON_POOL' } });
+    expect(placed).toBe(2);
+    for (const date of [d1, d2]) {
+      const cp = await prisma.bookingRequest.findFirstOrThrow({
+        where: { bookingDate: new Date(`${date}T00:00:00.000Z`), bookingType: 'COMMON_POOL', user: { email: RAHUL } },
+        select: { status: true },
+      });
+      expect(cp.status).toBe('ALLOCATED');
+      expect(await statusOf(RAHUL, date)).toBe('WAITLISTED'); // primary row untouched
+    }
+
+    // Re-running is safe: every date short-circuits and nothing is placed twice.
+    const again = await request(app)
+      .post(`${API}/allocation/weekly/common-pool/run`)
+      .set(bearer(sa))
+      .expect(200);
+    expect(again.body.data.dates.every((d: { alreadyDecided: boolean }) => d.alreadyDecided)).toBe(true);
+    expect(await prisma.parkingAllocation.count({ where: { allocationType: 'COMMON_POOL' } })).toBe(2);
+  });
+
+  it('exposes each band date\'s common-pool status separately from its primary status', async () => {
+    const sa = await login(SA);
+    const before = await request(app).get(`${API}/allocation/weekly`).set(bearer(sa)).expect(200);
+    const bandDates: string[] = before.body.data.band.dates;
+    const date = bandDates[0];
+
+    await squeezeTo(1, date);
+    await queueOk(SARA, date);
+    await queueOk(RAHUL, date);
+    await request(app).post(`${API}/allocation/weekly/run`).set(bearer(sa)).expect(200);
+
+    // Primary decided, pool not yet run — the UI needs these to be independent so it can offer the
+    // second step without claiming the first is unfinished.
+    const mid = await request(app).get(`${API}/allocation/weekly`).set(bearer(sa)).expect(200);
+    const row = mid.body.data.dates.find((d: { bookingDate: string }) => d.bookingDate === date);
+    expect(row.runStatus).toBe('COMPLETED');
+    expect(row.commonPoolStatus).toBeNull();
+    expect(row.waitlistedRequests).toBe(1); // what the pool would have to work with
+
+    await request(app).post(`${API}/allocation/weekly/common-pool/run`).set(bearer(sa)).expect(200);
+    const after = await request(app).get(`${API}/allocation/weekly`).set(bearer(sa)).expect(200);
+    const done = after.body.data.dates.find((d: { bookingDate: string }) => d.bookingDate === date);
+    expect(done.commonPoolStatus).toBe('COMPLETED');
+  });
+
+  it('the band common-pool run is SUPER_ADMIN only', async () => {
+    const user = await login(ADITI);
+    await request(app).post(`${API}/allocation/weekly/common-pool/run`).set(bearer(user)).expect(403);
+  });
+
   it('leaves the waitlist alone when no company has a spare slot', async () => {
     await squeezeTo(1);
     await queueOk(ADITI);
