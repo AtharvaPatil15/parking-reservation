@@ -317,6 +317,125 @@ describe('a booking needs a scoreable profile (P8-02)', () => {
   });
 });
 
+/**
+ * The primary waitlist feeding the common pool is the one path Phase 8 makes *live* without changing a
+ * line of it. Before D18 the waitlist was always empty — submit-time capping guaranteed
+ * demand <= quota — so this code has never run against real data. Asserted here for the first time.
+ */
+describe('a waitlisted user is picked up by the common-pool run', () => {
+  // Quota rows are not transactional data, so `resetTransactional` will not remove one we add.
+  afterEach(async () => {
+    await prisma.commonPoolSlot.deleteMany({});
+    await prisma.companySlotAllocation.deleteMany({ where: { id: 'test-quota-redbricks' } });
+  });
+
+  /** Give the building company unused quota, which is what the common pool is built out of. */
+  async function lendRedbricksQuota(slotCount: number): Promise<string> {
+    const redbricks = await prisma.company.findFirstOrThrow({ where: { code: 'REDBRICKS' } });
+    const sa = await prisma.user.findFirstOrThrow({ where: { email: SA } });
+    await prisma.companySlotAllocation.create({
+      data: {
+        id: 'test-quota-redbricks',
+        companyId: redbricks.id,
+        slotCount,
+        effectiveFrom: new Date('2020-01-01T00:00:00.000Z'),
+        createdById: sa.id,
+      },
+    });
+    return redbricks.id;
+  }
+
+  it('re-ranks the primary waitlist across companies and places them in another company\'s spare slots', async () => {
+    // Assent has ONE slot, three people want it: Sara wins on score, Rahul and Aditi are waitlisted.
+    await squeezeTo(1);
+    await queueOk(ADITI);
+    await queueOk(RAHUL);
+    await queueOk(SARA);
+    await runPrimary();
+
+    expect(await statusOf(SARA)).toBe('ALLOCATED');
+    expect(await statusOf(RAHUL)).toBe('WAITLISTED');
+    expect(await statusOf(ADITI)).toBe('WAITLISTED');
+
+    // Redbricks has one slot nobody asked for. That is the entire point of the common pool: it should
+    // cross the company boundary rather than sit empty while Assent has people waiting.
+    const redbricksId = await lendRedbricksQuota(1);
+
+    const sa = await login(SA);
+    await request(app)
+      .post(`${API}/allocation/common-pool/run`)
+      .set(bearer(sa))
+      .send({ bookingDate: DATE })
+      .expect(200);
+
+    // Both waitlisted users were enrolled as COMMON_POOL requests without asking again…
+    const cp = await prisma.bookingRequest.findMany({
+      where: { bookingDate: dateUtc, bookingType: 'COMMON_POOL' },
+      select: { status: true, user: { select: { email: true } } },
+    });
+    expect(cp.map((r) => r.user.email).sort()).toEqual([ADITI, RAHUL].sort());
+
+    // …and the single spare slot went to the BETTER-scoring one of them (Rahul 37.20 > Aditi 18.60),
+    // ranked across companies, not by who was waitlisted first.
+    const byEmail = new Map(cp.map((r) => [r.user.email, r.status]));
+    expect(byEmail.get(RAHUL)).toBe('ALLOCATED');
+    expect(byEmail.get(ADITI)).toBe('WAITLISTED');
+
+    // The allocation is typed COMMON_POOL and the pool slot is credited to whoever lent it.
+    const alloc = await prisma.parkingAllocation.findFirstOrThrow({
+      where: { bookingDate: dateUtc, allocationType: 'COMMON_POOL' },
+      select: { companyId: true, bookingRequest: { select: { user: { select: { email: true } } } } },
+    });
+    expect(alloc.bookingRequest.user.email).toBe(RAHUL);
+    expect(alloc.companyId).not.toBe(redbricksId); // recorded against the HOLDER, not the lender
+
+    const poolSlots = await prisma.commonPoolSlot.findMany({
+      where: { bookingDate: dateUtc },
+      select: { status: true, sourceCompanyId: true },
+    });
+    expect(poolSlots).toHaveLength(1);
+    expect(poolSlots[0]).toMatchObject({ status: 'ALLOCATED', sourceCompanyId: redbricksId });
+
+    // Rahul now holds a WAITLISTED primary row AND an ALLOCATED common-pool row for the same day, so
+    // the grid must report the outcome that matters. This is exactly why `myStatus` takes the best of
+    // the two rather than the first one found.
+    expect(await statusOf(RAHUL)).toBe('WAITLISTED'); // his PRIMARY row, untouched
+    const grid = await request(app).get(`${API}/availability`).set(bearer(await login(RAHUL))).expect(200);
+    const day = grid.body.data.days.find((d: { date: string }) => d.date === DATE);
+    expect(day.myStatus).toBe('ALLOCATED');
+    expect(day.mySlotNumber).toBeTruthy();
+    // …but it contributes no box to Assent's grid: the slot came out of Redbricks' quota (§5.3).
+    expect(day.boxes.filter((b: { state: string }) => b.state === 'MINE')).toHaveLength(0);
+    expect(day.boxes).toHaveLength(12);
+  });
+
+  it('leaves the waitlist alone when no company has a spare slot', async () => {
+    await squeezeTo(1);
+    await queueOk(ADITI);
+    await queueOk(SARA);
+    await runPrimary();
+
+    // No lent quota this time, so the pool is empty.
+    const sa = await login(SA);
+    await request(app)
+      .post(`${API}/allocation/common-pool/run`)
+      .set(bearer(sa))
+      .send({ bookingDate: DATE })
+      .expect(200);
+
+    expect(await prisma.commonPoolSlot.count({ where: { bookingDate: dateUtc } })).toBe(0);
+    expect(
+      await prisma.parkingAllocation.count({ where: { bookingDate: dateUtc, allocationType: 'COMMON_POOL' } }),
+    ).toBe(0);
+    // Aditi is enrolled and still waiting — never rejected (D19).
+    const cp = await prisma.bookingRequest.findFirstOrThrow({
+      where: { bookingDate: dateUtc, bookingType: 'COMMON_POOL', user: { email: ADITI } },
+      select: { status: true },
+    });
+    expect(cp.status).toBe('WAITLISTED');
+  });
+});
+
 describe('an under-provisioned building fails loudly instead of starving a tenant (P8-05b)', () => {
   // Slots are seeded data, not transactional, so `resetTransactional` will not put them back.
   afterEach(async () => {
