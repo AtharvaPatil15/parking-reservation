@@ -8,6 +8,7 @@ export const queryKeys = {
   allocations: (date: string, companyId: string, type: string, page: number) =>
     ['allocations', date, companyId, type, page] as const,
   me: ['me'] as const,
+  myVehicles: ['me', 'vehicles'] as const,
   userDashboard: ['dashboard', 'user'] as const,
   myBookings: (page: number, pageSize: number, status: string) => ['me', 'bookings', page, pageSize, status] as const,
   adminBookings: (date: string, companyId: string, page: number) =>

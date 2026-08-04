@@ -1,9 +1,10 @@
-import type { Prisma, UserStatus } from '@prisma/client';
+import type { BookingStatus, Prisma, UserStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
+import { currentIstCalendarDate } from '../bookings/bookings.time';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
 
@@ -33,6 +34,52 @@ async function loadTargetUser(actor: Actor, userId: string) {
  * either into their own tenant.
  */
 const PRIVILEGED_ROLE_NAMES = ['COMPANY_ADMIN', 'SECURITY'];
+const LIVE_BOOKING_STATUSES: BookingStatus[] = ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'ALLOCATED'];
+const REMOVED_USER_CANCELLATION_REASON = 'User removed';
+
+function hasRole(user: Awaited<ReturnType<typeof loadTargetUser>>, role: Role | 'COMPANY_ADMIN' | 'SECURITY' | 'USER') {
+  return user.roles.some((r) => r.role.name === role);
+}
+
+async function cancelLiveFutureBookingsForRemovedUser(tx: Prisma.TransactionClient, userId: string, now: Date) {
+  const liveBookings = await tx.bookingRequest.findMany({
+    where: {
+      userId,
+      bookingDate: { gte: currentIstCalendarDate(now) },
+      status: { in: LIVE_BOOKING_STATUSES },
+    },
+    select: {
+      id: true,
+      bookingDate: true,
+      allocation: { select: { slotId: true, allocationType: true } },
+    },
+  });
+  const bookingIds = liveBookings.map((b) => b.id);
+  if (bookingIds.length === 0) return 0;
+
+  const commonPoolSlots = liveBookings
+    .filter((b) => b.allocation?.allocationType === 'COMMON_POOL')
+    .map((b) => ({ slotId: b.allocation!.slotId, bookingDate: b.bookingDate }));
+
+  if (commonPoolSlots.length > 0) {
+    await tx.commonPoolSlot.updateMany({
+      where: { OR: commonPoolSlots, status: 'ALLOCATED' },
+      data: { status: 'AVAILABLE' },
+    });
+  }
+
+  await tx.parkingAllocation.deleteMany({ where: { bookingRequestId: { in: bookingIds } } });
+  await tx.bookingRequest.updateMany({
+    where: { id: { in: bookingIds } },
+    data: {
+      status: 'CANCELLED',
+      cancellationTime: now,
+      cancellationReason: REMOVED_USER_CANCELLATION_REASON,
+    },
+  });
+
+  return bookingIds.length;
+}
 
 /**
  * List PENDING privileged registrations (COMPANY_ADMIN or SECURITY) across all companies — the Super
@@ -160,6 +207,56 @@ export async function setStatus(actor: Actor, userId: string, status: UserStatus
     }),
   ]);
   return prisma.user.findFirstOrThrow({ where: { id: userId }, include: userInclude });
+}
+
+export async function removeUser(actor: Actor, userId: string) {
+  const user = await loadTargetUser(actor, userId);
+  if (user.id === actor.id) {
+    throw new ValidationError('You cannot remove your own account');
+  }
+
+  const targetIsCompanyAdmin = hasRole(user, 'COMPANY_ADMIN');
+  const targetIsSecurity = hasRole(user, 'SECURITY');
+
+  if (actor.role === 'SUPER_ADMIN') {
+    if (!targetIsCompanyAdmin && !targetIsSecurity) {
+      throw new ForbiddenError('Super admin can remove company-admin and security users from this screen');
+    }
+  } else {
+    if (targetIsCompanyAdmin || targetIsSecurity) {
+      throw new ForbiddenError('Only the super admin can remove company-admin or security users');
+    }
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const cancelledLiveBookingCount = await cancelLiveFutureBookingsForRemovedUser(tx, userId, now);
+
+    await tx.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await tx.companyAdmin.deleteMany({ where: { userId } });
+    await tx.vehicle.updateMany({
+      where: { userId },
+      data: { isActive: false },
+    });
+    await tx.user.update({
+      where: { id: userId },
+      data: { status: 'INACTIVE', deletedAt: now },
+    });
+    await tx.auditLog.create({
+      data: buildAuditData({
+        actionType: 'USER_REMOVED',
+        entityType: 'User',
+        entityId: userId,
+        oldValue: { status: user.status, role: user.roles[0]?.role.name ?? null, companyId: user.companyId },
+        newValue: { deletedAt: true, removedBy: actor.role, cancelledLiveBookingCount },
+      }),
+    });
+  });
+
+  return { message: 'User removed' };
 }
 
 export type { Actor };

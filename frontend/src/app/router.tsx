@@ -25,6 +25,7 @@ import { UserDashboard } from '../features/user/UserDashboard';
 import { History } from '../features/user/History';
 import { BookingForm } from '../features/user/BookingForm';
 import { BookingStatus } from '../features/user/BookingStatus';
+import { Profile } from '../features/user/Profile';
 
 /** `/` → the signed-in user's home, or /login when anonymous. */
 function RootRedirect() {
@@ -89,6 +90,12 @@ export function AppRouter() {
           <Route path="/book" element={<BookingForm />} />
           <Route path="/booking/:id" element={<BookingStatus />} />
           <Route path="/my-bookings" element={<History />} />
+        </Route>
+      </Route>
+
+      <Route element={<RequireRole role={['USER', 'COMPANY_ADMIN', 'SUPER_ADMIN', 'SECURITY']} />}>
+        <Route element={<AppShell />}>
+          <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>
 

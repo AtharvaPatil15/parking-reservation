@@ -56,7 +56,9 @@ TRUNCATE TABLE
   "CompanyAdmin",
   "Notification",
   "AuditLog",
-  "RefreshToken"
+  "RefreshToken",
+  "GateEvent",
+  "Vehicle"
 CASCADE;
 
 -- --- 2. Calendar rows scoped to tenants that are about to disappear ----------
@@ -101,6 +103,8 @@ UNION ALL SELECT 'AllocationRun',               count(*) FROM "AllocationRun"
 UNION ALL SELECT 'Notification',                count(*) FROM "Notification"
 UNION ALL SELECT 'AuditLog',                    count(*) FROM "AuditLog"
 UNION ALL SELECT 'RefreshToken',                count(*) FROM "RefreshToken"
+UNION ALL SELECT 'GateEvent',                   count(*) FROM "GateEvent"
+UNION ALL SELECT 'Vehicle',                     count(*) FROM "Vehicle"
 ORDER BY table_name;
 
 -- Confirm the surviving login.

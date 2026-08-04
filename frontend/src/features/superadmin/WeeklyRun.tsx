@@ -1,5 +1,9 @@
 import { Badge, Button, Card, ErrorState, LoadingState, Table, useToast, type Column } from '../../components';
-import { useRunWeeklyAllocation, useWeeklyRunPreview } from '../../api/hooks';
+import {
+  useRunWeeklyAllocation,
+  useRunWeeklyCommonPoolAllocation,
+  useWeeklyRunPreview,
+} from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
 
@@ -17,6 +21,14 @@ const runLabel = (iso: string): string =>
     minute: '2-digit',
   });
 
+/** Shared by both run columns — the same four states mean the same thing for either run type. */
+function RunBadge({ status }: { status: PreviewDate['runStatus'] }) {
+  if (status === 'COMPLETED') return <Badge tone="success">Decided</Badge>;
+  if (status === 'FAILED') return <Badge tone="danger">Failed</Badge>;
+  if (status) return <Badge tone="warning">{status}</Badge>;
+  return <Badge tone="neutral">Not run</Badge>;
+}
+
 /**
  * The weekly weekend batch (Phase 7 D10) — the Super Admin's one button for scoring a whole band of
  * dates at once, replacing the per-date primary run as the normal path.
@@ -28,6 +40,7 @@ const runLabel = (iso: string): string =>
 export function WeeklyRun() {
   const preview = useWeeklyRunPreview();
   const run = useRunWeeklyAllocation();
+  const commonPool = useRunWeeklyCommonPoolAllocation();
   const { toast } = useToast();
 
   if (preview.isLoading) return <LoadingState label="Loading the allocation band…" />;
@@ -49,6 +62,12 @@ export function WeeklyRun() {
   const allDecided = dates.length > 0 && dates.every((d) => d.runStatus === 'COMPLETED');
   const result = run.data;
 
+  // Common pool is a second, separate step over the same band. It has nothing to do until primary has
+  // produced a waitlist, so gate the button on that rather than letting the operator run a no-op.
+  const waitlistedTotal = dates.reduce((sum, d) => sum + d.waitlistedRequests, 0);
+  const poolAllDone = dates.length > 0 && dates.every((d) => d.commonPoolStatus === 'COMPLETED');
+  const poolResult = commonPool.data;
+
   const columns: Column<PreviewDate>[] = [
     { key: 'bookingDate', header: 'Date', render: (d) => dayLabel(d.bookingDate) },
     {
@@ -59,17 +78,20 @@ export function WeeklyRun() {
     },
     {
       key: 'runStatus',
-      header: 'Run',
-      render: (d) =>
-        d.runStatus === 'COMPLETED' ? (
-          <Badge tone="success">Decided</Badge>
-        ) : d.runStatus === 'FAILED' ? (
-          <Badge tone="danger">Failed</Badge>
-        ) : d.runStatus ? (
-          <Badge tone="warning">{d.runStatus}</Badge>
-        ) : (
-          <Badge tone="neutral">Not run</Badge>
-        ),
+      header: 'Primary run',
+      render: (d) => <RunBadge status={d.runStatus} />,
+    },
+    // Waitlisted-after-primary is the pool's input, so it belongs next to the pool's own status.
+    {
+      key: 'waitlistedRequests',
+      header: 'Waitlisted',
+      align: 'right',
+      render: (d) => <span className="tabular-nums">{d.waitlistedRequests}</span>,
+    },
+    {
+      key: 'commonPoolStatus',
+      header: 'Common pool',
+      render: (d) => <RunBadge status={d.commonPoolStatus} />,
     },
   ];
 
@@ -86,10 +108,25 @@ export function WeeklyRun() {
     });
   }
 
+  function onRunCommonPool() {
+    commonPool.mutate(undefined, {
+      onSuccess: (r) =>
+        toast(
+          r.totalAllocated > 0
+            ? `Common pool placed ${r.totalAllocated} waitlisted request(s)` +
+                (r.totalWaitlisted > 0 ? `, ${r.totalWaitlisted} still waitlisted.` : '.')
+            : 'Common pool ran, but there were no spare slots to redistribute.',
+          { tone: r.totalAllocated > 0 ? 'success' : 'info' },
+        ),
+      onError: (e) =>
+        toast(e instanceof ApiError ? e.message : 'Could not run the common pool.', { tone: 'danger' }),
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Weekly allocation</h2>
+        <h2 className="text-2xl">Weekly allocation</h2>
         <p className="text-text-muted">
           Runs every {win.runDay.toLowerCase()} at {win.runTime} IST. Next: {runLabel(win.nextRunAt)}.
         </p>
@@ -116,6 +153,58 @@ export function WeeklyRun() {
           </div>
         </div>
       </Card>
+
+      {/* Step 2 — the same band, redistributed. Deliberately a separate action rather than chained
+          onto step 1: the operator can see what primary waitlisted before deciding to share out the
+          leftovers. The scheduler runs both back-to-back, so an untouched band still ends up complete. */}
+      <Card
+        title="Common pool"
+        description="Shares every company's unused slots across the whole building, offering them to the users primary waitlisted — highest score first, regardless of company. Run this after the allocation above."
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={onRunCommonPool}
+            loading={commonPool.isPending}
+            disabled={poolAllDone || waitlistedTotal === 0}
+          >
+            {poolAllDone ? 'Common pool already run' : `Run common pool for ${dates.length} date(s)`}
+          </Button>
+          <p className="text-sm text-text-muted">
+            {poolAllDone
+              ? 'Every date in this band has been through the pool.'
+              : waitlistedTotal === 0
+                ? 'Nothing waitlisted in this band — the pool has nobody to place.'
+                : `${waitlistedTotal} waitlisted request${waitlistedTotal === 1 ? '' : 's'} could be placed.`}
+          </p>
+        </div>
+      </Card>
+
+      {poolResult && (
+        <Card
+          title="Last common-pool run"
+          description={`Band ${poolResult.band.from} → ${poolResult.band.toExclusive} (exclusive).`}
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-text">
+              {poolResult.totalAllocated} placed from the pool · {poolResult.totalWaitlisted} still waitlisted
+            </p>
+            <ul className="divide-y divide-border text-sm">
+              {poolResult.dates.map((d) => (
+                <li key={d.bookingDate} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span className="font-medium text-text">{dayLabel(d.bookingDate)}</span>
+                  <span className="text-text-muted">
+                    {d.alreadyDecided
+                      ? 'already pooled — left untouched'
+                      : `${d.allocated} placed, ${d.waitlisted} still waitlisted`}
+                    {d.error ? ` · ${d.error}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      )}
 
       {result && (
         <Card title="Last run" description={`Band ${result.band.from} → ${result.band.toExclusive} (exclusive).`}>

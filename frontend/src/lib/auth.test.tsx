@@ -64,6 +64,16 @@ describe('AuthProvider', () => {
     expect(result.current.accessToken).toBe('tok');
   });
 
+  it('does not restore a persisted session whose JWT is already expired', () => {
+    sessionStorage.setItem(
+      'auth:session',
+      JSON.stringify({ ...session, accessToken: makeJwt(Math.floor(Date.now() / 1000) - 1) }),
+    );
+    const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(sessionStorage.getItem('auth:session')).toBeNull();
+  });
+
   it('persists the session to storage on login and clears it on logout', () => {
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider });
     act(() => result.current.login(session));
@@ -154,6 +164,48 @@ describe('AuthProvider', () => {
         await vi.advanceTimersByTimeAsync(31_000);
       });
       expect(result.current.isAuthenticated).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('logs out when a silent refresh returns a token for a different user', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = 1_700_000_000_000;
+      vi.setSystemTime(now);
+      const exp = Math.floor(now / 1000) + 90;
+      server.use(
+        http.post('*/api/v1/auth/refresh', () =>
+          HttpResponse.json({
+            success: true,
+            data: {
+              accessToken: makeJwt(Math.floor(now / 1000) + 900),
+              tokenType: 'Bearer',
+              expiresIn: 900,
+              user: {
+                id: '2',
+                fullName: 'Different User',
+                role: 'USER',
+                companyId: 'c2',
+                companyName: 'Other Co',
+              },
+            },
+          }),
+        ),
+      );
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: ({ children }) => (
+          <AuthProvider initialSession={{ ...session, accessToken: makeJwt(exp) }}>{children}</AuthProvider>
+        ),
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+      });
+
+      expect(result.current.isAuthenticated).toBe(false);
+      expect(sessionStorage.getItem('auth:session')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

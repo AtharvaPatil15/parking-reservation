@@ -45,7 +45,7 @@ export function History() {
     <div className="space-y-4">
       <div className="space-y-2">
         <BackLink />
-        <h1 className="text-2xl font-semibold tracking-tight">Booking history</h1>
+        <h1 className="text-4xl">Booking history</h1>
       </div>
 
       <Card>

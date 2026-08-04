@@ -35,9 +35,6 @@ export function BookingStatus() {
   const [editOpen, setEditOpen] = useState(false);
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [people, setPeople] = useState('1');
-  // No longer editable in the UI, but still round-tripped so saving an edit
-  // preserves any special requirement already on the booking rather than clearing it.
-  const [special, setSpecial] = useState('');
   const [members, setMembers] = useState<{ name: string; employeeEmail: string }[]>([]);
 
   if (booking.isLoading) return <LoadingState label="Loading booking…" />;
@@ -89,7 +86,6 @@ export function BookingStatus() {
   function openEdit() {
     setVehicleNumber(b.vehicleNumber ?? '');
     setPeople(String(b.carpoolMemberCount + 1));
-    setSpecial(b.specialRequirement ?? '');
     setMembers((b.carpoolMembers ?? []).map((m) => ({ name: m.name, employeeEmail: m.employeeEmail ?? '' })));
     setEditOpen(true);
   }
@@ -103,7 +99,6 @@ export function BookingStatus() {
       // Keep people ≥ declared members + driver so the edit is internally consistent.
       carpoolPeople: Math.max(peopleNum, cleanedMembers.length + 1),
       vehicleNumber: vehicleNumber.trim() || null,
-      specialRequirement: special.trim() || null,
       carpoolMembers: cleanedMembers,
     };
     update.mutate(body, {
@@ -119,7 +114,7 @@ export function BookingStatus() {
       <BackLink to="/my-bookings" label="Back to my bookings" />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Booking status</h1>
+          <h1 className="text-4xl">Booking status</h1>
           <p className="text-text-muted">
             {b.bookingDate} · {b.bookingType}
           </p>
@@ -131,6 +126,13 @@ export function BookingStatus() {
         {b.status === 'ALLOCATED' && b.allocatedSlotNumber ? (
           <p className="text-text">
             Allocated slot <span className="font-semibold text-accent">{b.allocatedSlotNumber}</span>.
+          </p>
+        ) : b.status === 'WAITLISTED' ? (
+          // Phase 8 D19: waitlisted, never rejected — this is the "why didn't I get it?" screen, so
+          // point straight at the score breakdown rather than a bare status echo.
+          <p className="text-text-muted">
+            Not allocated this run — the score breakdown below shows how you ranked. You may still be
+            placed if a common-pool slot opens up.
           </p>
         ) : (
           <p className="text-text-muted">No slot assigned ({b.status.toLowerCase()}).</p>

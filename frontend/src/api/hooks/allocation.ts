@@ -43,6 +43,19 @@ export function useRunWeeklyAllocation() {
   });
 }
 
+/**
+ * POST /allocation/weekly/common-pool/run — the band-scoped common pool. Same no-body shape as the
+ * weekly primary batch, and meant to be run after it: it redistributes every company's unused slots
+ * across the building for each date in the band.
+ */
+export function useRunWeeklyCommonPoolAllocation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap<WeeklyRunResult>(api.POST('/allocation/weekly/common-pool/run')),
+    onSuccess: () => invalidateAfterRun(qc),
+  });
+}
+
 /** POST /allocation/primary/run — returns the run summary (use `.id` for the breakdown). */
 export function useRunPrimaryAllocation() {
   const qc = useQueryClient();

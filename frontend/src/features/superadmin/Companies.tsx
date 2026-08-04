@@ -130,7 +130,7 @@ export function Companies() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Companies</h2>
+        <h2 className="text-2xl">Companies</h2>
         <p className="text-text-muted">Tenants and their parking quota.</p>
       </div>
 

@@ -35,7 +35,7 @@ export const register = asyncHandler(async (req, res) => {
 export const refresh = asyncHandler(async (req, res) => {
   const r = await service.refresh(req.cookies?.[COOKIE], req.ip);
   res.cookie(COOKIE, r.refreshToken, cookieOpts(r.refreshExpiresAt));
-  sendSuccess(res, { accessToken: r.accessToken, tokenType: r.tokenType, expiresIn: r.expiresIn });
+  sendSuccess(res, { accessToken: r.accessToken, tokenType: r.tokenType, expiresIn: r.expiresIn, user: r.user });
 });
 
 export const logout = asyncHandler(async (req, res) => {

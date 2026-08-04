@@ -88,6 +88,15 @@ export const runWeekly = asyncHandler(async (req, res) => {
   sendSuccess(res, await service.runWeeklyAllocation(req.user?.id), 200);
 });
 
+/**
+ * POST /allocation/weekly/common-pool/run — the band-scoped common pool: redistributes every
+ * company's unused slots across the whole building for each date the weekly batch owns. Runs after
+ * `weekly/run`; on its own it would find no waitlist to enroll.
+ */
+export const runWeeklyCommonPool = asyncHandler(async (req, res) => {
+  sendSuccess(res, await service.runWeeklyCommonPoolAllocation(req.user?.id), 200);
+});
+
 /** GET /allocation/weekly — the band the next batch owns, with pending-request counts per date. */
 export const weeklyPreview = asyncHandler(async (_req, res) => {
   sendSuccess(res, await service.getWeeklyRunPreview(), 200);

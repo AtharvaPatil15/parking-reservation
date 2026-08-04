@@ -133,7 +133,7 @@ export function Slots() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Parking slots</h2>
+        <h2 className="text-2xl">Parking slots</h2>
         <p className="text-text-muted">The physical inventory allocation draws from. Deactivated slots don't count as in service.</p>
       </div>
 

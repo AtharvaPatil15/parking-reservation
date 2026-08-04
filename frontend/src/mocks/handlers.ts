@@ -116,7 +116,7 @@ const breakdownFor = (distanceKm: number, people: number, finalScore: number) =>
 function seedBookings(): Record<string, BookingDetail> {
   return {
     'mock-booking-1': {
-      id: 'mock-booking-1', bookingDate: '2026-08-03', bookingType: 'PRIMARY', status: 'ALLOCATED',
+      id: 'mock-booking-1', bookingDate: MOCK_UPCOMING_DATE, bookingType: 'PRIMARY', status: 'ALLOCATED',
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
@@ -124,7 +124,7 @@ function seedBookings(): Record<string, BookingDetail> {
       scoreBreakdown: breakdownFor(8.5, 2, 38.8),
     },
     'bk-1': {
-      id: 'bk-1', bookingDate: '2026-08-03', bookingType: 'PRIMARY', status: 'ALLOCATED',
+      id: 'bk-1', bookingDate: MOCK_UPCOMING_DATE, bookingType: 'PRIMARY', status: 'ALLOCATED',
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
@@ -271,6 +271,7 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
       userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
       userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
       userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', acme),
+      userProfile('u-guard', 'Gate Guard', 'guard@acme.test', 'ACTIVE', 'SECURITY', acme),
     ],
   };
 }
@@ -340,6 +341,21 @@ const addDaysTo = (d: Date, n: number): Date => {
   copy.setDate(copy.getDate() + n);
   return copy;
 };
+/**
+ * The demo's "upcoming allocated booking" date: today if it is a weekday, else the next Monday.
+ *
+ * Relative rather than a literal, because `BookingStatus` only offers **Release** for a booking dated
+ * today or later. A hardcoded date silently expires at midnight and takes the release affordance with
+ * it — which reads as a broken feature rather than a stale fixture, and cost a red suite once already.
+ * Exported so a test can assert the same value instead of re-deriving it.
+ */
+export const MOCK_UPCOMING_DATE: string = (() => {
+  let d = new Date();
+  // getDay(): 0 = Sunday, 6 = Saturday.
+  while (d.getDay() === 0 || d.getDay() === 6) d = addDaysTo(d, 1);
+  return isoOf(d);
+})();
+
 const isWeekday = (iso: string): boolean => {
   const day = new Date(`${iso}T00:00:00`).getDay();
   return day >= 1 && day <= 5;
@@ -353,6 +369,18 @@ function mockNextRun(now = new Date()): Date {
   run.setDate(run.getDate() + delta);
   if (run.getTime() <= now.getTime()) run.setDate(run.getDate() + 7);
   return run;
+}
+
+/** Live scoring inputs (§4/D3) read from the mutable config store, so P8-12's score panel reacts to
+ *  Super-Admin edits the same way the real `bookingWindowSummary` would. */
+function mockScoring(): { distanceWeight: number; carpoolWeight: number; maxDistanceKm: number; maxPeople: number } {
+  const num = (key: string, fallback: number) => Number(configState.find((c) => c.key === key)?.value ?? fallback);
+  return {
+    distanceWeight: num('allocation.distanceWeight', 0.6),
+    carpoolWeight: num('allocation.carpoolWeight', 0.4),
+    maxDistanceKm: num('allocation.maxDistanceKm', 40),
+    maxPeople: num('carpool.maxPeople', 4),
+  };
 }
 
 function mockWindow(now = new Date()): BookingWindow {
@@ -381,35 +409,107 @@ function mockWindow(now = new Date()): BookingWindow {
     latestDate: isoOf(latest),
     requestableDates: dates,
     nextRuns: Array.from({ length: 5 }, (_, i) => addDaysTo(nextRun, i * 7).toISOString()),
+    scoring: mockScoring(),
   };
 }
 
-/** Mirrors backend `buildBoxes`: mine first (so it survives the clamp), then taken, blocked, free. */
-function mockBoxes(quota: number, blocked: number, taken: number, mine: boolean): SlotBox[] {
-  const states: SlotBox['state'][] = [];
-  if (mine) states.push('MINE');
-  for (let i = 0; i < taken - (mine ? 1 : 0); i++) states.push('TAKEN');
-  for (let i = 0; i < blocked; i++) states.push('BLOCKED');
-  while (states.length < quota) states.push('AVAILABLE');
-  return states.slice(0, quota).map((state, i) => ({ index: i + 1, state }));
+/**
+ * Phase 8 (D22): before a date's run, the grid shows only AVAILABLE/BLOCKED — requests never take a
+ * box (D18). `blocked` first so the count is stable regardless of quota, then AVAILABLE fills the rest.
+ */
+function buildOpenBoxes(quota: number, blocked: number): SlotBox[] {
+  const boxes: SlotBox[] = [];
+  for (let i = 0; i < blocked; i++) boxes.push({ index: 0, state: 'BLOCKED', slotNumber: null });
+  while (boxes.length < quota) boxes.push({ index: 0, state: 'AVAILABLE', slotNumber: null });
+  return boxes.slice(0, quota).map((b, i) => ({ ...b, index: i + 1 }));
 }
 
-/** Per-date occupancy the mock mutates when a booking is submitted. */
-interface MockDayState { taken: number; blocked: number; mine: boolean; decided: boolean }
+/**
+ * After the run: MINE first (so it survives the clamp — mirrors the backend's "own box first" rule),
+ * then everyone else's TAKEN allocations with their real slot numbers, then BLOCKED, then whatever
+ * AVAILABLE remains.
+ */
+/** Mock slot labels match the real `ParkingSlot.slotNumber` format — a free-form label, not an ordinal. */
+const slotLabel = (n: number): string => `A-${String(n).padStart(2, '0')}`;
+
+function buildDecidedBoxes(quota: number, blocked: number, otherSlots: string[], mySlot: string | null): SlotBox[] {
+  const boxes: SlotBox[] = [];
+  if (mySlot !== null) boxes.push({ index: 0, state: 'MINE', slotNumber: mySlot });
+  for (const slot of otherSlots) boxes.push({ index: 0, state: 'TAKEN', slotNumber: slot });
+  for (let i = 0; i < blocked; i++) boxes.push({ index: 0, state: 'BLOCKED', slotNumber: null });
+  while (boxes.length < quota) boxes.push({ index: 0, state: 'AVAILABLE', slotNumber: null });
+  return boxes.slice(0, quota).map((b, i) => ({ ...b, index: i + 1 }));
+}
+
+/**
+ * Per-date state the mock mutates as requests are submitted and (via `setMockDatePhase`) decided.
+ * `requestCount` is demand only — it never gates a submission (D18). `decided` drives `phase`; once
+ * true, `otherSlots`/`mySlotNumber` describe the real allocation the grid renders.
+ */
+interface MockDayState {
+  requestCount: number;
+  blocked: number;
+  decided: boolean;
+  myStatus: DayAvailability['myStatus'];
+  mySlotNumber: string | null;
+  otherSlots: string[];
+  /** True once the band's common-pool run has covered this date. Separate from `decided` — the two
+   *  runs are separate steps, and a date can be decided but not yet pooled. */
+  pooled?: boolean;
+}
+
+/** Slots the date's primary run handed out, and who it left behind. Shared by the preview and both runs. */
+function mockDayCounts(st: MockDayState | undefined): { allocated: number; waitlisted: number } {
+  if (!st || !st.decided) return { allocated: 0, waitlisted: 0 };
+  const allocated = st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0);
+  return { allocated, waitlisted: Math.max(0, st.requestCount - allocated) };
+}
 
 function seedAvailability(): Record<string, MockDayState> {
   const win = mockWindow();
   const state: Record<string, MockDayState> = {};
   win.requestableDates.forEach((date, i) => {
-    // A spread of occupancy so the grid is visibly interesting: one nearly-full day, one blocked day.
-    state[date] = {
-      taken: i === 0 ? MOCK_QUOTA - 1 : i === 1 ? 4 : i % 3,
-      blocked: i === 2 ? 2 : 0,
-      mine: false,
-      decided: false,
-    };
+    if (i === 0) {
+      // Already decided (demoable pre-built outcome): the caller won a slot.
+      state[date] = {
+        requestCount: MOCK_QUOTA - 1, blocked: 0, decided: true,
+        myStatus: 'ALLOCATED', mySlotNumber: slotLabel(3),
+        otherSlots: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].slice(0, MOCK_QUOTA - 1).map(slotLabel),
+      };
+    } else if (i === 1) {
+      // Already decided: the caller lost out to score and was waitlisted.
+      state[date] = {
+        requestCount: MOCK_QUOTA + 2, blocked: 0, decided: true,
+        myStatus: 'WAITLISTED', mySlotNumber: null,
+        otherSlots: Array.from({ length: MOCK_QUOTA }, (_v, n) => slotLabel(n + 1)),
+      };
+    } else if (i === 2) {
+      // Still OPEN, with two boxes withheld by an admin.
+      state[date] = { requestCount: 4, blocked: 2, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [] };
+    } else {
+      // A spread of demand so the count is visibly interesting, all still OPEN.
+      state[date] = { requestCount: i % 5, blocked: 0, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [] };
+    }
   });
   return state;
+}
+
+/**
+ * Mock-only dev/test toggle (P8-10): flips a date between the `OPEN` and `DECIDED` grid phases so the
+ * frontend can be built and exercised against the two-phase model without a real backend run. Optionally
+ * sets the caller's own outcome for the date at the same time. No-op for a date outside the seeded window.
+ */
+export function setMockDatePhase(
+  date: string,
+  phase: 'OPEN' | 'DECIDED',
+  outcome?: { myStatus?: DayAvailability['myStatus']; mySlotNumber?: string | null; otherSlots?: string[] },
+): void {
+  const st = availabilityState[date];
+  if (!st) return;
+  st.decided = phase === 'DECIDED';
+  if (outcome?.myStatus !== undefined) st.myStatus = outcome.myStatus;
+  if (outcome?.mySlotNumber !== undefined) st.mySlotNumber = outcome.mySlotNumber;
+  if (outcome?.otherSlots !== undefined) st.otherSlots = outcome.otherSlots;
 }
 
 function seedVehicles(): VehicleSummary[] {
@@ -417,6 +517,7 @@ function seedVehicles(): VehicleSummary[] {
     { id: 'veh-1', vehicleNumber: 'MH12AB1234', displayNumber: 'MH 12 AB 1234', ownerName: 'Aditi Rao', ownerEmail: 'aditi@assent.example', contactNumber: '9822001101', vehicleType: 'CAR', makeModel: 'Hyundai i20', colour: 'White', companyId: 'mock-co', companyName: 'Mock Co' },
     { id: 'veh-2', vehicleNumber: 'MH12CD5678', displayNumber: 'MH 12 CD 5678', ownerName: 'Rahul Mehta', ownerEmail: 'rahul@assent.example', contactNumber: '9822001102', vehicleType: 'CAR', makeModel: 'Tata Nexon', colour: 'Blue', companyId: 'mock-co', companyName: 'Mock Co' },
     { id: 'veh-3', vehicleNumber: 'MH14EF9012', displayNumber: 'MH 14 EF 9012', ownerName: 'Sara Khan', ownerEmail: 'sara@assent.example', contactNumber: '9822001103', vehicleType: 'EV_CAR', makeModel: 'Tata Nexon EV', colour: 'Grey', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-mine-1', vehicleNumber: 'KA011234', displayNumber: 'KA 01 1234', ownerName: 'Mock User', ownerEmail: 'user@acme.test', contactNumber: '9000000000', vehicleType: 'CAR', makeModel: 'Honda City', colour: 'Silver', companyId: 'mock-co', companyName: 'Mock Co' },
   ];
 }
 
@@ -454,8 +555,19 @@ let parkingAreaState = seedParkingAreas();
 let availabilityState = seedAvailability();
 let vehicleState = seedVehicles();
 let gateEventState = seedGateEvents();
+let profileState: Record<string, Partial<UserProfile>> = {};
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
+
+function currentMockProfile(): UserProfile {
+  const s = readMockSession();
+  if (s) {
+    const base = userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName });
+    return { ...base, ...profileState[s.id] };
+  }
+  const base = userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE');
+  return { ...base, ...profileState[base.id] };
+}
 
 /** Restore all mutable mock state to its seed. Call between tests (see test/setup.ts). */
 export function resetMockData(): void {
@@ -470,6 +582,7 @@ export function resetMockData(): void {
   availabilityState = seedAvailability();
   vehicleState = seedVehicles();
   gateEventState = seedGateEvents();
+  profileState = {};
   seq = 0;
 }
 
@@ -486,6 +599,25 @@ const pageParams = (request: Request) => {
  */
 const directoryEmails = (): Set<string> =>
   new Set(Object.values(companyUserState).flatMap((list) => list.map((u) => u.email.toLowerCase())));
+
+/**
+ * Carpool members must be existing users (any company). Every member needs an email, and it must
+ * resolve to a registered user — both cases come back as per-member field details so the form can flag
+ * the exact row. Shared by the single-date and batch booking handlers so they cannot disagree.
+ */
+const carpoolMemberDetails = (
+  members: { name?: string; employeeEmail?: string }[] | undefined,
+): { field: string; message: string }[] => {
+  const dir = directoryEmails();
+  return (members ?? []).flatMap((m, i) => {
+    const email = m.employeeEmail?.trim();
+    if (!email) return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
+    if (!dir.has(email.toLowerCase())) {
+      return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
+    }
+    return [];
+  });
+};
 
 /** Coherent, deterministic handlers for the hero + admin flows (override the generated random ones). */
 const hero = [
@@ -507,9 +639,19 @@ const hero = [
   }),
   // Rehydrate the access token from the persisted mock session (mirrors the real refresh-cookie flow).
   http.post(`${baseURL}/auth/refresh`, () => {
-    if (!readMockSession()) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
-    return ok<{ accessToken: string; tokenType: 'Bearer'; expiresIn: number }>({
-      accessToken: 'mock-access-token', tokenType: 'Bearer', expiresIn: 900,
+    const stored = readMockSession();
+    if (!stored) return fail(401, 'UNAUTHENTICATED', 'No refresh token');
+    return ok<LoginResponseData>({
+      accessToken: 'mock-access-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: {
+        id: stored.id,
+        fullName: stored.fullName,
+        role: stored.role,
+        companyId: stored.companyId,
+        companyName: stored.companyName,
+      },
     });
   }),
   http.post(`${baseURL}/auth/logout`, () => {
@@ -564,45 +706,24 @@ const hero = [
       carpoolPeople?: number;
       carpoolMembers?: { name?: string; employeeEmail?: string }[];
     };
-    // Carpool members must be existing users (any company). Every member needs an
-    // email, and it must resolve to a registered user — reject both cases with
-    // per-member field details so the form can flag the exact row.
-    const dir = directoryEmails();
-    const details = (b.carpoolMembers ?? []).flatMap((m, i) => {
-      const email = m.employeeEmail?.trim();
-      if (!email) {
-        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
-      }
-      if (!dir.has(email.toLowerCase())) {
-        return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
-      }
-      return [];
-    });
+    const details = carpoolMemberDetails(b.carpoolMembers);
     if (details.length > 0) {
       return HttpResponse.json(
         { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
         { status: 400 },
       );
     }
-    // Phase 7 D12: a request reserves a slot immediately. Mirror the server so the mock demo shows
-    // the grid filling up, and can actually reach the "date is full" refusal.
+    // Phase 8 D18: a request is a queue entry, not a reservation. It never consumes capacity and can
+    // never fail for fullness — only a closed window or a duplicate stop it (mirrors the real server).
     const date = b.bookingDate ?? isoOf(new Date());
     const day = availabilityState[date];
     if (day) {
       if (day.decided) {
         return fail(422, 'WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
       }
-      if (day.mine) return fail(409, 'CONFLICT', 'You already have a PRIMARY booking for this date');
-      const capacity = MOCK_QUOTA - day.blocked;
-      if (day.taken >= capacity) {
-        return fail(
-          409,
-          'CAPACITY_FULL',
-          `All ${capacity} slot(s) for ${date} are already taken — please choose another date`,
-        );
-      }
-      day.taken += 1;
-      day.mine = true;
+      if (day.myStatus !== null) return fail(409, 'CONFLICT', 'You already have a PRIMARY booking for this date');
+      day.requestCount += 1;
+      day.myStatus = 'SUBMITTED';
     }
     return ok<BookingCreatedData>(
       {
@@ -616,6 +737,74 @@ const hero = [
       },
       201,
     );
+  }),
+  /**
+   * POST /bookings/batch — one request per date, shared trip details.
+   *
+   * Mirrors the server's partial-success contract: always 200, each date evaluated independently
+   * against the same stateful grid the single-date handler mutates, so the mock demo can actually show
+   * "3 of 5 booked". Request-level member validation is rejected as 400 before any date is booked.
+   */
+  http.post(`${baseURL}/bookings/batch`, async ({ request }) => {
+    const b = (await request.json().catch(() => ({}))) as {
+      bookingDates?: string[];
+      carpoolPeople?: number;
+      carpoolMembers?: { name?: string; employeeEmail?: string }[];
+    };
+    const details = carpoolMemberDetails(b.carpoolMembers);
+    if (details.length > 0) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'VALIDATION_ERROR', message: 'Some carpool members are not registered users.', details } },
+        { status: 400 },
+      );
+    }
+    const dates = [...new Set(b.bookingDates ?? [])].sort();
+    if (dates.length === 0) return fail(400, 'VALIDATION_ERROR', 'Select at least one date');
+    if (dates.length > 20) return fail(400, 'VALIDATION_ERROR', 'Cannot book more than 20 dates at once');
+
+    const results = dates.map((date) => {
+      const day = availabilityState[date];
+      const refuse = (code: string, message: string) => ({ bookingDate: date, outcome: 'FAILED' as const, code, message });
+      if (day?.decided) {
+        return refuse('WINDOW_CLOSED', `Allocation for ${date} has already run — this date is closed`);
+      }
+      if (day && day.myStatus !== null) return refuse('CONFLICT', 'You already have a PRIMARY booking for this date');
+      if (day) {
+        day.requestCount += 1;
+        day.myStatus = 'SUBMITTED';
+      }
+      const id = nextId('bkg');
+      const booking = {
+        id,
+        status: 'SUBMITTED' as const,
+        bookingType: 'PRIMARY' as const,
+        bookingDate: date,
+        travelDistanceKm: 6.2,
+        carpoolPeople: b.carpoolPeople ?? 1,
+        submittedAt: new Date().toISOString(),
+      };
+      // Register a detail row so the outcome panel's "View status" link resolves in the demo.
+      bookingState[id] = {
+        ...booking,
+        vehicleType: 'CAR',
+        vehicleNumber: null,
+        carpoolMemberCount: (b.carpoolPeople ?? 1) - 1,
+        specialRequirement: null,
+        allocationScore: null,
+        allocatedSlotNumber: null,
+        createdAt: booking.submittedAt,
+        carpoolMembers: [],
+      } as BookingDetail;
+      return { bookingDate: date, outcome: 'CREATED' as const, booking };
+    });
+
+    const createdCount = results.filter((r) => r.outcome === 'CREATED').length;
+    return ok({
+      requested: results.length,
+      createdCount,
+      failedCount: results.length - createdCount,
+      results,
+    });
   }),
   http.get(`${baseURL}/bookings/:id`, ({ params }) => {
     const detail = bookingState[String(params.id)];
@@ -646,13 +835,51 @@ const hero = [
     return ok<BookingDetail>(detail);
   }),
   http.get(`${baseURL}/me`, () => {
+    return ok<UserProfile>(currentMockProfile());
+  }),
+  http.patch(`${baseURL}/me`, async ({ request }) => {
+    const current = currentMockProfile();
+    const body = await request.json() as Partial<UserProfile>;
+    const updated = { ...current, ...body, updatedAt: new Date().toISOString() };
+    profileState[current.id] = updated;
     const s = readMockSession();
-    if (s) {
-      return ok<UserProfile>(
-        userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName }),
-      );
-    }
-    return ok<UserProfile>(userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE'));
+    if (s && body.fullName) writeMockSession({ ...s, fullName: body.fullName });
+    return ok<UserProfile>(updated);
+  }),
+  http.get(`${baseURL}/me/vehicles`, () => {
+    const me = currentMockProfile();
+    return ok<VehicleSummary[]>(vehicleState.filter((v) => v.ownerEmail === me.email));
+  }),
+  http.post(`${baseURL}/me/vehicles`, async ({ request }) => {
+    const me = currentMockProfile();
+    const body = await request.json() as Partial<VehicleSummary> & { vehicleNumber?: string };
+    const plate = normalizeMockPlate(body.vehicleNumber ?? '');
+    if (!plate) return fail(400, 'VALIDATION_ERROR', 'Car number is required');
+    const existing = vehicleState.find((v) => v.vehicleNumber === plate);
+    if (existing && existing.ownerEmail !== me.email) return fail(409, 'CONFLICT', 'This car number is already registered to another user');
+    const vehicle: VehicleSummary = {
+      id: existing?.id ?? nextId('veh'),
+      vehicleNumber: plate,
+      displayNumber: body.displayNumber || body.vehicleNumber || plate,
+      ownerName: me.fullName,
+      ownerEmail: me.email,
+      contactNumber: me.contactNumber,
+      vehicleType: body.vehicleType ?? 'CAR',
+      makeModel: body.makeModel ?? null,
+      colour: body.colour ?? null,
+      companyId: me.companyId,
+      companyName: me.companyName,
+    };
+    vehicleState = existing ? vehicleState.map((v) => (v.id === existing.id ? vehicle : v)) : [vehicle, ...vehicleState];
+    return ok<VehicleSummary>(vehicle, 201);
+  }),
+  http.delete(`${baseURL}/me/vehicles/:id`, ({ params }) => {
+    const me = currentMockProfile();
+    const id = String(params.id);
+    const vehicle = vehicleState.find((v) => v.id === id && v.ownerEmail === me.email);
+    if (!vehicle) return fail(404, 'NOT_FOUND', 'Car not found');
+    vehicleState = vehicleState.filter((v) => v.id !== id);
+    return ok<{ id: string }>({ id });
   }),
   http.get(`${baseURL}/dashboard/user`, () =>
     ok<UserDashboard>({
@@ -792,7 +1019,7 @@ const hero = [
     const { page, pageSize } = pageParams(request);
     const all = Object.values(companyUserState)
       .flat()
-      .filter((u) => u.status === 'PENDING' && u.role === 'COMPANY_ADMIN');
+      .filter((u) => u.status === 'PENDING' && (u.role === 'COMPANY_ADMIN' || u.role === 'SECURITY'));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
   }),
@@ -802,7 +1029,7 @@ const hero = [
     // newest decision first (backend sorts by updatedAt desc) — sort before paginating.
     const all = Object.values(companyUserState)
       .flat()
-      .filter((u) => u.role === 'COMPANY_ADMIN' && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
+      .filter((u) => (u.role === 'COMPANY_ADMIN' || u.role === 'SECURITY') && (u.status === 'ACTIVE' || u.status === 'REJECTED'))
       .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
     const start = (page - 1) * pageSize;
     return okPage(all.slice(start, start + pageSize), page, pageSize, all.length);
@@ -835,6 +1062,19 @@ const hero = [
     }
     if (!updated) return fail(404, 'NOT_FOUND', 'User not found');
     return ok<UserProfile>(updated);
+  }),
+  http.delete(`${baseURL}/users/:id`, ({ params }) => {
+    const id = String(params.id);
+    let removed = false;
+    for (const [companyId, list] of Object.entries(companyUserState)) {
+      const next = list.filter((u) => u.id !== id);
+      if (next.length !== list.length) {
+        companyUserState[companyId] = next;
+        removed = true;
+      }
+    }
+    if (!removed) return fail(404, 'NOT_FOUND', 'User not found');
+    return ok<{ message: string }>({ message: 'User removed' });
   }),
 
   // --- Slots (super admin) ---
@@ -932,37 +1172,49 @@ const hero = [
     const win = mockWindow();
     const from = url.searchParams.get('from') ?? win.earliestDate;
     const to = url.searchParams.get('to') ?? win.latestDate;
+    // Dev/test-only query-param toggle (P8-10): force these dates to render DECIDED for this response,
+    // without mutating the shared mock store — a lighter-weight alternative to `setMockDatePhase`.
+    const forceDecided = new Set((url.searchParams.get('mockDecide') ?? '').split(',').filter(Boolean));
     const days: DayAvailability[] = [];
     for (let d = new Date(`${from}T00:00:00`); isoOf(d) <= to; d = addDaysTo(d, 1)) {
       const date = isoOf(d);
       if (!isWeekday(date)) {
         days.push({
-          date, quota: MOCK_QUOTA, blocked: 0, taken: 0, available: 0, mine: false,
+          date, phase: 'OPEN', quota: MOCK_QUOTA, blocked: 0, requestCount: 0, allocatedCount: 0,
+          available: 0, mine: false, myStatus: null, mySlotNumber: null,
           requestable: false, reason: 'NOT_WEEKDAY',
           message: 'Booking date must be a bookable weekday (Mon–Fri)',
           boxes: [],
         });
         continue;
       }
-      const st = availabilityState[date] ?? { taken: 0, blocked: 0, mine: false, decided: false };
-      const available = Math.max(0, MOCK_QUOTA - st.blocked - st.taken);
+      const st: MockDayState = availabilityState[date] ?? {
+        requestCount: 0, blocked: 0, decided: false, myStatus: null, mySlotNumber: null, otherSlots: [],
+      };
+      const phase: DayAvailability['phase'] = st.decided || forceDecided.has(date) ? 'DECIDED' : 'OPEN';
+      const allocatedCount = phase === 'DECIDED' ? st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0) : 0;
+      const available =
+        phase === 'DECIDED' ? Math.max(0, MOCK_QUOTA - st.blocked - allocatedCount) : Math.max(0, MOCK_QUOTA - st.blocked);
       const inWindow = date >= win.earliestDate && date <= win.latestDate;
+      const mine = st.myStatus !== null;
       const reason: DayAvailability['reason'] =
         !inWindow ? (date < win.earliestDate ? 'TOO_SOON' : 'BEYOND_WINDOW')
-        : st.decided ? 'TOO_SOON'
-        : st.mine ? 'ALREADY_BOOKED'
-        : available === 0 ? 'FULL'
+        : mine ? 'ALREADY_BOOKED'
+        : phase === 'DECIDED' ? 'TOO_SOON'
         : null;
       const message =
         reason === 'TOO_SOON' ? `${date} has already been allocated.`
         : reason === 'BEYOND_WINDOW' ? `${date} is beyond the ${WINDOW_WEEKS}-week booking window.`
         : reason === 'ALREADY_BOOKED' ? 'You already have a request for this date.'
-        : reason === 'FULL' ? 'All slots for this date are taken — pick another date.'
         : null;
+      const boxes =
+        phase === 'OPEN'
+          ? buildOpenBoxes(MOCK_QUOTA, st.blocked)
+          : buildDecidedBoxes(MOCK_QUOTA, st.blocked, st.otherSlots, st.myStatus === 'ALLOCATED' ? st.mySlotNumber : null);
       days.push({
-        date, quota: MOCK_QUOTA, blocked: st.blocked, taken: st.taken, available,
-        mine: st.mine, requestable: reason === null, reason, message,
-        boxes: mockBoxes(MOCK_QUOTA, st.blocked, st.taken, st.mine),
+        date, phase, quota: MOCK_QUOTA, blocked: st.blocked, requestCount: st.requestCount, allocatedCount,
+        available, mine, myStatus: st.myStatus, mySlotNumber: st.mySlotNumber,
+        requestable: reason === null, reason, message, boxes,
       });
     }
     return ok<AvailabilityResponse>({ window: win, days });
@@ -975,11 +1227,16 @@ const hero = [
     return ok<WeeklyRunPreview>({
       window: win,
       band,
-      dates: band.dates.map((date) => ({
-        bookingDate: date,
-        runStatus: availabilityState[date]?.decided ? 'COMPLETED' : null,
-        pendingRequests: availabilityState[date]?.taken ?? 0,
-      })),
+      dates: band.dates.map((date) => {
+        const st = availabilityState[date];
+        return {
+          bookingDate: date,
+          runStatus: st?.decided ? 'COMPLETED' : null,
+          pendingRequests: st?.requestCount ?? 0,
+          commonPoolStatus: st?.pooled ? ('COMPLETED' as const) : null,
+          waitlistedRequests: mockDayCounts(st).waitlisted,
+        };
+      }),
     });
   }),
   http.post(`${baseURL}/allocation/weekly/run`, () => {
@@ -989,15 +1246,79 @@ const hero = [
       const st = availabilityState[date];
       const alreadyDecided = st?.decided ?? false;
       const capacity = st ? MOCK_QUOTA - st.blocked : MOCK_QUOTA;
-      const allocated = st ? Math.min(st.taken, capacity) : 0;
-      if (st) st.decided = true; // a decided date closes for requests, as on the server
+      if (st && !alreadyDecided) {
+        // Score-decided allocation (D18/D22): fill up to capacity, the caller's own SUBMITTED request
+        // included in the ranking like anyone else's — this mock just approximates "earlier = better".
+        const iAmSubmitted = st.myStatus === 'SUBMITTED';
+        const otherRequestCount = Math.max(0, st.requestCount - (iAmSubmitted ? 1 : 0));
+        const otherAllocated = Math.min(otherRequestCount, capacity - (iAmSubmitted ? 1 : 0));
+        st.otherSlots = Array.from({ length: Math.max(0, otherAllocated) }, (_v, i) => slotLabel(i + 1));
+        if (iAmSubmitted) {
+          const gotSlot = st.requestCount <= capacity;
+          st.myStatus = gotSlot ? 'ALLOCATED' : 'WAITLISTED';
+          st.mySlotNumber = gotSlot ? slotLabel(st.otherSlots.length + 1) : null;
+        }
+        st.decided = true;
+      }
+      const allocated = st ? st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0) : 0;
       return {
         bookingDate: date,
         runId: `mock-run-${date}`,
         status: 'COMPLETED' as const,
         alreadyDecided,
         allocated,
-        waitlisted: st ? Math.max(0, st.taken - capacity) : 0,
+        waitlisted: st ? Math.max(0, st.requestCount - allocated) : 0,
+        error: null,
+      };
+    });
+    return ok<WeeklyRunResult>({
+      runAt: new Date().toISOString(),
+      band,
+      dates: results,
+      totalAllocated: results.reduce((sum, r) => sum + r.allocated, 0),
+      totalWaitlisted: results.reduce((sum, r) => sum + r.waitlisted, 0),
+    });
+  }),
+
+  // Band-scoped common pool: hands each date's leftover capacity to whoever primary waitlisted.
+  // Idempotent per date via `pooled`, mirroring the server's (COMMON_POOL, date) uniqueness.
+  http.post(`${baseURL}/allocation/weekly/common-pool/run`, () => {
+    const win = mockWindow();
+    const band = mockBand(win);
+    const results = band.dates.map((date) => {
+      const st = availabilityState[date];
+      const alreadyDecided = st?.pooled ?? false;
+      const { allocated: primaryAllocated, waitlisted } = mockDayCounts(st);
+      if (!st || alreadyDecided || waitlisted === 0) {
+        return {
+          bookingDate: date,
+          runId: `mock-cp-${date}`,
+          status: 'COMPLETED' as const,
+          alreadyDecided,
+          allocated: 0,
+          waitlisted,
+          error: null,
+        };
+      }
+      const spare = Math.max(0, MOCK_QUOTA - st.blocked - primaryAllocated);
+      const placed = Math.min(waitlisted, spare);
+      // Give the caller the first pooled slot when they were the one waitlisted — that is what makes
+      // the change visible on their dashboard, which is the point of running this from the UI.
+      if (st.myStatus === 'WAITLISTED' && placed > 0) {
+        st.myStatus = 'ALLOCATED';
+        st.mySlotNumber = slotLabel(primaryAllocated + 1);
+        for (let i = 1; i < placed; i++) st.otherSlots.push(slotLabel(primaryAllocated + 1 + i));
+      } else {
+        for (let i = 0; i < placed; i++) st.otherSlots.push(slotLabel(primaryAllocated + 1 + i));
+      }
+      st.pooled = true;
+      return {
+        bookingDate: date,
+        runId: `mock-cp-${date}`,
+        status: 'COMPLETED' as const,
+        alreadyDecided,
+        allocated: placed,
+        waitlisted: waitlisted - placed,
         error: null,
       };
     });

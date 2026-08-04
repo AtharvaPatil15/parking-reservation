@@ -1,5 +1,12 @@
 export { useLogin, useLogout, useRegister, useActiveCompanies } from './auth';
-export { useCreateBooking, useUpdateBooking, useBooking, useReleaseBooking, useAdminBookings } from './bookings';
+export {
+  useCreateBooking,
+  useCreateBookings,
+  useUpdateBooking,
+  useBooking,
+  useReleaseBooking,
+  useAdminBookings,
+} from './bookings';
 export type { AdminBookingsFilter } from './bookings';
 export {
   useRunPrimaryAllocation,
@@ -9,6 +16,7 @@ export {
   useAllocations,
   useWeeklyRunPreview,
   useRunWeeklyAllocation,
+  useRunWeeklyCommonPoolAllocation,
 } from './allocation';
 export type { AllocationsFilter } from './allocation';
 export { useAvailability } from './availability';
@@ -23,12 +31,21 @@ export {
 } from './gate';
 export type { GateEventsFilter, UnbookedFilter } from './gate';
 export { useConfig, useUpdateConfig } from './config';
-export { useMe, useMyBookings, useUserDashboard } from './user';
+export {
+  useMe,
+  useUpdateMe,
+  useMyVehicles,
+  useCreateMyVehicle,
+  useRemoveMyVehicle,
+  useMyBookings,
+  useUserDashboard,
+} from './user';
 export {
   useSuperAdminDashboard,
   usePendingAdmins,
   useAdminRequestHistory,
   useApproveAdminRequest,
+  useRemovePrivilegedUser,
   useCompanies,
   useCreateCompany,
   useCompanyQuotaSummary,
@@ -45,6 +62,7 @@ export {
   useCompanyAdminDashboard,
   useCompanyUsers,
   useSetUserApproval,
+  useRemoveCompanyUser,
   useBlocks,
   useCreateBlock,
   useDeleteBlock,

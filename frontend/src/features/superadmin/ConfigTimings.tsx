@@ -241,7 +241,7 @@ export function ConfigTimings() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">System configuration</h2>
+        <h2 className="text-2xl">System configuration</h2>
         <p className="text-text-muted">Booking windows, scoring weights, and limits. Validated before saving.</p>
       </div>
 

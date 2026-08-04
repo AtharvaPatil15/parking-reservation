@@ -33,6 +33,7 @@ const PATHS: Record<NavIconName, string[]> = {
   ],
   play: ['M6 3v18l14-9z'],
   calendar: ['M8 2v4', 'M16 2v4', 'M3 4h18v18H3z', 'M3 10h18'],
+  user: ['M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2', 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0'],
 };
 
 export function NavIcon({ name }: { name?: NavIconName }) {

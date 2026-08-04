@@ -4,6 +4,7 @@
  */
 import createClient, { type Middleware } from 'openapi-fetch';
 import type { paths } from './types';
+import type { AuthUser } from '../lib/auth';
 
 // Vite injects VITE_API_BASE_URL; fall back to the dev proxy path.
 const baseUrl =
@@ -31,13 +32,29 @@ export function clearSession(): void {
 
 type UnauthorizedHandler = () => void;
 let onUnauthorized: UnauthorizedHandler | null = null;
+const AUTH_SESSION_KEY = 'auth:session';
+const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
+
+function notifyUnauthorized(): void {
+  accessToken = null;
+  sessionGeneration += 1;
+  try {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  onUnauthorized?.();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+  }
+}
 
 /** Register a callback fired when an authenticated request stays 401 after a refresh attempt fails. */
 export function registerUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
   onUnauthorized = fn;
 }
 
-type TokenRefreshedHandler = (token: string) => void;
+type TokenRefreshedHandler = (token: string, user?: AuthUser) => void;
 let onTokenRefreshed: TokenRefreshedHandler | null = null;
 
 /** Register a callback fired with a freshly-rotated access token so the auth layer can persist it. */
@@ -56,13 +73,13 @@ async function doRefresh(): Promise<string | null> {
   try {
     const res = await fetch(`${baseUrl}/auth/refresh`, { method: 'POST', credentials: 'include' });
     if (!res.ok) return null;
-    const body = (await res.json()) as { data?: { accessToken?: string } };
+    const body = (await res.json()) as { data?: { accessToken?: string; user?: AuthUser } };
     const token = body?.data?.accessToken ?? null;
     // If logout ran while the refresh was in flight, drop the token — don't resurrect the session.
     if (gen !== sessionGeneration) return null;
     if (token) {
       setAccessToken(token);
-      onTokenRefreshed?.(token);
+      onTokenRefreshed?.(token, body.data?.user);
     }
     return token;
   } catch {
@@ -111,7 +128,7 @@ const authMiddleware: Middleware = {
     // we treat the session as over.
     const token = await refreshAccessToken();
     if (!token) {
-      onUnauthorized?.();
+      notifyUnauthorized();
       return response;
     }
     // Rebuild the retry from the pre-dispatch clone (method + headers + body intact). The stored
@@ -134,7 +151,7 @@ const authMiddleware: Middleware = {
     // If the replay STILL 401s, the session is genuinely dead (e.g. the account was disabled). Surface
     // it as a logout rather than handing the caller a silent, broken 401 while the app looks signed-in.
     if (retryResponse.status === 401) {
-      onUnauthorized?.();
+      notifyUnauthorized();
     }
     return retryResponse;
   },

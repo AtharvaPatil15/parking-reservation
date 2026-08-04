@@ -22,7 +22,8 @@ export type NavIconName =
   | 'grid'
   | 'shield'
   | 'play'
-  | 'calendar';
+  | 'calendar'
+  | 'user';
 
 interface NavDrawerContextValue {
   items: NavDrawerItem[];

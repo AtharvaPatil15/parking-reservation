@@ -2,22 +2,23 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { getNumber } from '../../config/systemConfig';
 import {
+  AppError,
   ValidationError,
   ConflictError,
-  CapacityFullError,
   NotFoundError,
   WindowClosedError,
+  type ErrorCode,
 } from '../../lib/errors';
 import { parseCalendarDate, currentIstCalendarDate } from './bookings.time';
 import { checkRequestable, toIsoDate } from './bookings.window';
 import { loadWindowConfig } from './bookings.windowConfig';
-import { LIVE_BOOKING_STATUSES } from './bookings.availability';
 import { score, rankCandidates } from '../allocation/score';
 import { buildAuditData } from '../../lib/audit';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 import type {
   CreateBookingInput,
+  CreateBookingsBatchInput,
   UpdateBookingInput,
   ListBookingsQuery,
   ReleaseBookingInput,
@@ -101,33 +102,66 @@ async function withSerializableRetry<T>(work: (tx: Prisma.TransactionClient) => 
 }
 
 /**
- * Create a submitted PRIMARY booking for the current user (P4-12, reworked for Phase 7).
+ * Load the user a booking is being created for, and refuse if their profile cannot be scored.
+ *
+ * A null `distanceKm` used to be harmless: under Phase 7 the request reserved a box on submit, so the
+ * score never decided anything. Under Phase 8 the weekly run ranks on it, and `score()` treats null
+ * as 0 km — the *worst* possible distance score. Left unchecked, anyone who never set an address
+ * would be silently ranked last every single week and would never understand why. Better to refuse
+ * the booking and name the fix (P8-02).
+ */
+async function loadBookingUser(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError('User not found');
+  if (user.distanceKm == null) {
+    fail(
+      'distanceKm',
+      'Set your home → office distance in your profile before booking — slots are allocated by score, and distance is part of it',
+    );
+  }
+  return user;
+}
+
+/**
+ * Create a queued PRIMARY booking for the current user (P4-12, reworked for Phase 8).
  * Snapshots distance/address from the profile (F6); records carpool members, flagging only
  * validated same-company employees as scored (F4).
  *
- * Phase 7 changes the gate from "before 18:00 the day before" to the rolling window (D9/D11): the
- * date must be a bookable weekday inside `[nextRun + approvalLeadDays, today + windowWeeks*7]`
- * (422 WINDOW_CLOSED otherwise), and the request must fit the company's remaining capacity for that
- * date (409 CAPACITY_FULL otherwise) — that capacity reservation (D12) is what makes the promise of
- * "no rejections" structural rather than a hope. Duplicate same-type request → 409 CONFLICT.
+ * **Phase 8 (D18): a request is a queue entry, not a reservation.** There is deliberately no capacity
+ * check here — submitting is always allowed while the date is open, however many people have already
+ * asked. Phase 7 capped demand at submit time to guarantee "no rejections", but that made the winner
+ * whoever clicked first and left the scoring engine decorative. Scarcity is now resolved once, by
+ * score, in the weekly run; the overflow becomes WAITLISTED (D19), never REJECTED.
+ *
+ * What still refuses a request:
+ *  - the rolling window (D9/D11) — not a bookable weekday, or outside `[earliest, latest]` → 422
+ *  - the date has already been decided by a completed run → 422
+ *  - the user already has a PRIMARY request for the date → 409
+ *  - the profile has no travel distance → 400 (see `loadBookingUser`)
+ *
  * `now` is injectable for testing.
  */
-export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
-  // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
-  const windowCfg = await loadWindowConfig();
-  const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
-  if (!windowCheck.ok) {
-    if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
-    throw new WindowClosedError(windowCheck.message);
-  }
+/** The parts of a booking request that say nothing about *when* — shared by every date in a batch. */
+type TripDetails = Pick<CreateBookingInput, 'vehicleType' | 'carpoolPeople' | 'carpoolMembers'>;
 
-  // 2. Car-only POC: reject anything else, and persist the field explicitly even when a client omits it.
+/**
+ * Validate the date-independent trip details: car-only vehicle (POC), the live `carpool.maxPeople`
+ * cap (D8), member/seat consistency, and duplicate member emails (F4).
+ *
+ * Extracted so the batch endpoint can run these ONCE up front and answer 400. These rules give the
+ * same verdict for every date, so reporting them per date would repeat one mistake up to 20 times and
+ * bury the real message. Sharing the code (rather than re-implementing the checks in the batch path)
+ * is what keeps the two endpoints from drifting apart.
+ *
+ * Normalises `vehicleType` to 'CAR' in place, so the column is written explicitly even when a client
+ * omits it. Returns the trimmed member emails, which the caller needs for the same-company lookup.
+ */
+async function assertTripDetails(input: TripDetails): Promise<{ trimmedEmails: string[] }> {
   if (input.vehicleType && input.vehicleType !== 'CAR') {
     fail('vehicleType', 'Only normal car bookings are supported right now');
   }
   input.vehicleType = 'CAR';
 
-  // 3. Carpool headcount cap (D8) and member/seat consistency.
   const maxPeople = (await getNumber('carpool.maxPeople')) ?? DEFAULT_MAX_PEOPLE;
   if (input.carpoolPeople > maxPeople) {
     fail('carpoolPeople', `Must be between 1 and ${maxPeople}`);
@@ -137,7 +171,6 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     fail('carpoolMembers', `Cannot list more members than carpoolPeople - 1 (${input.carpoolPeople - 1})`);
   }
 
-  // 3b. Dedupe member emails within the request, case-insensitively (F4).
   const trimmedEmails = members
     .map((m) => m.employeeEmail?.trim())
     .filter((e): e is string => !!e);
@@ -145,9 +178,24 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
   const firstDupe = lowered.find((e, i) => lowered.indexOf(e) !== i);
   if (firstDupe) fail('carpoolMembers', `Duplicate carpool member email: ${firstDupe}`);
 
-  // 4. Load the user for the distance/address snapshot (F6).
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new NotFoundError('User not found');
+  return { trimmedEmails };
+}
+
+export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
+  // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
+  const windowCfg = await loadWindowConfig();
+  const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
+  if (!windowCheck.ok) {
+    if (windowCheck.code === 'INVALID_DATE') fail('bookingDate', windowCheck.message);
+    throw new WindowClosedError(windowCheck.message);
+  }
+
+  // 2/3/3b. Vehicle + carpool rules (nothing here depends on the date).
+  const { trimmedEmails } = await assertTripDetails(input);
+  const members = input.carpoolMembers ?? [];
+
+  // 4. Load the user for the distance/address snapshot (F6), refusing an unscoreable profile (P8-02).
+  const user = await loadBookingUser(userId);
 
   // 5. Resolve which members are same-company ACTIVE employees → scored (F4).
   const employees = trimmedEmails.length
@@ -175,103 +223,56 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
     };
   });
 
-  // 6/7. Capacity check + create, together in one SERIALIZABLE transaction.
+  // 6/7. Guards + create, in one transaction.
   //
-  // Reading remaining capacity and then inserting must be atomic: two users submitting for the last
-  // free slot at the same time would otherwise both read `available = 1` and both be admitted,
-  // oversubscribing the date and forcing the weekly run to reject one of them — exactly what this
-  // phase exists to prevent. There is no unique constraint that can act as a backstop for a *count*,
-  // so the isolation level is doing the real work here.
-  //
-  // Wrapped in `withSerializableRetry` so a lost write race is retried server-side rather than shown
-  // to the user: losing the race does not mean the date is full, only that this read was stale.
+  // Phase 7 needed SERIALIZABLE here because it read a *count* (remaining capacity) and then wrote
+  // against it — a race no unique constraint can backstop, so the isolation level was doing the real
+  // work. With the capacity check gone (D18) there is no count to protect: the only invariant left is
+  // "one PRIMARY request per user per date", which the composite unique enforces directly. A plain
+  // transaction is therefore enough, and cheaper — it just keeps the guards and the insert together.
   try {
-    return await withSerializableRetry(
-      async (tx) => {
-        // Once a date's run has completed it is decided and closed, whatever the window says.
-        const decided = await tx.allocationRun.findFirst({
-          where: { runType: 'PRIMARY', bookingDate: bookingDateUtc, status: 'COMPLETED' },
-          select: { id: true },
-        });
-        if (decided) {
-          throw new WindowClosedError(`Allocation for ${input.bookingDate} has already run — this date is closed`);
-        }
+    return await prisma.$transaction(async (tx) => {
+      // Once a date's run has completed it is decided and closed, whatever the window says.
+      const decided = await tx.allocationRun.findFirst({
+        where: { runType: 'PRIMARY', bookingDate: bookingDateUtc, status: 'COMPLETED' },
+        select: { id: true },
+      });
+      if (decided) {
+        throw new WindowClosedError(`Allocation for ${input.bookingDate} has already run — this date is closed`);
+      }
 
-        // Duplicate same-type request → clean 409 (the composite unique is the backstop).
-        const duplicate = await tx.bookingRequest.findUnique({
-          where: {
-            userId_bookingDate_bookingType: {
-              userId: user.id,
-              bookingDate: bookingDateUtc,
-              bookingType: 'PRIMARY',
-            },
-          },
-          select: { id: true },
-        });
-        if (duplicate) throw new ConflictError('You already have a PRIMARY booking for this date');
-
-        // Remaining capacity = effective quota − blocked − live PRIMARY requests already holding a box.
-        const [quotaRow, blockedAgg, taken] = await Promise.all([
-          tx.companySlotAllocation.findFirst({
-            where: {
-              companyId: user.companyId,
-              effectiveFrom: { lte: bookingDateUtc },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gte: bookingDateUtc } }],
-            },
-            orderBy: { effectiveFrom: 'desc' },
-            select: { slotCount: true },
-          }),
-          tx.slotBlock.aggregate({
-            _sum: { blockedCount: true },
-            where: {
-              companyId: user.companyId,
-              startDate: { lte: bookingDateUtc },
-              endDate: { gte: bookingDateUtc },
-            },
-          }),
-          tx.bookingRequest.count({
-            where: {
-              companyId: user.companyId,
-              bookingDate: bookingDateUtc,
-              bookingType: 'PRIMARY',
-              status: { in: LIVE_BOOKING_STATUSES },
-            },
-          }),
-        ]);
-        const quota = quotaRow?.slotCount ?? 0;
-        const blocked = Math.min(quota, blockedAgg._sum.blockedCount ?? 0);
-        const available = Math.max(0, quota - blocked - taken);
-        if (quota === 0) {
-          throw new CapacityFullError(
-            `Your company has no parking quota configured for ${input.bookingDate}`,
-          );
-        }
-        if (available === 0) {
-          throw new CapacityFullError(
-            `All ${quota - blocked} slot(s) for ${input.bookingDate} are already taken — please choose another date`,
-          );
-        }
-
-        return tx.bookingRequest.create({
-          data: {
-            bookingDate: bookingDateUtc,
+      // Duplicate same-type request → clean 409 (the composite unique is the backstop).
+      const duplicate = await tx.bookingRequest.findUnique({
+        where: {
+          userId_bookingDate_bookingType: {
             userId: user.id,
-            companyId: user.companyId,
+            bookingDate: bookingDateUtc,
             bookingType: 'PRIMARY',
-            status: 'SUBMITTED',
-            userAddress: user.address,
-            pinCode: user.pinCode,
-            travelDistanceKm: user.distanceKm, // Decimal | null — snapshot (F6)
-            vehicleType: input.vehicleType ?? null,
-            vehicleNumber: input.vehicleNumber ?? null,
-            carpoolMemberCount: input.carpoolPeople - 1,
-            specialRequirement: input.specialRequirement ?? null,
-            submittedAt: now,
-            carpoolMembers: memberRows.length ? { create: memberRows } : undefined,
           },
-        });
-      },
-    );
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new ConflictError('You already have a PRIMARY booking for this date');
+
+      return tx.bookingRequest.create({
+        data: {
+          bookingDate: bookingDateUtc,
+          userId: user.id,
+          companyId: user.companyId,
+          bookingType: 'PRIMARY',
+          status: 'SUBMITTED',
+          userAddress: user.address,
+          pinCode: user.pinCode,
+          travelDistanceKm: user.distanceKm, // Decimal — snapshot (F6); null is refused up front
+          vehicleType: input.vehicleType ?? null,
+          vehicleNumber: input.vehicleNumber ?? null,
+          carpoolMemberCount: input.carpoolPeople - 1,
+          specialRequirement: input.specialRequirement ?? null,
+          submittedAt: now,
+          carpoolMembers: memberRows.length ? { create: memberRows } : undefined,
+        },
+      });
+    });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = Array.isArray(err.meta?.target)
@@ -282,15 +283,68 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
       }
       throw new ConflictError('You already have a PRIMARY booking for this date');
     }
-    // P2034 — the capacity check kept losing the write race even after the retries above. The read is
-    // stale so the request must not be admitted; surface a retryable 409 rather than a 500.
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
-      throw new CapacityFullError(
-        'Another request for this date landed at the same moment — please refresh the slot grid and try again',
-      );
-    }
     throw err;
   }
+}
+
+export type BookingBatchResult =
+  | { bookingDate: string; outcome: 'CREATED'; booking: Awaited<ReturnType<typeof createBooking>> }
+  | { bookingDate: string; outcome: 'FAILED'; code: ErrorCode; message: string };
+
+/**
+ * Multi-date booking (POST /bookings/batch). One PRIMARY request per date, same trip details on each.
+ *
+ * Deliberately NOT one transaction, and deliberately not parallel:
+ *
+ *  - **Independent outcomes.** Rolling the whole batch back because one date was closed would throw
+ *    away the dates that were fine. The honest answer is "these four are queued, that one had already
+ *    been decided", not "start again". A caller who wants all-or-nothing can book dates one at a time.
+ *  - **Sequential, ascending.** Each date is its own transaction; running them concurrently would make
+ *    sibling dates of one batch contend for the same rows for no benefit. Ascending order also keeps
+ *    the per-date report in a natural reading order.
+ *
+ * Under Phase 8 a date can no longer fail for want of capacity (D18), so a `FAILED` row here means the
+ * window is closed for that date, it has already been decided, or the user already requested it.
+ *
+ * Only `AppError` is caught per date. An unexpected failure is a bug, not a booking outcome, so it
+ * propagates and fails the whole request rather than being reported as "this date didn't work".
+ */
+export async function createBookings(
+  userId: string,
+  input: CreateBookingsBatchInput,
+  now: Date = new Date(),
+) {
+  const { bookingDates, ...shared } = input;
+
+  // Pre-flight the date-independent rules so a bad carpool — or an unscoreable profile — is one 400,
+  // not the same VALIDATION_ERROR repeated for every date, and never a partial set.
+  await assertTripDetails(shared);
+  await loadBookingUser(userId);
+
+  const results: BookingBatchResult[] = [];
+
+  for (const bookingDate of bookingDates) {
+    try {
+      // Fresh object per date: createBooking mutates `input.vehicleType` (car-only normalisation), so
+      // sharing one would leak that write across iterations.
+      const booking = await createBooking(userId, { ...shared, bookingDate }, now);
+      results.push({ bookingDate, outcome: 'CREATED', booking });
+    } catch (err) {
+      if (err instanceof AppError) {
+        results.push({ bookingDate, outcome: 'FAILED', code: err.code, message: err.message });
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  const createdCount = results.filter((r) => r.outcome === 'CREATED').length;
+  return {
+    requested: results.length,
+    createdCount,
+    failedCount: results.length - createdCount,
+    results,
+  };
 }
 
 /**

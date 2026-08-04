@@ -170,6 +170,44 @@ export interface paths {
         patch: operations["updateMe"];
         trace?: never;
     };
+    "/me/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's saved cars */
+        get: operations["getMyVehicles"];
+        put?: never;
+        /**
+         * Add a car to the current user's profile
+         * @description Creates or reactivates an active vehicle-registry row for security lookup.
+         */
+        post: operations["createMyVehicle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/vehicles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove one of the current user's saved cars */
+        delete: operations["removeMyVehicle"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/bookings": {
         parameters: {
             query?: never;
@@ -239,6 +277,30 @@ export interface paths {
          * @description Role: USER. Creates a PRIMARY booking for a bookable weekday (Mon–Fri, D7). `travelDistanceKm` is snapshotted from the user's profile at submission (F6); `carpoolPeople` includes the driver as person 1 (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
          */
         post: operations["createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit parking requests for several dates at once
+         * @description Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`, applying the same trip details (vehicle, carpool, special requirement) to every date.
+         *
+         *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
+         *
+         *     A 200 with every result `FAILED` is a valid response. Request-level problems — an empty or oversized `bookingDates`, a malformed date, a carpool that breaks the cap — are rejected as 400 before any booking is attempted, so a bad payload never books a partial set.
+         */
+        post: operations["createBookingsBatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -684,6 +746,28 @@ export interface paths {
         patch: operations["setUserStatus"];
         trace?: never;
     };
+    "/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a user
+         * @description Soft-removes a user. Super Admin may remove company-admin and security users. Company Admin may remove non-privileged users from their own company.
+         */
+        delete: operations["removeUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/companies/{id}/admins": {
         parameters: {
             query?: never;
@@ -911,7 +995,7 @@ export interface paths {
         };
         /**
          * Per-date slot grid for the caller's company + booking-window summary
-         * @description Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the currently-open window) with the company's quota, how much is blocked/taken, and a `boxes` array to render as the slot grid. The company always comes from the principal, never the query. `taken` counts LIVE REQUESTS, not just allocations (D12) — a submitted request holds a box immediately, which is what keeps demand within supply so nobody is rejected later.
+         * @description Any authenticated role. Returns one entry per date in `[from, to]` (defaulting to exactly the currently-open window) with the company's quota, how much is blocked, and a `boxes` array to render as the slot grid. The company always comes from the principal, never the query. Requests never consume capacity (D18): each date has a `phase` — `OPEN` (before that date's weekly run) shows only AVAILABLE/BLOCKED boxes plus a `requestCount` of live requests as a count, not boxes; `DECIDED` (after the run) shows real allocations via `allocatedCount` and MINE/TAKEN boxes with `slotNumber` (D22).
          */
         get: operations["getAvailability"];
         put?: never;
@@ -956,6 +1040,27 @@ export interface paths {
          * @description Role SUPER_ADMIN. Decides every bookable weekday in the band the upcoming run owns — `[nextRunDate + approvalLeadDays, followingRunDate + approvalLeadDays)` — by delegating to the per-date primary run, so each date stays idempotent and score-explained. Takes no body: the band comes from config. Dates already COMPLETED are reported as `alreadyDecided` and left alone, and one failing date does not abort the others. Overflow waitlists; it never rejects.
          */
         post: operations["runWeeklyAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/weekly/common-pool/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the common pool across the weekly band
+         * @description Role SUPER_ADMIN. The band-scoped sibling of `POST /allocation/weekly/run`: for every date in the band the upcoming run owns, enrolls the users primary left WAITLISTED, derives pool inventory from every company's unused quota, and assigns it cross-company by FinalScore. Takes no body — the band comes from config. Idempotent per (COMMON_POOL, date): dates already COMPLETED are reported as `alreadyDecided`, and one failing date does not abort the others.
+         *     Run this AFTER the primary batch; on its own there is no waitlist to enroll. The `allocated` and `waitlisted` counts in the response describe the COMMON_POOL requests, not the PRIMARY ones — a primary-waitlisted user placed by the pool stays WAITLISTED on their primary row.
+         */
+        post: operations["runWeeklyCommonPoolAllocation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1151,7 +1256,7 @@ export interface components {
          * @description Canonical error codes (docs/phases-3-6-plan.md §3.2).
          * @enum {string}
          */
-        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "CAPACITY_FULL" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
+        ErrorCode: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "WINDOW_CLOSED" | "RATE_LIMITED" | "INTERNAL";
         Pagination: {
             page: number;
             pageSize: number;
@@ -1245,6 +1350,16 @@ export interface components {
             address?: string;
             pinCode?: string;
             distanceKm?: number | null;
+        };
+        CreateMyVehicleRequest: {
+            /** @description Any spacing/case; normalized server-side for security lookup. */
+            vehicleNumber: string;
+            /** @description Optional display form shown to security. */
+            displayNumber?: string;
+            vehicleType?: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            notes?: string | null;
         };
         Booking: {
             id: string;
@@ -1516,7 +1631,7 @@ export interface components {
         BookingWindow: {
             /**
              * Format: date-time
-             * @description When the next weekly batch runs.
+             * @description When the next automatic batch runs.
              */
             nextRunAt: string;
             /** @description Seconds until `nextRunAt`; 0 once passed. */
@@ -1551,6 +1666,18 @@ export interface components {
             requestableDates: string[];
             /** @description Next five automatic allocation run instants. */
             nextRuns: string[];
+            scoring: components["schemas"]["BookingWindowScoring"];
+        };
+        /** @description Live scoring inputs (§4, D3) so the booking form can compute a user's score client-side with no extra round-trip as they add carpool members. Super-Admin editable; not a promise of outcome — ranking and tie-breakers still decide. */
+        BookingWindowScoring: {
+            /** @description Weight applied to distanceScore (default 0.60). */
+            distanceWeight: number;
+            /** @description Weight applied to carpoolScore (default 0.40). */
+            carpoolWeight: number;
+            /** @description Distance at which distanceScore caps at 100 (default 40). */
+            maxDistanceKm: number;
+            /** @description Carpool size at which carpoolScore caps at 100 (default 4). */
+            maxPeople: number;
         };
         /**
          * @description MINE = the caller's own reservation, TAKEN = someone else's, BLOCKED = withheld by an admin, AVAILABLE = free. Render AVAILABLE green and everything else grey.
@@ -1561,23 +1688,41 @@ export interface components {
             /** @description 1-based position in the grid. */
             index: number;
             state: components["schemas"]["SlotBoxState"];
+            /** @description The real `ParkingSlot.slotNumber` (a free-form label, e.g. `B1-07` — not an ordinal), populated only when `phase = DECIDED` and the box is `MINE` or `TAKEN`. `null` while `OPEN`, or for `AVAILABLE`/`BLOCKED` boxes. Not to be confused with `index`, which orders the grid. */
+            slotNumber: string | null;
         };
         /**
          * @description Why a date cannot be requested; `null` when it can.
          * @enum {string}
          */
-        UnavailableReason: "INVALID_DATE" | "NOT_WEEKDAY" | "TOO_SOON" | "BEYOND_WINDOW" | "NO_QUOTA" | "FULL" | "ALREADY_BOOKED";
+        UnavailableReason: "INVALID_DATE" | "NOT_WEEKDAY" | "TOO_SOON" | "BEYOND_WINDOW" | "NO_QUOTA" | "ALREADY_BOOKED";
+        /**
+         * @description OPEN = before the date's weekly run; grid shows only AVAILABLE/BLOCKED and demand is a count. DECIDED = after the run; grid shows real allocations (D22).
+         * @enum {string}
+         */
+        DayAvailabilityPhase: "OPEN" | "DECIDED";
+        /**
+         * @description The caller's **best** request status for this date, if any — a user can hold both a PRIMARY and a COMMON_POOL row for one day (the common-pool run enrolls the primary waitlist), and "you got a slot" is the answer that matters. Priority order: ALLOCATED, WAITLISTED, SUBMITTED, DRAFT, RELEASED, EXPIRED, CANCELLED, REJECTED.
+         * @enum {string|null}
+         */
+        DayAvailabilityMyStatus: "DRAFT" | "SUBMITTED" | "CANCELLED" | "ALLOCATED" | "WAITLISTED" | "REJECTED" | "RELEASED" | "EXPIRED" | null;
         DayAvailability: {
             /** Format: date */
             date: string;
+            phase: components["schemas"]["DayAvailabilityPhase"];
             /** @description The company's effective quota for this date — also the number of boxes (D14). */
             quota: number;
             blocked: number;
-            /** @description Live requests holding a box (D12), not merely completed allocations. */
-            taken: number;
+            /** @description Live PRIMARY requests for this date — demand, not reservation. "Live" is every non-terminal status (DRAFT, SUBMITTED, WAITLISTED, ALLOCATED), so once `phase = DECIDED` this still counts the decided rows and remains >= `allocatedCount`. Informational only; never gates a submission (D18). */
+            requestCount: number;
+            /** @description Rows actually allocated for this date. 0 while `phase = OPEN`. */
+            allocatedCount: number;
             available: number;
             /** @description True when the caller already holds a request for this date. */
             mine: boolean;
+            myStatus: components["schemas"]["DayAvailabilityMyStatus"] | null;
+            /** @description Set when `myStatus = ALLOCATED` (including common-pool allocations, §5.3). */
+            mySlotNumber: string | null;
             requestable: boolean;
             reason?: components["schemas"]["UnavailableReason"] | null;
             /** @description Human-readable explanation of `reason`. */
@@ -1624,6 +1769,10 @@ export interface components {
                 bookingDate: string;
                 runStatus?: components["schemas"]["AllocationRunStatus"] | null;
                 pendingRequests: number;
+                /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
+                commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
+                /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
+                waitlistedRequests: number;
             }[];
         };
         VehicleSummary: {
@@ -1738,6 +1887,39 @@ export interface components {
             specialRequirement?: string | null;
             /** @description Optional carpool members; only same-company employees are scored (F4). */
             carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
+        };
+        /** @description Multi-date booking. Identical to CreateBookingRequest except that `bookingDate` becomes `bookingDates`; every other field is applied unchanged to each date. */
+        CreateBookingsBatchRequest: {
+            /** @description Target bookable weekdays (Mon–Fri, D7). Duplicates are collapsed and the list is sorted ascending before booking. The cap of 20 is the most weekdays a maximum 4-week window can contain, so it can never reject a legitimate selection. */
+            bookingDates: string[];
+            vehicleType?: components["schemas"]["VehicleType"];
+            vehicleNumber?: string | null;
+            /** @description Total people incl. the driver (person 1, D3), applied to every date. Server enforces the current carpool.maxPeople cap (default 4, D8). */
+            carpoolPeople: number;
+            specialRequirement?: string | null;
+            /** @description Optional carpool members, applied to every date; only same-company employees are scored (F4). */
+            carpoolMembers?: components["schemas"]["CarpoolMemberInput"][];
+        };
+        /** @description Outcome for a single date within a batch. */
+        BookingBatchResult: {
+            /** Format: date */
+            bookingDate: string;
+            /** @enum {string} */
+            outcome: "CREATED" | "FAILED";
+            /** @description Present when `outcome` is CREATED. */
+            booking?: components["schemas"]["BookingCreatedData"] | null;
+            /** @description Present when `outcome` is FAILED — the same error code the single-date endpoint would have returned for this date (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR). */
+            code?: string | null;
+            /** @description Present when `outcome` is FAILED — human-readable reason, safe to show the user. */
+            message?: string | null;
+        };
+        BookingsBatchData: {
+            /** @description Distinct dates evaluated after de-duplication. */
+            requested: number;
+            createdCount: number;
+            failedCount: number;
+            /** @description One entry per requested date, ascending. */
+            results: components["schemas"]["BookingBatchResult"][];
         };
         /** @description Partial edit before the primary cutoff. All fields optional. */
         UpdateBookingRequest: {
@@ -2151,7 +2333,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessEnvelope"] & {
-                        data?: components["schemas"]["AccessTokenData"];
+                        data?: components["schemas"]["LoginResponseData"];
                     };
                 };
             };
@@ -2286,6 +2468,89 @@ export interface operations {
             };
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getMyVehicles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved cars visible to security */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createMyVehicle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMyVehicleRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved car */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    removeMyVehicle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: {
+                            id?: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getMyBookings: {
@@ -2481,6 +2746,98 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["WindowClosed"];
+        };
+    };
+    createBookingsBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bookingDates": [
+                 *         "2026-08-12",
+                 *         "2026-08-13",
+                 *         "2026-08-14"
+                 *       ],
+                 *       "vehicleType": "CAR",
+                 *       "vehicleNumber": "MH12AB1234",
+                 *       "carpoolPeople": 2,
+                 *       "carpoolMembers": [
+                 *         {
+                 *           "name": "Rahul Mehta",
+                 *           "employeeEmail": "rahul@assent.example"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreateBookingsBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-date outcomes. Check `results[]` — some dates may have failed. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "data": {
+                     *         "requested": 3,
+                     *         "createdCount": 2,
+                     *         "failedCount": 1,
+                     *         "results": [
+                     *           {
+                     *             "bookingDate": "2026-08-12",
+                     *             "outcome": "CREATED",
+                     *             "booking": {
+                     *               "id": "bkg_123",
+                     *               "status": "SUBMITTED",
+                     *               "bookingType": "PRIMARY",
+                     *               "bookingDate": "2026-08-12",
+                     *               "travelDistanceKm": 12.4,
+                     *               "carpoolPeople": 2,
+                     *               "submittedAt": "2026-08-04T11:20:00Z"
+                     *             }
+                     *           },
+                     *           {
+                     *             "bookingDate": "2026-08-13",
+                     *             "outcome": "FAILED",
+                     *             "code": "CONFLICT",
+                     *             "message": "You already have a PRIMARY booking for this date."
+                     *           },
+                     *           {
+                     *             "bookingDate": "2026-08-14",
+                     *             "outcome": "CREATED",
+                     *             "booking": {
+                     *               "id": "bkg_124",
+                     *               "status": "SUBMITTED",
+                     *               "bookingType": "PRIMARY",
+                     *               "bookingDate": "2026-08-14",
+                     *               "travelDistanceKm": 12.4,
+                     *               "carpoolPeople": 2,
+                     *               "submittedAt": "2026-08-04T11:20:00Z"
+                     *             }
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingsBatchData"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createCommonPoolBooking: {
@@ -3279,6 +3636,24 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    removeUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MessageOk"];
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     assignCompanyAdmin: {
         parameters: {
             query?: never;
@@ -3821,6 +4196,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Per-date outcomes for the band. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["WeeklyRunResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runWeeklyCommonPoolAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-date common-pool outcomes for the band. */
             200: {
                 headers: {
                     "X-Correlation-Id": components["headers"]["CorrelationId"];

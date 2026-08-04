@@ -43,13 +43,20 @@ export interface WindowConfig {
   approvalLeadDays: number;
 }
 
-/** Fallbacks mirroring the seeded defaults, used when a config row is missing. */
+/**
+ * Fallbacks mirroring the seeded defaults, used when a config row is missing.
+ *
+ * `approvalLeadDays` is 1 as of Phase 8 (D21): with a Sunday run, a 3-day lead pushed the earliest
+ * requestable date out to Wednesday, so the requirement "it is Sunday, I want Mon–Fri" could not be
+ * expressed at all. Must stay in step with `prisma/seed.ts` — the integration suite derives its test
+ * dates from these values and assumes the seeded DB matches.
+ */
 export const DEFAULT_WINDOW_CONFIG: WindowConfig = {
   windowWeeks: 2,
   runDay: 'SUNDAY',
   runFrequency: 'WEEKLY',
   runTime: '20:00',
-  approvalLeadDays: 3,
+  approvalLeadDays: 1,
 };
 
 /** `YYYY-MM-DD` for a UTC-midnight calendar-date instant. */
@@ -256,6 +263,22 @@ export function upcomingAllocationBand(now: Date, cfg: WindowConfig): Allocation
   return allocationBand(nextAllocationRunAt(now, cfg), cfg);
 }
 
+/**
+ * The live scoring weights and caps, echoed to the client (P8-04).
+ *
+ * Phase 8 decides who gets a slot by score, so a user is entitled to see what their score *is* before
+ * they commit — and to watch it move as they add carpool members. Shipping the coefficients lets the
+ * form compute it locally with no round-trip; the formula is three lines
+ * (see `allocation/score.ts`). Read from config by `loadScoringConfig`, and passed in here rather than
+ * loaded, because this module stays pure.
+ */
+export interface ScoringSummary {
+  distanceWeight: number;
+  carpoolWeight: number;
+  maxDistanceKm: number;
+  maxPeople: number;
+}
+
 export interface BookingWindowSummary {
   nextRunAt: string;
   nextRunCountdownSeconds: number;
@@ -271,10 +294,15 @@ export interface BookingWindowSummary {
   latestDate: string;
   requestableDates: string[];
   nextRuns: string[];
+  scoring: ScoringSummary;
 }
 
 /** Everything the client needs to render "book between X and Y; results on Z" in one payload. */
-export function bookingWindowSummary(now: Date, cfg: WindowConfig): BookingWindowSummary {
+export function bookingWindowSummary(
+  now: Date,
+  cfg: WindowConfig,
+  scoring: ScoringSummary,
+): BookingWindowSummary {
   const nextRun = nextAllocationRunAt(now, cfg);
   const windowRun = requestWindowRunAt(now, cfg);
   const requestClose = requestCloseAtForRun(windowRun);
@@ -293,5 +321,6 @@ export function bookingWindowSummary(now: Date, cfg: WindowConfig): BookingWindo
     latestDate: toIsoDate(latestRequestableDate(now, cfg)),
     requestableDates: requestableDates(now, cfg),
     nextRuns: nextAllocationRuns(now, cfg, 5),
+    scoring,
   };
 }

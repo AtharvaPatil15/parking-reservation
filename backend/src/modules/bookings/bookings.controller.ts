@@ -4,7 +4,7 @@ import { parsePagination } from '../../lib/pagination';
 import { UnauthenticatedError } from '../../lib/errors';
 import * as service from './bookings.service';
 import { getAvailability as loadAvailability } from './bookings.availability';
-import { loadWindowConfig } from './bookings.windowConfig';
+import { loadScoringConfig, loadWindowConfig } from './bookings.windowConfig';
 import {
   bookingWindowSummary,
   earliestRequestableDate,
@@ -138,17 +138,41 @@ export const listBookings = asyncHandler(async (req, res) => {
 export const getAvailability = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const now = new Date();
-  const cfg = await loadWindowConfig();
+  const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
   const from = (req.query.from as string | undefined) ?? toIsoDate(earliestRequestableDate(now, cfg));
   const to = (req.query.to as string | undefined) ?? toIsoDate(latestRequestableDate(now, cfg));
   const days = await loadAvailability(req.user.companyId, req.user.id, from, to, cfg, now);
-  sendSuccess(res, { window: bookingWindowSummary(now, cfg), days }, 200);
+  sendSuccess(res, { window: bookingWindowSummary(now, cfg, scoring), days }, 200);
 });
 
 export const createBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.createBooking(req.user.id, req.body);
   sendSuccess(res, toBookingCreated(booking), 201);
+});
+
+/**
+ * Multi-date booking. 200 rather than 201 because the response is a per-date report that may mix
+ * created and failed — including all-failed, which is still a successful *request* (openapi
+ * `BookingsBatchData`). A partial set is the intended outcome, not an error.
+ */
+export const createBookingsBatch = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const batch = await service.createBookings(req.user.id, req.body);
+  sendSuccess(
+    res,
+    {
+      requested: batch.requested,
+      createdCount: batch.createdCount,
+      failedCount: batch.failedCount,
+      results: batch.results.map((r) =>
+        r.outcome === 'CREATED'
+          ? { bookingDate: r.bookingDate, outcome: r.outcome, booking: toBookingCreated(r.booking) }
+          : { bookingDate: r.bookingDate, outcome: r.outcome, code: r.code, message: r.message },
+      ),
+    },
+    200,
+  );
 });
 
 export const updateBooking = asyncHandler(async (req, res) => {

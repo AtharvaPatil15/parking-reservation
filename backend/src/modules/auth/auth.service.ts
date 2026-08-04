@@ -175,7 +175,7 @@ export async function register(input: RegisterInput) {
 }
 
 /** Rotate the refresh token (revoke old, issue new) and mint a fresh access token. */
-export async function refresh(rawToken: string | undefined, ip?: string): Promise<Tokens> {
+export async function refresh(rawToken: string | undefined, ip?: string): Promise<Tokens & { user: AuthUser }> {
   if (!rawToken) throw new UnauthenticatedError('No refresh token');
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(rawToken) } });
   if (!row || row.revokedAt || row.expiresAt < new Date()) {
@@ -183,7 +183,7 @@ export async function refresh(rawToken: string | undefined, ip?: string): Promis
   }
   const user = await prisma.user.findFirst({
     where: { id: row.userId, deletedAt: null },
-    include: { roles: { include: { role: true } } },
+    include: { roles: { include: { role: true } }, company: true },
   });
   if (!user || user.status !== 'ACTIVE') throw new UnauthenticatedError('Invalid refresh token');
 
@@ -200,6 +200,13 @@ export async function refresh(rawToken: string | undefined, ip?: string): Promis
     expiresIn: env.ACCESS_TOKEN_TTL,
     refreshToken: raw,
     refreshExpiresAt: expiresAt,
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      role,
+      companyId: user.companyId,
+      companyName: user.company.name,
+    },
   };
 }
 

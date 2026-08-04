@@ -112,7 +112,7 @@ export function RegisterPage() {
         ) : (
           <>
             <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
+              <h1 className="text-4xl">Create an account</h1>
               <p className="text-text-muted">Register to request parking. An admin approves new accounts.</p>
             </div>
 
