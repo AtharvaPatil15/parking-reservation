@@ -5,6 +5,7 @@ import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
 import { Logo, ThemeToggle } from './chrome';
 import { NavDrawerProvider, useNavDrawerItems } from './navDrawer';
+import { ROLE_NAV } from './roleNav';
 
 /**
  * Authenticated chrome: top bar + content region. The role shells (/admin,
@@ -16,7 +17,7 @@ export function AppShell() {
     <NavDrawerProvider>
       <div className="min-h-screen bg-canvas text-text">
         <TopBar />
-        <main className="mx-auto max-w-5xl px-6 py-10">
+        <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
           <Outlet />
         </main>
       </div>
@@ -26,27 +27,35 @@ export function AppShell() {
 
 function TopBar() {
   const { user, logout } = useAuth();
-  const navItems = useNavDrawerItems();
+  const registeredItems = useNavDrawerItems();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const initial = user?.fullName?.charAt(0).toUpperCase() ?? '?';
+  // Pages outside a role shell (/profile, the gate console) register nothing, so fall back to the
+  // signed-in role's menu — the hamburger is always shown and must never open an empty drawer.
+  const navItems = registeredItems.length > 0 ? registeredItems : (user ? ROLE_NAV[user.role] ?? [] : []);
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-        <div className="flex items-center gap-2.5">
-          {navItems.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Open navigation menu"
-              className="grid h-8 w-8 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-            >
-              <MenuIcon />
-            </button>
-          )}
+      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {/* Always rendered: pages outside a role shell (e.g. /profile) register no nav items of
+              their own, and hiding the only navigation control there stranded the user. Those
+              pages fall back to the role's own menu below. */}
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation menu"
+            className="grid h-8 w-8 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
+            <MenuIcon />
+          </button>
           <Logo />
-          <span className="text-base font-semibold tracking-tight">Parking Reservation</span>
+          {/* The full wordmark wrapped to two lines at 390px and pushed the bar past its own height.
+              Keep it on one line and drop the second word on the narrowest screens. */}
+          <span className="truncate whitespace-nowrap text-base font-semibold tracking-tight">
+            Parking<span className="hidden sm:inline"> Reservation</span>
+          </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle />
           <Link
             to="/profile"
@@ -58,7 +67,7 @@ function TopBar() {
             </span>
             <span className="hidden sm:inline">{user?.fullName ?? 'Account'}</span>
           </Link>
-          <Button size="sm" variant="secondary" onClick={logout}>
+          <Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={logout}>
             Sign out
           </Button>
         </div>

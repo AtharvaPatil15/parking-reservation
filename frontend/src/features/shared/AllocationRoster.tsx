@@ -71,20 +71,28 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
 
   return (
     <Card title="Allocated seats" padded={false}>
+      {/* Date carries a hint, so its neighbours reserve the same line (hintReserve) — otherwise
+          items-end lifts their inputs out of line with it. */}
       <div className="flex flex-wrap items-end gap-3 px-4 pt-5 sm:px-6">
         <div className="w-full sm:w-44">
           <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} hint="Blank = all dates" />
         </div>
         <div className="w-full sm:w-40">
-          <Select label="Type" options={TYPE_OPTIONS} value={type} onChange={(e) => setType(e.target.value)} />
+          <Select label="Type" options={TYPE_OPTIONS} value={type} onChange={(e) => setType(e.target.value)} hintReserve />
         </div>
         {showCompanyFilter && (
           <div className="w-full sm:w-52">
-            <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
+            <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => setCompanyId(e.target.value)} hintReserve />
           </div>
         )}
         {(date || type || companyId) && (
-          <Button variant="secondary" size="sm" onClick={() => { setDate(''); setType(''); setCompanyId(''); }}>
+          // Sits on the control row; the reserved hint line below the inputs is what it clears.
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mb-[1.625rem]"
+            onClick={() => { setDate(''); setType(''); setCompanyId(''); }}
+          >
             Clear
           </Button>
         )}

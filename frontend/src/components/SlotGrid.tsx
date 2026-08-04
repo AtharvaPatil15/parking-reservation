@@ -64,7 +64,15 @@ export function SlotGrid({ boxes, phase, size = 'md', className }: SlotGridProps
             title={`Slot ${shownAs} — ${STATE_LABELS[box.state]}`}
             className={cn(
               'flex items-center justify-center rounded-control border font-medium tabular-nums',
-              size === 'sm' ? 'h-5 w-5 text-[10px]' : 'h-9 w-9 text-xs',
+              // A grid position is 1-2 characters and stays square. A real slot number ("A-03") is
+              // wider than the square, so keep the height and let the box grow instead of wrapping
+              // the label onto a second line.
+              size === 'sm' ? 'h-5 text-[10px]' : 'h-9 text-xs',
+              showSlotNumber
+                ? cn('whitespace-nowrap', size === 'sm' ? 'min-w-[1.25rem] px-1' : 'min-w-[2.25rem] px-1.5')
+                : size === 'sm'
+                  ? 'w-5'
+                  : 'w-9',
               STATE_STYLES[box.state],
               box.state === 'MINE' ? 'text-primary' : box.state === 'AVAILABLE' ? 'text-success' : 'text-text-muted',
             )}

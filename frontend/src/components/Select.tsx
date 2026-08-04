@@ -10,13 +10,15 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   hint?: string;
   error?: string;
+  /** See Input's `hintReserve`: keeps the hint line's height so `items-end` rows stay aligned. */
+  hintReserve?: boolean;
   options: SelectOption[];
   placeholder?: string;
 }
 
 /** Labelled native select — same label/hint/error/a11y contract as Input. */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, options, placeholder, id, className, value, defaultValue, ...rest },
+  { label, hint, error, hintReserve = false, options, placeholder, id, className, value, defaultValue, ...rest },
   ref,
 ) {
   const autoId = useId();
@@ -69,6 +71,10 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       ) : hint ? (
         <p id={`${selectId}-hint`} className="text-sm text-text-muted">
           {hint}
+        </p>
+      ) : hintReserve ? (
+        <p aria-hidden="true" className="text-sm">
+          &nbsp;
         </p>
       ) : null}
     </div>

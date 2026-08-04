@@ -137,12 +137,13 @@ export function Companies() {
       <Card title="Add company">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-56">
-            <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
+            {/* Code below carries a hint; reserve the same line here so both inputs stay in line. */}
+            <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} hintReserve />
           </div>
           <div className="w-40">
             <Input label="Code" value={code} onChange={(e) => setCode(e.target.value)} hint="Short tenant code" />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={!name.trim() || !code.trim()}>
+          <Button className="mb-[1.625rem]" onClick={onCreate} loading={create.isPending} disabled={!name.trim() || !code.trim()}>
             Add company
           </Button>
         </div>
