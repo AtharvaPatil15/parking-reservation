@@ -3,14 +3,19 @@ import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
 import type { Role } from '../lib/roles';
 import { NavIcon } from './navIcons';
-import { useNavDrawerItems } from './navDrawer';
+import { useNavDrawerItems, type NavDrawerItem } from './navDrawer';
+import { ROLE_NAV } from './roleNav';
+import { useSuperAdminNavCounts } from './useNavCounts';
 
 /**
  * The steel rail: a dark plane carrying the brand, the role, the nav and the
  * signed-in user. Dark in both themes — it is its own plane, not a surface.
  *
- * Purely presentational. Items come from whichever role shell is mounted (see
- * navDrawer), so the rail never knows about routes itself.
+ * Nav comes from the signed-in ROLE (see roleNav), not from whichever role shell
+ * is mounted. Five routes mount the shell with no role shell inside, and those
+ * screens used to render a bare brand bar with no nav at all — for SECURITY, whose
+ * only route is /security, that was every screen. A shell may still override with
+ * its own registered items, which is how a section can add to the rail.
  */
 
 /** Display strings for the rail. Labels users already know, so nothing is renamed. */
@@ -23,9 +28,11 @@ const ROLE_CHROME: Record<Role, { label: string; code: string }> = {
 
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth();
-  const items = useNavDrawerItems();
+  const registered = useNavDrawerItems();
   const chrome = user ? ROLE_CHROME[user.role] : undefined;
   const initial = user?.fullName?.charAt(0).toUpperCase() ?? '?';
+  // Role-derived by default; a mounted shell's own registration wins if it has one.
+  const items = registered.length > 0 ? registered : user ? ROLE_NAV[user.role] : [];
 
   return (
     <div className="flex h-full w-full flex-col bg-field text-field-ink">
@@ -49,28 +56,14 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
 
-      <nav className="flex flex-1 flex-col gap-px overflow-y-auto px-2.5" aria-label="Main">
-        {items.map((item) => (
-          <div key={item.to} className={cn(item.dividerBefore && 'mt-2.5 border-t border-field-ln pt-2.5')}>
-            <NavLink
-              to={item.to}
-              end={item.end}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  'flex h-[34px] items-center gap-2.5 px-2.5 text-sm transition-colors',
-                  isActive
-                    ? 'bg-white/[0.08] text-white shadow-[inset_2px_0_0_rgb(var(--field-accent))]'
-                    : 'text-field-ink-2 hover:bg-white/[0.05] hover:text-field-ink',
-                )
-              }
-            >
-              <NavIcon name={item.icon} />
-              <span className="flex-1">{item.label}</span>
-            </NavLink>
-          </div>
-        ))}
-      </nav>
+      {/* Counts are super-admin-only, and the hooks behind them take no `enabled`
+          flag, so the counted variant is a separate component that simply never
+          mounts for other roles. */}
+      {user?.role === 'SUPER_ADMIN' ? (
+        <CountedNav items={items} onNavigate={onNavigate} />
+      ) : (
+        <NavList items={items} onNavigate={onNavigate} />
+      )}
 
       <div className="mx-4 h-px bg-field-ln" />
       <div className="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
@@ -109,4 +102,55 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
     </div>
   );
+}
+
+/** The nav rows. Split out so the counted super-admin variant can wrap it. */
+function NavList({ items, onNavigate }: { items: NavDrawerItem[]; onNavigate?: () => void }) {
+  return (
+    <nav className="flex flex-1 flex-col gap-px overflow-y-auto px-2.5" aria-label="Main">
+      {items.map((item) => (
+        <div key={item.to} className={cn(item.dividerBefore && 'mt-2.5 border-t border-field-ln pt-2.5')}>
+          <NavLink
+            to={item.to}
+            end={item.end}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                'flex h-[34px] items-center gap-2.5 px-2.5 text-sm transition-colors',
+                isActive
+                  ? 'bg-white/[0.08] text-white shadow-[inset_2px_0_0_rgb(var(--field-accent))]'
+                  : 'text-field-ink-2 hover:bg-white/[0.05] hover:text-field-ink',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <NavIcon name={item.icon} />
+                <span className="flex-1">{item.label}</span>
+                {item.count != null && (
+                  <span
+                    className={cn(
+                      'flex-none font-mono text-3xs tabular-nums',
+                      isActive ? 'text-field-accent' : 'text-field-ink-3',
+                    )}
+                  >
+                    {item.count}
+                  </span>
+                )}
+              </>
+            )}
+          </NavLink>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+/**
+ * Super-admin rail: the same rows with live figures on the right. Separate because
+ * the count queries take no `enabled` flag, so this component simply never mounts
+ * for the roles that must not run them.
+ */
+function CountedNav({ items, onNavigate }: { items: NavDrawerItem[]; onNavigate?: () => void }) {
+  return <NavList items={useSuperAdminNavCounts(items)} onNavigate={onNavigate} />;
 }

@@ -8,6 +8,11 @@ export interface NavDrawerItem {
   icon?: NavIconName;
   /** Renders a divider above this item, grouping the cross-role booking links. */
   dividerBefore?: boolean;
+  /**
+   * Monospace figure on the right of the row (the redesign shows "Companies 6",
+   * "Slots 240"). Supplied by the rail from live query data, not hardcoded.
+   */
+  count?: number;
 }
 
 /** Names of the Lucide-derived glyphs the nav rail can draw. */
