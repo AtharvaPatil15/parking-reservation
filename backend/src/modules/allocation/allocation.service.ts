@@ -4,7 +4,7 @@ import { getNumber } from '../../config/systemConfig';
 import { NotFoundError, ValidationError } from '../../lib/errors';
 import { isValidCalendarDate, parseCalendarDate } from '../bookings/bookings.time';
 import { bookingWindowSummary, upcomingAllocationBand, type AllocationBand } from '../bookings/bookings.window';
-import { loadWindowConfig } from '../bookings/bookings.windowConfig';
+import { loadScoringConfig, loadWindowConfig } from '../bookings/bookings.windowConfig';
 import { score, rankCandidates, type RankCandidate } from './score';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
@@ -32,6 +32,33 @@ interface ScoredCandidate extends RankCandidate {
   breakdown: ReturnType<typeof score>;
 }
 
+/**
+ * Quota still assignable to a company for a date: effective quota − blocks − PRIMARY slots it
+ * **already holds** (P8-05a).
+ *
+ * Phase 7 could get away with `quota − blocked` because submit-time capping guaranteed the company
+ * never held anything the run had not just decided. Under Phase 8 that is no longer true — a release
+ * cascade hands a slot straight to a waitlisted colleague, and a forced re-run then sees candidates it
+ * has not placed *and* allocations it did not make. Without subtracting them the same company could be
+ * pushed past its own quota.
+ *
+ * Deliberately counts only `PRIMARY` allocations: a `COMMON_POOL` slot held by one of this company's
+ * users came out of a *different* company's unused quota, so it must not consume this one's.
+ */
+async function remainingPrimaryQuotaTx(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  date: Date,
+): Promise<number> {
+  const [effective, alreadyHeld] = await Promise.all([
+    availableQuotaTx(tx, companyId, date),
+    tx.parkingAllocation.count({
+      where: { companyId, bookingDate: date, allocationType: 'PRIMARY' },
+    }),
+  ]);
+  return Math.max(0, effective - alreadyHeld);
+}
+
 /** Effective quota − overlapping blocks, read on the transaction connection (mirrors slots.getAvailableQuota). */
 async function availableQuotaTx(tx: Prisma.TransactionClient, companyId: string, date: Date): Promise<number> {
   const [quotaRow, blockedAgg] = await Promise.all([
@@ -53,6 +80,13 @@ async function availableQuotaTx(tx: Prisma.TransactionClient, companyId: string,
 
 /**
  * Run (or idempotently re-run) primary allocation for a booking date. Returns the AllocationRun id.
+ *
+ * Score decides, and nothing caps it: a user who ranks first on all five weekdays wins all five.
+ * That is deliberate (Prithviraj, 2026-08-05) — a per-user weekly cap was built and then removed,
+ * because the score already encodes need (distance + carpool), and overriding it to spread slots
+ * around would be a second, competing fairness rule that also left slots empty when everybody had
+ * hit their limit. Fairness lives in the score and in tie-breaker 4 (fewer allocations in the prior
+ * 30 days), not in a quota on winning.
  */
 export async function runPrimaryAllocation(bookingDateStr: string, triggeredById?: string): Promise<string> {
   if (!isValidCalendarDate(bookingDateStr)) {
@@ -155,13 +189,42 @@ export async function runPrimaryAllocation(bookingDateStr: string, triggeredById
           byCompany.set(s.companyId, list);
         }
 
+        // Resolve every company's headroom up front, so the shortfall check below can see the whole
+        // picture before a single slot is handed out.
+        const companyIds = [...byCompany.keys()].sort();
+        const remainingByCompany = new Map<string, number>();
+        for (const companyId of companyIds) {
+          remainingByCompany.set(companyId, await remainingPrimaryQuotaTx(tx, companyId, bookingDate));
+        }
+
+        // P8-05b — refuse to run rather than starve a tenant.
+        //
+        // Companies are walked in a fixed order sharing one cursor over the physical slot pool, so if
+        // the building is under-provisioned the *last* company in that order silently receives nothing
+        // — an outcome decided by UUID ordering, which is indefensible and nearly invisible. Phase 7
+        // hid this: submit-time capping meant demand could never reach the pool's limit. Under Phase 8
+        // over-subscription is the normal case, so fail loudly and name the shortfall; the Super Admin
+        // can then fix quotas or add slots. (Degrading proportionally would be kinder, and is a
+        // deliberate non-goal here — an arbitrary winner is worse than an explicit error.)
+        const demanded = companyIds.reduce(
+          (sum, id) => sum + Math.min(remainingByCompany.get(id) ?? 0, byCompany.get(id)!.length),
+          0,
+        );
+        if (demanded > pool.length) {
+          throw new Error(
+            `Not enough usable parking slots for ${bookingDateStr}: ${pool.length} assignable, but ` +
+              `${demanded} needed across ${companyIds.length} company/companies within quota. ` +
+              `Add slots or reduce company quotas before running allocation.`,
+          );
+        }
+
         let poolIdx = 0;
         const allocated: { cand: ScoredCandidate; slotId: string; rank: number; randomDraw: number }[] = [];
         const waitlisted: { cand: ScoredCandidate; rank: number; randomDraw: number }[] = [];
 
-        for (const companyId of [...byCompany.keys()].sort()) {
+        for (const companyId of companyIds) {
           const group = byCompany.get(companyId)!;
-          const available = await availableQuotaTx(tx, companyId, bookingDate);
+          const available = remainingByCompany.get(companyId) ?? 0;
           const ranked = rankCandidates(group);
           ranked.forEach((r, i) => {
             const withinQuota = i < available;
@@ -628,7 +691,7 @@ export async function runWeeklyAllocation(
 
 /** Preview the band the next (or current) weekly batch owns — lets the SA see it before running. */
 export async function getWeeklyRunPreview(now: Date = new Date()) {
-  const cfg = await loadWindowConfig();
+  const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
   const band = upcomingAllocationBand(now, cfg);
   const runs = await prisma.allocationRun.findMany({
     where: {
@@ -651,7 +714,7 @@ export async function getWeeklyRunPreview(now: Date = new Date()) {
   const pendingByDate = new Map(pending.map((p) => [isoDate(p.bookingDate), p._count._all]));
 
   return {
-    window: bookingWindowSummary(now, cfg),
+    window: bookingWindowSummary(now, cfg, scoring),
     band,
     dates: band.dates.map((d) => ({
       bookingDate: d,

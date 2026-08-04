@@ -33,7 +33,13 @@ function firesNow(now: Date, cfg: WindowConfig): boolean {
   return toIsoDate(currentIstCalendarDate(due)) === toIsoDate(currentIstCalendarDate(now));
 }
 
-const cfg = DEFAULT_WINDOW_CONFIG; // SUNDAY 20:00, 2 weeks, 3 days lead
+/**
+ * SUNDAY 20:00, 2 weeks, **3 days lead** — pinned, not inherited from `DEFAULT_WINDOW_CONFIG`, which
+ * Phase 8 (D21) moved to 1. The band assertion below is hand-calculated against a 3-day lead, and the
+ * fire-time rules this file exists for do not depend on the lead at all. The shipped default's band is
+ * asserted in `bookings.window.test.ts` instead.
+ */
+const cfg: WindowConfig = { ...DEFAULT_WINDOW_CONFIG, approvalLeadDays: 3 };
 
 describe('scheduler run-due rule', () => {
   it('does not fire on a weekday', () => {

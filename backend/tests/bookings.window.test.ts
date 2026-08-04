@@ -22,8 +22,19 @@ import { parseCalendarDate } from '../src/modules/bookings/bookings.time';
  * 20:00 IST == 14:30 UTC the same day.
  */
 
-const SUNDAY_CFG = DEFAULT_WINDOW_CONFIG; // 2 weeks, SUNDAY 20:00, 3 days lead
+/**
+ * 2 weeks, SUNDAY 20:00, **3 days lead**.
+ *
+ * Pinned explicitly rather than taken from `DEFAULT_WINDOW_CONFIG`, which Phase 8 (D21) moved to a
+ * 1-day lead. Every worked example below is calculated by hand against a 3-day lead, and these tests
+ * exist to pin the *arithmetic*, not the shipped default — so they must not move when someone retunes
+ * the config. The default itself is asserted separately, at the bottom of this file.
+ */
+const SUNDAY_CFG: WindowConfig = { ...DEFAULT_WINDOW_CONFIG, approvalLeadDays: 3 };
 const MONDAY_MORNING = new Date('2026-08-03T04:30:00.000Z'); // Mon 03 Aug, 10:00 IST
+
+/** Scoring coefficients are echoed through the summary untouched; any values will do here. */
+const SCORING = { distanceWeight: 0.6, carpoolWeight: 0.4, maxDistanceKm: 40, maxPeople: 4 };
 
 const cfg = (over: Partial<WindowConfig> = {}): WindowConfig => ({ ...SUNDAY_CFG, ...over });
 
@@ -220,7 +231,7 @@ describe('upcomingAllocationBand (what a manual "run the batch" click must proce
 
 describe('bookingWindowSummary', () => {
   it('packages the next run, countdown and open dates for the client', () => {
-    const s = bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG);
+    const s = bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG, SCORING);
     expect(s).toMatchObject({
       nextRunAt: '2026-08-09T14:30:00.000Z',
       requestCloseAt: '2026-08-09T13:30:00.000Z',
@@ -236,5 +247,41 @@ describe('bookingWindowSummary', () => {
     expect(s.nextRunCountdownSeconds).toBe(6 * 86400 + 10 * 3600);
     expect(s.requestCloseCountdownSeconds).toBe(6 * 86400 + 9 * 3600);
     expect(s.requestableDates).toHaveLength(4);
+  });
+
+  it('echoes the live scoring coefficients so the client can score before submitting (P8-04)', () => {
+    // Passed in, never read from config here — this module stays pure, which is what lets every test
+    // above be plain arithmetic with no database.
+    const s = bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG, SCORING);
+    expect(s.scoring).toEqual(SCORING);
+
+    const retuned = { distanceWeight: 0.3, carpoolWeight: 0.7, maxDistanceKm: 25, maxPeople: 5 };
+    expect(bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG, retuned).scoring).toEqual(retuned);
+  });
+});
+
+describe('the shipped default lead time (D21)', () => {
+  it('is 1 day, so a Sunday can request the Monday straight after the run', () => {
+    // The requirement this phase exists for: "today is Sunday, I want Mon–Fri". With the old 3-day
+    // lead the earliest requestable date on a Sunday was Wednesday, so Mon/Tue were unreachable
+    // before the queue was even consulted.
+    expect(DEFAULT_WINDOW_CONFIG.approvalLeadDays).toBe(1);
+
+    const sundayNoon = new Date('2026-08-09T06:30:00.000Z'); // Sun 09 Aug, 12:00 IST — run is 20:00
+    expect(toIsoDate(earliestRequestableDate(sundayNoon, DEFAULT_WINDOW_CONFIG))).toBe('2026-08-10');
+
+    // …and that evening's run owns exactly that week's Mon–Fri.
+    const band = upcomingAllocationBand(sundayNoon, DEFAULT_WINDOW_CONFIG);
+    expect(band.dates).toEqual(['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']);
+  });
+
+  it('still refuses the same Monday once that run has passed', () => {
+    // 21:00 IST Sunday — the 20:00 run has fired, so Monday belongs to a decided band and the window
+    // has moved on to the following week. The lead-time promise holds in both directions.
+    const sundayNight = new Date('2026-08-09T15:30:00.000Z');
+    expect(checkRequestable('2026-08-10', sundayNight, DEFAULT_WINDOW_CONFIG)).toMatchObject({
+      ok: false,
+      code: 'TOO_SOON',
+    });
   });
 });
