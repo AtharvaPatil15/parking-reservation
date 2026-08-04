@@ -247,6 +247,10 @@ async function main() {
     { key: 'booking.allocationRunFrequency', value: 'WEEKLY', valueType: 'STRING', description: 'Automatic allocation run interval (weekly, biweekly, or monthly)' },
     { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Automatic allocation run day' },
     { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Automatic allocation run time on the run day (IST)' },
+    // Same time as the primary run means both halves fire in one tick — the behaviour that predates this
+    // key. Push it later to give companies a window to release quota they know they will not use, since
+    // that released quota is exactly what the pool redistributes. Must never be earlier than the above.
+    { key: 'booking.commonPoolRunTime', value: '20:00', valueType: 'TIME', description: 'Automatic common-pool run time on the run day (IST)' },
     // Phase 8 D21: 1, not 3. With a Sunday run and a 3-day lead, the earliest date a user can request
     // on a Sunday is Wednesday — so "today is Sunday, I want Mon–Fri" was impossible before the queue
     // was even consulted. At 1 the Sunday 20:00 run owns exactly [Mon, Sat) = Mon–Fri.

@@ -64,4 +64,37 @@ describe('validateTimingOrder', () => {
     const bad = { ...ordered, 'booking.commonPoolClose': 'nope' };
     expect(validateTimingOrder(bad)).toEqual({});
   });
+
+  /**
+   * The run-time pair is a separate rule over separate keys: the pool shares out what the primary run
+   * waitlists, so it can never run first.
+   */
+  describe('common-pool run time vs the allocation run', () => {
+    const runTimes = { 'booking.allocationRunTime': '20:00', 'booking.commonPoolRunTime': '22:00' };
+
+    it('accepts the pool at or after the allocation run', () => {
+      expect(validateTimingOrder({ ...ordered, ...runTimes })).toEqual({});
+      expect(
+        validateTimingOrder({ ...ordered, ...runTimes, 'booking.commonPoolRunTime': '20:00' }),
+      ).toEqual({});
+    });
+
+    it('flags a pool time before the allocation run', () => {
+      const errs = validateTimingOrder({ ...ordered, ...runTimes, 'booking.commonPoolRunTime': '19:59' });
+      expect(errs['booking.commonPoolRunTime']).toMatch(/at or after the allocation run time/i);
+      // Only that field — the legacy ordering is untouched and must not be co-flagged.
+      expect(Object.keys(errs)).toEqual(['booking.commonPoolRunTime']);
+    });
+
+    it('is evaluated even when a legacy timing value is unparseable', () => {
+      // The two rules are independent; one being unusable must not silence the other.
+      const errs = validateTimingOrder({
+        ...ordered,
+        ...runTimes,
+        'booking.commonPoolClose': 'nope',
+        'booking.commonPoolRunTime': '01:00',
+      });
+      expect(errs['booking.commonPoolRunTime']).toMatch(/at or after/i);
+    });
+  });
 });

@@ -24,6 +24,7 @@ const TIMING_LABELS: Record<string, string> = {
   'booking.allocationRunFrequency': 'Automatic allocation interval',
   'booking.allocationRunDay': 'Weekly allocation run day',
   'booking.allocationRunTime': 'Weekly allocation run time',
+  'booking.commonPoolRunTime': 'Common-pool run time',
   'booking.approvalLeadDays': 'Decision lead time (days)',
 };
 
@@ -120,13 +121,24 @@ export const ENUM_CONFIG_OPTIONS: Record<string, Array<{ value: string; label: s
  * validation surfaces the malformed one).
  */
 export function validateTimingOrder(values: Record<string, string>): Record<string, string> {
+  const errors: Record<string, string> = {};
+
+  // The common pool shares out what the primary run waitlists, so it can never run first. Evaluated
+  // independently of the legacy ordering below — these are separate rules over separate keys, and one
+  // being unparseable must not silence the other.
+  const primaryRun = toMinutes(values['booking.allocationRunTime'] ?? '');
+  const poolRun = toMinutes(values['booking.commonPoolRunTime'] ?? '');
+  if (primaryRun !== null && poolRun !== null && poolRun < primaryRun) {
+    errors['booking.commonPoolRunTime'] = 'Must be at or after the allocation run time';
+  }
+
   const mins = TIMING_KEYS.map((k) => toMinutes(values[k] ?? ''));
-  if (mins.some((m) => m === null)) return {};
+  if (mins.some((m) => m === null)) return errors;
   const [pc, pr, cc, cr] = mins as number[];
-  if (pc < pr && pr <= cc && cc < cr) return {};
+  if (pc < pr && pr <= cc && cc < cr) return errors;
   // Flag the timing fields so the user sees which rule broke inline.
   const message = 'Out of order (cutoff < results by ≤ pool close < pool results by)';
-  return Object.fromEntries(TIMING_KEYS.map((k) => [k, message]));
+  return { ...errors, ...Object.fromEntries(TIMING_KEYS.map((k) => [k, message])) };
 }
 
 /**

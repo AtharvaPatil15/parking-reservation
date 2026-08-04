@@ -96,6 +96,7 @@ function seedConfig(): ConfigEntry[] {
     { key: 'booking.allocationRunFrequency', value: 'WEEKLY', valueType: 'STRING', description: 'Automatic allocation run interval' },
     { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Weekly allocation run day' },
     { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Weekly allocation run time (IST)' },
+    { key: 'booking.commonPoolRunTime', value: '20:00', valueType: 'TIME', description: 'Common-pool run time (IST)' },
     { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'Days a date is decided ahead of itself' },
   ];
 }
@@ -403,6 +404,11 @@ function mockWindow(now = new Date()): BookingWindow {
     runDay: 'SUNDAY',
     runFrequency: 'WEEKLY',
     runTime: '20:00',
+    // A gap, so the demo exercises the "pool follows later" copy rather than the same-instant case.
+    commonPoolRunTime: '20:30',
+    nextCommonPoolRunAt: new Date(
+      nextRun.getFullYear(), nextRun.getMonth(), nextRun.getDate(), 20, 30, 0, 0,
+    ).toISOString(),
     windowWeeks: WINDOW_WEEKS,
     approvalLeadDays: LEAD_DAYS,
     earliestDate: isoOf(earliest),
@@ -534,6 +540,38 @@ function mockBand(win: BookingWindow): { from: string; toExclusive: string; date
     if (isWeekday(isoOf(d))) dates.push(isoOf(d));
   }
   return { from, toExclusive, dates };
+}
+
+/**
+ * The band the previous scheduled run decided — one week behind `mockBand`, and contiguous with it, as
+ * the real half-open bands are (`lastRun.band.toExclusive === band.from`).
+ */
+function mockLastRun(win: BookingWindow): NonNullable<WeeklyRunPreview['lastRun']> {
+  const prevRun = addDaysTo(new Date(win.nextRunAt), -7);
+  const from = isoOf(addDaysTo(prevRun, LEAD_DAYS));
+  const toExclusive = isoOf(addDaysTo(prevRun, 7 + LEAD_DAYS));
+  const dates: string[] = [];
+  for (let d = new Date(`${from}T00:00:00`); isoOf(d) < toExclusive; d = addDaysTo(d, 1)) {
+    if (isWeekday(isoOf(d))) dates.push(isoOf(d));
+  }
+  return {
+    runAt: prevRun.toISOString(),
+    commonPoolRunAt: new Date(
+      prevRun.getFullYear(), prevRun.getMonth(), prevRun.getDate(), 20, 30, 0, 0,
+    ).toISOString(),
+    band: { from, toExclusive, dates },
+    // Full house on most days and one oversubscribed day, so the pool visibly did something on one of
+    // them — a table of identical rows demonstrates nothing.
+    dates: dates.map((date, i) => ({
+      bookingDate: date,
+      runStatus: 'COMPLETED' as const,
+      pendingRequests: 0,
+      commonPoolStatus: 'COMPLETED' as const,
+      waitlistedRequests: i === 1 ? 2 : 0,
+      allocated: MOCK_QUOTA,
+      poolAllocated: i === 1 ? 1 : 0,
+    })),
+  };
 }
 
 /** Cars with a booking today — drives `hasBooking`, i.e. whether the gate warns (D16). */
@@ -1229,14 +1267,21 @@ const hero = [
       band,
       dates: band.dates.map((date) => {
         const st = availabilityState[date];
+        const counts = mockDayCounts(st);
         return {
           bookingDate: date,
           runStatus: st?.decided ? 'COMPLETED' : null,
           pendingRequests: st?.requestCount ?? 0,
           commonPoolStatus: st?.pooled ? ('COMPLETED' as const) : null,
-          waitlistedRequests: mockDayCounts(st).waitlisted,
+          waitlistedRequests: counts.waitlisted,
+          allocated: counts.allocated,
+          poolAllocated: st?.pooled ? 1 : 0,
         };
       }),
+      // The band the last scheduled run already decided. Fabricated rather than read from
+      // `availabilityState`, which only covers the *open* window — these dates are behind it. Present so
+      // the demo shows what the real screen shows after a Sunday-night batch: results nobody clicked for.
+      lastRun: mockLastRun(win),
     });
   }),
   http.post(`${baseURL}/allocation/weekly/run`, () => {
