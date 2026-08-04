@@ -247,7 +247,10 @@ async function main() {
     { key: 'booking.allocationRunFrequency', value: 'WEEKLY', valueType: 'STRING', description: 'Automatic allocation run interval (weekly, biweekly, or monthly)' },
     { key: 'booking.allocationRunDay', value: 'SUNDAY', valueType: 'STRING', description: 'Automatic allocation run day' },
     { key: 'booking.allocationRunTime', value: '20:00', valueType: 'TIME', description: 'Automatic allocation run time on the run day (IST)' },
-    { key: 'booking.approvalLeadDays', value: '3', valueType: 'NUMBER', description: 'A date must be decided at least this many days before it (D11)' },
+    // Phase 8 D21: 1, not 3. With a Sunday run and a 3-day lead, the earliest date a user can request
+    // on a Sunday is Wednesday — so "today is Sunday, I want Mon–Fri" was impossible before the queue
+    // was even consulted. At 1 the Sunday 20:00 run owns exactly [Mon, Sat) = Mon–Fri.
+    { key: 'booking.approvalLeadDays', value: '1', valueType: 'NUMBER', description: 'A date must be decided at least this many days before it (D11/D21)' },
     { key: 'password.minLength', value: '10', valueType: 'NUMBER', description: 'Minimum password length' },
     // Notification config — delivery implemented later; see docs/notification-service-plan.md
     { key: 'notification.email.enabled', value: 'true', valueType: 'BOOLEAN', description: 'Master switch for email channel' },

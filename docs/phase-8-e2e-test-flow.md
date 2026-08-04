@@ -127,9 +127,15 @@ Assent's seeded quota is **12** and there are only 3 seeded users, so nothing is
 capacity to 2 without touching the quota, so the grid still shows 12 boxes with 10 of them dotted —
 which is also the clearest thing to demo.
 
-1. **Set `approvalLeadDays` to 1.** Sign in as super admin → **`/admin/config`** →
-   `booking.approvalLeadDays` → `1`. **A live dev DB keeps its old stored value — re-seeding will not
-   change it.** Skip this and Mon/Tue will be `TOO_SOON` and nothing below reproduces.
+1. **`approvalLeadDays` must be 1.** As of Phase 8 this is the **seeded default**, and `npm run db:seed`
+   *does* overwrite existing config rows — so a reseed is enough, and the earlier claim that you had to
+   set it by hand was wrong. Confirm it took: `/admin/config` → `booking.approvalLeadDays` → `1`. If it
+   is still `3`, Mon/Tue come back `TOO_SOON` and nothing below reproduces.
+
+   > **Config is cached in-process.** `src/config/systemConfig.ts` caches every key and only drops the
+   > cache on `PATCH /config`. Editing a config row **directly in the database leaves the running
+   > server on the old value** — which looks exactly like a broken feature. Always change config through
+   > the UI/API, or restart the server.
 2. **Confirm quota is 12.** `/admin/companies` → Assent → *Set quota* → 12, effective today.
 3. **Block 10 slots on `D`.** Sign in as `admin@assent.example` → **`/company/blocks`** → block
    **10** slots for 2026-08-10 → 2026-08-10.
@@ -252,7 +258,7 @@ exist as a field at all.
 
 **Expect — Sara**
 ```jsonc
-{ "phase": "DECIDED", "allocatedCount": 2, "myStatus": "ALLOCATED", "mySlotNumber": 1,
+{ "phase": "DECIDED", "allocatedCount": 2, "myStatus": "ALLOCATED", "mySlotNumber": "B1-01",
   "states": { "MINE": 1, "TAKEN": 1, "BLOCKED": 10 } }
 ```
 **Expect — Aditi**
@@ -315,7 +321,7 @@ company by UUID got zero allocations, which is the symptom.
 
 ---
 
-### 4.6 · P8-06 — the weekly run, and the per-user cap
+### 4.6 · The weekly run, and no per-user cap
 
 **The run itself**
 
@@ -330,56 +336,61 @@ curl -s -X POST localhost:4000/api/v1/allocation/weekly/run -H "authorization: B
 **Expect:** band = `["2026-08-10", …, "2026-08-14"]`; for `D`, `allocated: 2` and
 **`waitlisted: 1`** — the first non-zero waitlist this project has ever produced.
 
-Then the ranked breakdown:
+Then the ranked breakdown — note the response shape is `data.id` and `data.results[]`:
 ```bash
 RUN=$(curl -s "localhost:4000/api/v1/allocation/runs?type=PRIMARY&date=2026-08-10" \
-      -H "authorization: Bearer $SA" | jq -r .data.run.id)
+      -H "authorization: Bearer $SA" | jq -r .data.id)
 curl -s "localhost:4000/api/v1/allocation/runs/$RUN/breakdown" -H "authorization: Bearer $SA" \
-  | jq '.data.rows[] | {name: .bookingRequest.user.fullName, finalScore, status: .bookingRequest.status,
-                        slot: .bookingRequest.allocation.slot.slotNumber}'
+  | jq '.data.results[] | {rank, user, finalScore, outcome, slotNumber}'
 ```
 
 **Expect exactly this ordering and these scores:**
 
-| Name | finalScore | status | slot |
-| --- | --- | --- | --- |
-| Sara Khan | 57.1500 | ALLOCATED | *n* |
-| Rahul Mehta | 37.2000 | ALLOCATED | *m* |
-| Aditi Rao | 18.6000 | **WAITLISTED** | — |
+| rank | user | finalScore | outcome | slotNumber |
+| --- | --- | --- | --- | --- |
+| 1 | Sara Khan | 57.15 | ALLOCATED | `B1-01` |
+| 2 | Rahul Mehta | 37.2 | ALLOCATED | `B1-02` |
+| 3 | Aditi Rao | 18.6 | **WAITLISTED** | `null` |
+
+> Slot numbers are **strings** (`B1-07`), not integers — `ParkingSlot.slotNumber` is a label. Which
+> two slots get used depends on the pool order, so match the shape, not the exact labels.
 
 **Aditi submitted first and lost. That single row is the phase.** A breakdown row must exist for the
 waitlisted user too — all three rows, not two.
 
-**The per-user cap (D20)**
+**A winner can take the whole week — check that too (D20 rejected)**
 
-1. Reset `D`…`D+4` (fresh DB or clear the runs and requests for the band).
+1. Reset `D`…`D+4` (fresh DB, or clear the runs and requests for the band).
 2. Block down to 1 free slot on each of Mon 10 – Fri 14.
 3. As **Sara** (top score), book all five dates: `POST /api/v1/bookings/batch` with
    `bookingDates: ["2026-08-10","2026-08-11","2026-08-12","2026-08-13","2026-08-14"]`.
 4. As Rahul and Aditi, book the same five.
 5. Trigger the weekly run.
 
-**Expect with `allocation.maxDaysPerUserPerWeek = 3`:** Sara wins **3** dates, not 5; the other two
-dates go to Rahul (next by score). Sara's two losing rows carry
-`tieBreakerData.cappedByWeeklyLimit = true`.
+**Expect Sara to win all five dates**, with Rahul and Aditi waitlisted on every one. There is no
+per-user cap: she outranks them every day, so she wins every day. Rahul's and Aditi's rows still carry
+a full score breakdown for each date, so the outcome is explainable.
 
-**Expect with the key set to `5`:** Sara wins all five. Both are correct behaviours — the point is
-that the key controls it.
+> This will get questioned by users, so be ready for it: the answer is that Sara scored highest on
+> distance and carpool size on all five days. The lever is `allocation.distanceWeight` /
+> `allocation.carpoolWeight` at `/admin/config`, not a quota on winning. A per-user weekly cap was
+> built and deliberately removed — do not re-add one without revisiting D20.
 
-**A failure here means** the band counter is not threaded through `runWeeklyAllocation`'s date loop
-(cap ignored), or it is counting across all history rather than within the band (Sara wins nothing).
+**A failure here means** something is capping or rotating winners that should not be — check that
+`runPrimaryAllocation` takes no band argument and that the assign loop is plain `i < available`.
 
 ---
 
 ### 4.7 · P8-07 — config
 
 **Steps**
-1. Fresh `npm run db:seed` on a clean DB → check `booking.approvalLeadDays` is `1` and
-   `allocation.maxDaysPerUserPerWeek` is `3`.
-2. At `/admin/config`, try to save `approvalLeadDays = 0` and `maxDaysPerUserPerWeek = 0`.
+1. Fresh `npm run db:seed` on a clean DB → check `booking.approvalLeadDays` is `1`. There should be
+   **no** `allocation.maxDaysPerUserPerWeek` key at all (D20 rejected); if you see one, it is a stale
+   row from an earlier build — delete it.
+2. At `/admin/config`, try to save `approvalLeadDays = 0`, and then `7`.
 3. Set `approvalLeadDays` to `3`, reload `/book`.
 
-**Expect:** both rejected at (2) with "must be an integer ≥ 1". At (3) the earliest requestable date
+**Expect:** both rejected at (2) with "Must be an integer between 1 and 6". At (3) the earliest requestable date
 moves from Mon 10 Aug to **Wed 12 Aug** — proof the window follows config and that D21 is a
 configuration choice, not a hardcode.
 
@@ -405,7 +416,6 @@ npm run test:integration   # needs Postgres
 | over-subscription | 5 requests / 2 slots → 2 + 3, breakdown rows for **all 5** |
 | carpool flips the winner | Aditi + 3 members (58.60) beats solo Sara (57.15) |
 | each tie-breaker | through the real run, not only `score.ts` units |
-| weekly cap | with the key at 3 and at 5 |
 | quota + shortfall hardening | §4.5 (a) and (b) |
 | grid phase transition | same date, `OPEN` vs `DECIDED` |
 | waitlisted → common pool | the leftover is picked up |
@@ -571,18 +581,26 @@ Where each Phase 8 behaviour is pinned:
 
 | Behaviour | Test |
 | --- | --- |
-| Score formula + all five tie-breakers | `backend/tests/allocation.score.test.ts` |
-| **Best score wins even when it submitted last** | `backend/tests/phase7.integration.test.ts` *(rewritten)* |
-| Over-subscription → allocated + waitlisted split | `backend/tests/phase7.integration.test.ts` |
-| Queue accepts past capacity (batch) | `backend/tests/bookings-batch.integration.test.ts` *(rewritten)* |
-| Two-phase box building | `backend/tests/gate.test.ts` *(rewritten)* |
-| Weekly cap (D20) | `backend/tests/phase7.integration.test.ts` |
-| Quota / slot-pool hardening | `backend/tests/allocation-run-lookup.integration.test.ts` or a new file |
-| Window arithmetic, band partitioning, lead time | `backend/tests/bookings.window.test.ts` *(unchanged)* |
+| Score formula + all five tie-breakers | `backend/tests/allocation.score.test.ts` *(unchanged)* |
+| **Best score wins even when it submitted last** | `backend/tests/phase8.integration.test.ts` |
+| Over-subscription → allocated + waitlisted split | `backend/tests/phase8.integration.test.ts` |
+| Carpool flips the winner (58.60 beats 57.15) | `backend/tests/phase8.integration.test.ts` |
+| Two-phase grid, end to end | `backend/tests/phase8.integration.test.ts` |
+| Quota hardening (P8-05a) | `backend/tests/phase8.integration.test.ts` |
+| Profile-distance guard (P8-02) | `backend/tests/phase8.integration.test.ts` |
+| Queue consumes no box; no `CAPACITY_FULL` | `backend/tests/phase7.integration.test.ts` *(inverted)* |
+| Queue accepts past capacity (batch) | `backend/tests/bookings-batch.integration.test.ts` *(inverted)* |
+| Two-phase box building, in isolation | `backend/tests/gate.test.ts` *(split in two)* |
+| Window arithmetic, band partitioning, lead time | `backend/tests/bookings.window.test.ts` *(fixture pinned to lead 3)* |
+| The shipped 1-day lead + Sunday→Mon-Fri band (D21) | `backend/tests/bookings.window.test.ts` |
 | Release cascade still ranks by score | `backend/tests/release-booking.integration.test.ts` *(unchanged)* |
-| Grid states + phase + accessibility | `frontend/src/components/SlotGrid.test.tsx` |
-| Queued-not-held copy, live score panel | `frontend/src/features/user/BookingForm.test.tsx` |
-| Results panel, four row states | `frontend/src/features/user/UserDashboard.test.tsx` |
+| Grid states + phase + accessibility | `frontend/src/components/SlotGrid.test.tsx` — *Devashish* |
+| Queued-not-held copy, live score panel | `frontend/src/features/user/BookingForm.test.tsx` — *Devashish* |
+| Results panel, four row states | `frontend/src/features/user/UserDashboard.test.tsx` — *Devashish* |
+
+> **Not covered, deliberately:** the slot-pool shortfall guard (P8-05b). Forcing it needs a
+> building-wide quota/slot imbalance that would fight every other test's fixtures, so it is verified by
+> hand per §4.5(b).
 
 ---
 
@@ -619,8 +637,9 @@ around them. Full detail in [`phase-7-e2e-test-flow.md`](phase-7-e2e-test-flow.m
   deciding whether in-app is enough for the demo.
 - **Slot-pool shortfall fails the run rather than degrading gracefully.** Deliberate (P8-05b): loud
   beats arbitrary. Proportional allocation across companies is the nicer fix and is not in this phase.
-- **The per-user weekly cap is a blunt instrument.** It caps by count, not by score margin, so a user
-  who is far and away the best fit for all five days still only gets three. That is the point, but it
-  is a policy choice (D20) — set `allocation.maxDaysPerUserPerWeek` to `5` to turn it off.
+- **One user can win every day of the week.** There is no per-user cap (D20 rejected): the score
+  decides, and if the same person scores highest all week they park all week. Retune
+  `allocation.distanceWeight` / `allocation.carpoolWeight` if the outcome looks wrong — do not add a
+  cap without revisiting D20.
 - **`requestCount` reveals aggregate demand** for your own company's dates. Intentional, and no
   per-user detail leaks — but it is new information a user did not have before.

@@ -4,7 +4,7 @@ import { parsePagination } from '../../lib/pagination';
 import { UnauthenticatedError } from '../../lib/errors';
 import * as service from './bookings.service';
 import { getAvailability as loadAvailability } from './bookings.availability';
-import { loadWindowConfig } from './bookings.windowConfig';
+import { loadScoringConfig, loadWindowConfig } from './bookings.windowConfig';
 import {
   bookingWindowSummary,
   earliestRequestableDate,
@@ -138,11 +138,11 @@ export const listBookings = asyncHandler(async (req, res) => {
 export const getAvailability = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const now = new Date();
-  const cfg = await loadWindowConfig();
+  const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
   const from = (req.query.from as string | undefined) ?? toIsoDate(earliestRequestableDate(now, cfg));
   const to = (req.query.to as string | undefined) ?? toIsoDate(latestRequestableDate(now, cfg));
   const days = await loadAvailability(req.user.companyId, req.user.id, from, to, cfg, now);
-  sendSuccess(res, { window: bookingWindowSummary(now, cfg), days }, 200);
+  sendSuccess(res, { window: bookingWindowSummary(now, cfg, scoring), days }, 200);
 });
 
 export const createBooking = asyncHandler(async (req, res) => {
