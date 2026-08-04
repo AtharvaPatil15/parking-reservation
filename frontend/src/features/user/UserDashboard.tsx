@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, SlotGrid } from '../../components';
 import { useAvailability, useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
-import { formatCountdown } from '../../lib/dates';
+import { formatCountdown, todayIstIso } from '../../lib/dates';
 import { statusTone } from './statusTone';
 import type { components } from '../../api/types';
 
@@ -40,7 +40,13 @@ export function UserDashboard() {
   const dash = useUserDashboard();
   // One GET over the whole open window — no dedicated results endpoint (P8-13). Each row renders its
   // own OPEN/DECIDED phase straight from the same payload the booking form uses.
-  const availability = useAvailability();
+  //
+  // `from: today` matters, and is not the same as omitting it. With no range the server starts at the
+  // *earliest requestable* date (next run + approvalLeadDays), which sits in the future — so the dates
+  // the last run just decided fall below the range and the panel silently loses every ALLOCATED /
+  // WAITLISTED row the day after a run. This panel is precisely where those rows have to appear, so it
+  // asks from today and lets the server keep its default upper bound.
+  const availability = useAvailability({ from: todayIstIso() });
   const secondsLeft = useCountdown(dash.data?.cutoffCountdownSeconds);
 
   if (dash.isLoading) return <LoadingState label="Loading your dashboard…" />;

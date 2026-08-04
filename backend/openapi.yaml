@@ -624,7 +624,7 @@ paths:
                     - bookingDate: "2026-08-13"
                       outcome: FAILED
                       code: CONFLICT
-                      message: You already have a request for 2026-08-13
+                      message: You already have a PRIMARY booking for this date.
                     - bookingDate: "2026-08-14"
                       outcome: CREATED
                       booking:
@@ -2005,6 +2005,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /allocation/weekly/common-pool/run:
+    post:
+      tags: [Allocation]
+      operationId: runWeeklyCommonPoolAllocation
+      summary: Run the common pool across the weekly band
+      description: >
+        Role SUPER_ADMIN. The band-scoped sibling of `POST /allocation/weekly/run`: for every date in
+        the band the upcoming run owns, enrolls the users primary left WAITLISTED, derives pool
+        inventory from every company's unused quota, and assigns it cross-company by FinalScore.
+        Takes no body — the band comes from config. Idempotent per (COMMON_POOL, date): dates already
+        COMPLETED are reported as `alreadyDecided`, and one failing date does not abort the others.
+
+        Run this AFTER the primary batch; on its own there is no waitlist to enroll. The `allocated`
+        and `waitlisted` counts in the response describe the COMMON_POOL requests, not the PRIMARY
+        ones — a primary-waitlisted user placed by the pool stays WAITLISTED on their primary row.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Per-date common-pool outcomes for the band.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/WeeklyRunResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /vehicles:
     get:
       tags: [Gate]
@@ -2947,8 +2979,10 @@ components:
         requestCount:
           type: integer
           description: >
-            Live SUBMITTED/DRAFT PRIMARY requests for this date — demand, not reservation. Informational
-            only; never gates a submission (D18).
+            Live PRIMARY requests for this date — demand, not reservation. "Live" is every non-terminal
+            status (DRAFT, SUBMITTED, WAITLISTED, ALLOCATED), so once `phase = DECIDED` this still counts
+            the decided rows and remains >= `allocatedCount`. Informational only; never gates a
+            submission (D18).
         allocatedCount:
           type: integer
           description: Rows actually allocated for this date. 0 while `phase = OPEN`.
@@ -3026,13 +3060,24 @@ components:
           type: array
           items:
             type: object
-            required: [bookingDate, pendingRequests]
+            required: [bookingDate, pendingRequests, waitlistedRequests]
             properties:
               bookingDate: { type: string, format: date }
               runStatus:
                 allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
                 nullable: true
               pendingRequests: { type: integer }
+              commonPoolStatus:
+                allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
+                nullable: true
+                description: >
+                  Status of this date's COMMON_POOL run, or null if it has not run. Independent of
+                  `runStatus` — the two runs are separate steps.
+              waitlistedRequests:
+                type: integer
+                description: >
+                  PRIMARY requests left WAITLISTED for this date — the population the common-pool run
+                  would enroll. 0 means running the pool for this date would achieve nothing.
 
     # --- Gate: vehicle registry + check-in/out (Phase 7 §5) ---
     VehicleSummary:

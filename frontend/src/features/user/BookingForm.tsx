@@ -99,6 +99,15 @@ export function BookingForm() {
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'carpoolMembers' });
   const carpoolPeople = Number(watch('carpoolPeople')) || 1;
+  const carpoolMembers = watch('carpoolMembers') ?? [];
+  /**
+   * People the *run* will score, which is not the same as `carpoolPeople`. The server counts
+   * `1 + members whose email resolves to an active colleague`, so a declared "4 people" with no member
+   * rows scores as 1. Scoring the typed number instead would show the user a number they were never
+   * ranked on — worse than showing none. Still an estimate: only the server can tell whether an email
+   * actually resolves, so this counts rows that at least carry one.
+   */
+  const scoredPeople = 1 + carpoolMembers.filter((m) => m?.employeeEmail?.trim()).length;
   const bookingDates = watch('bookingDates') ?? [];
   const selectedDates = new Set(bookingDates);
 
@@ -345,7 +354,10 @@ export function BookingForm() {
                 submitting early does not improve your chances.
               </p>
             </div>
-            <SlotGridLegend phase={days.some((d) => d.phase === 'DECIDED') ? 'DECIDED' : 'OPEN'} />
+            {/* Keyed to the date whose grid is actually on show, not to the list. Taking DECIDED from
+                "any row is decided" put "Booked"/"Your booking" in the legend for a window whose visible
+                grid is OPEN — teaching the land-grab D22 removes. */}
+            <SlotGridLegend phase={focused?.phase ?? 'OPEN'} />
           </div>
 
           {openDates.length > 0 && (
@@ -521,21 +533,29 @@ export function BookingForm() {
           </div>
 
           {/* Live score panel (§4, D3): recomputes client-side as carpool members are added/removed, so
-              the user sees the same number the weekly run will score them on, with no round-trip. */}
+              the user sees the same number the weekly run will score them on, with no round-trip. It
+              scores `scoredPeople`, not the declared headcount — see the note on that value. */}
           {window_?.scoring &&
             (me.data?.distanceKm != null ? (
               (() => {
                 const { distanceScore, carpoolScore, finalScore } = scoreComponents(
                   me.data.distanceKm,
-                  carpoolPeople,
+                  scoredPeople,
                   window_.scoring,
                 );
                 return (
-                  <p role="status" className="text-sm text-text-muted" data-testid="score-panel">
-                    Your score: <span className="font-medium text-text">{finalScore.toFixed(1)}</span> —{' '}
-                    {me.data.distanceKm} km ({distanceScore.toFixed(1)}) + {carpoolPeople}{' '}
-                    {carpoolPeople === 1 ? 'person' : 'people'} ({carpoolScore.toFixed(1)})
-                  </p>
+                  <div role="status" className="space-y-0.5" data-testid="score-panel">
+                    <p className="text-sm text-text-muted">
+                      Estimated score:{' '}
+                      <span className="font-medium text-text">{finalScore.toFixed(1)}</span> —{' '}
+                      {me.data.distanceKm} km ({distanceScore.toFixed(1)}) + {scoredPeople}{' '}
+                      {scoredPeople === 1 ? 'person' : 'people'} ({carpoolScore.toFixed(1)})
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Only colleagues we recognise from their work email count towards your carpool score
+                      — add them below.
+                    </p>
+                  </div>
                 );
               })()
             ) : (

@@ -112,6 +112,30 @@ describe('UserDashboard', () => {
     expect(await screen.findByText(/no upcoming booking/i)).toBeInTheDocument();
   });
 
+  /**
+   * No mocked test can catch this by rendering: the mocks build DECIDED dates inside the requestable
+   * window, which the real server never does. With no `from`, the server starts at the earliest
+   * *requestable* date (next run + lead days) — in the future — so the dates the last run decided fall
+   * out of the payload and every ALLOCATED / WAITLISTED row disappears the day after a run. Assert the
+   * range bound directly.
+   */
+  it('asks for availability from today, so dates the last run decided are still in range', async () => {
+    let requestedFrom: string | null = null;
+    server.use(
+      http.get('*/api/v1/availability', ({ request }) => {
+        requestedFrom = new URL(request.url).searchParams.get('from');
+        return HttpResponse.json(weekAvailability());
+      }),
+    );
+    renderDash();
+
+    await screen.findByText(/your week/i);
+    expect(requestedFrom).not.toBeNull();
+    // `en-CA` in IST is the same yyyy-mm-dd the component sends.
+    const todayIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    expect(requestedFrom! <= todayIst).toBe(true);
+  });
+
   it('renders a "Your week" panel with all four row states from a single availability call', async () => {
     server.use(http.get('*/api/v1/availability', () => HttpResponse.json(weekAvailability())));
     renderDash();

@@ -423,7 +423,7 @@ describe('BookingForm', () => {
       renderForm();
 
       const panel = await screen.findByTestId('score-panel');
-      expect(within(panel).getByText(/your score:/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/estimated score:/i)).toBeInTheDocument();
       expect(within(panel).getByText(/8\.5 km/)).toBeInTheDocument();
       expect(within(panel).getByText(/1 person/)).toBeInTheDocument();
     });
@@ -434,12 +434,35 @@ describe('BookingForm', () => {
       const panel = await screen.findByTestId('score-panel');
       const before = panel.textContent;
 
+      // Raise the declared headcount first — that alone only unlocks the "Add member" button.
       const carpoolPeopleInput = screen.getByLabelText(/carpool people/i);
       await userEvent.clear(carpoolPeopleInput);
       await userEvent.type(carpoolPeopleInput, '3');
+      await userEvent.click(screen.getByRole('button', { name: /add member/i }));
+      await userEvent.type(screen.getByLabelText(/member 1 email/i), 'aditi@assent.example');
 
       await waitFor(() => expect(screen.getByTestId('score-panel').textContent).not.toBe(before));
-      expect(screen.getByTestId('score-panel')).toHaveTextContent(/3 people/);
+      expect(screen.getByTestId('score-panel')).toHaveTextContent(/2 people/);
+    });
+
+    // The number shown has to be the number the run ranks on. The server scores
+    // `1 + members whose email resolves`, so a declared headcount with no member rows must not inflate
+    // the panel — showing 58.6 for a request the run scores at 18.6 is worse than showing nothing.
+    it('scores only recognised members, not the declared headcount', async () => {
+      useAvailability(availability());
+      renderForm();
+      const panel = await screen.findByTestId('score-panel');
+      const before = panel.textContent;
+
+      const carpoolPeopleInput = screen.getByLabelText(/carpool people/i);
+      await userEvent.clear(carpoolPeopleInput);
+      await userEvent.type(carpoolPeopleInput, '4');
+
+      // No member rows added, so nothing about the score may move.
+      await waitFor(() => expect(screen.getByRole('button', { name: /add member/i })).toBeEnabled());
+      expect(screen.getByTestId('score-panel').textContent).toBe(before);
+      expect(screen.getByTestId('score-panel')).toHaveTextContent(/1 person/);
+      expect(screen.getByTestId('score-panel')).toHaveTextContent(/only colleagues we recognise/i);
     });
   });
 

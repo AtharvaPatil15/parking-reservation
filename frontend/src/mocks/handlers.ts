@@ -453,6 +453,16 @@ interface MockDayState {
   myStatus: DayAvailability['myStatus'];
   mySlotNumber: string | null;
   otherSlots: string[];
+  /** True once the band's common-pool run has covered this date. Separate from `decided` — the two
+   *  runs are separate steps, and a date can be decided but not yet pooled. */
+  pooled?: boolean;
+}
+
+/** Slots the date's primary run handed out, and who it left behind. Shared by the preview and both runs. */
+function mockDayCounts(st: MockDayState | undefined): { allocated: number; waitlisted: number } {
+  if (!st || !st.decided) return { allocated: 0, waitlisted: 0 };
+  const allocated = st.otherSlots.length + (st.myStatus === 'ALLOCATED' ? 1 : 0);
+  return { allocated, waitlisted: Math.max(0, st.requestCount - allocated) };
 }
 
 function seedAvailability(): Record<string, MockDayState> {
@@ -1217,11 +1227,16 @@ const hero = [
     return ok<WeeklyRunPreview>({
       window: win,
       band,
-      dates: band.dates.map((date) => ({
-        bookingDate: date,
-        runStatus: availabilityState[date]?.decided ? 'COMPLETED' : null,
-        pendingRequests: availabilityState[date]?.requestCount ?? 0,
-      })),
+      dates: band.dates.map((date) => {
+        const st = availabilityState[date];
+        return {
+          bookingDate: date,
+          runStatus: st?.decided ? 'COMPLETED' : null,
+          pendingRequests: st?.requestCount ?? 0,
+          commonPoolStatus: st?.pooled ? ('COMPLETED' as const) : null,
+          waitlistedRequests: mockDayCounts(st).waitlisted,
+        };
+      }),
     });
   }),
   http.post(`${baseURL}/allocation/weekly/run`, () => {
@@ -1253,6 +1268,57 @@ const hero = [
         alreadyDecided,
         allocated,
         waitlisted: st ? Math.max(0, st.requestCount - allocated) : 0,
+        error: null,
+      };
+    });
+    return ok<WeeklyRunResult>({
+      runAt: new Date().toISOString(),
+      band,
+      dates: results,
+      totalAllocated: results.reduce((sum, r) => sum + r.allocated, 0),
+      totalWaitlisted: results.reduce((sum, r) => sum + r.waitlisted, 0),
+    });
+  }),
+
+  // Band-scoped common pool: hands each date's leftover capacity to whoever primary waitlisted.
+  // Idempotent per date via `pooled`, mirroring the server's (COMMON_POOL, date) uniqueness.
+  http.post(`${baseURL}/allocation/weekly/common-pool/run`, () => {
+    const win = mockWindow();
+    const band = mockBand(win);
+    const results = band.dates.map((date) => {
+      const st = availabilityState[date];
+      const alreadyDecided = st?.pooled ?? false;
+      const { allocated: primaryAllocated, waitlisted } = mockDayCounts(st);
+      if (!st || alreadyDecided || waitlisted === 0) {
+        return {
+          bookingDate: date,
+          runId: `mock-cp-${date}`,
+          status: 'COMPLETED' as const,
+          alreadyDecided,
+          allocated: 0,
+          waitlisted,
+          error: null,
+        };
+      }
+      const spare = Math.max(0, MOCK_QUOTA - st.blocked - primaryAllocated);
+      const placed = Math.min(waitlisted, spare);
+      // Give the caller the first pooled slot when they were the one waitlisted — that is what makes
+      // the change visible on their dashboard, which is the point of running this from the UI.
+      if (st.myStatus === 'WAITLISTED' && placed > 0) {
+        st.myStatus = 'ALLOCATED';
+        st.mySlotNumber = slotLabel(primaryAllocated + 1);
+        for (let i = 1; i < placed; i++) st.otherSlots.push(slotLabel(primaryAllocated + 1 + i));
+      } else {
+        for (let i = 0; i < placed; i++) st.otherSlots.push(slotLabel(primaryAllocated + 1 + i));
+      }
+      st.pooled = true;
+      return {
+        bookingDate: date,
+        runId: `mock-cp-${date}`,
+        status: 'COMPLETED' as const,
+        alreadyDecided,
+        allocated: placed,
+        waitlisted: waitlisted - placed,
         error: null,
       };
     });

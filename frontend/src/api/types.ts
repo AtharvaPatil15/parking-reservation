@@ -1046,6 +1046,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/allocation/weekly/common-pool/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run the common pool across the weekly band
+         * @description Role SUPER_ADMIN. The band-scoped sibling of `POST /allocation/weekly/run`: for every date in the band the upcoming run owns, enrolls the users primary left WAITLISTED, derives pool inventory from every company's unused quota, and assigns it cross-company by FinalScore. Takes no body — the band comes from config. Idempotent per (COMMON_POOL, date): dates already COMPLETED are reported as `alreadyDecided`, and one failing date does not abort the others.
+         *     Run this AFTER the primary batch; on its own there is no waitlist to enroll. The `allocated` and `waitlisted` counts in the response describe the COMMON_POOL requests, not the PRIMARY ones — a primary-waitlisted user placed by the pool stays WAITLISTED on their primary row.
+         */
+        post: operations["runWeeklyCommonPoolAllocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/vehicles": {
         parameters: {
             query?: never;
@@ -1692,7 +1713,7 @@ export interface components {
             /** @description The company's effective quota for this date — also the number of boxes (D14). */
             quota: number;
             blocked: number;
-            /** @description Live SUBMITTED/DRAFT PRIMARY requests for this date — demand, not reservation. Informational only; never gates a submission (D18). */
+            /** @description Live PRIMARY requests for this date — demand, not reservation. "Live" is every non-terminal status (DRAFT, SUBMITTED, WAITLISTED, ALLOCATED), so once `phase = DECIDED` this still counts the decided rows and remains >= `allocatedCount`. Informational only; never gates a submission (D18). */
             requestCount: number;
             /** @description Rows actually allocated for this date. 0 while `phase = OPEN`. */
             allocatedCount: number;
@@ -1748,6 +1769,10 @@ export interface components {
                 bookingDate: string;
                 runStatus?: components["schemas"]["AllocationRunStatus"] | null;
                 pendingRequests: number;
+                /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
+                commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
+                /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
+                waitlistedRequests: number;
             }[];
         };
         VehicleSummary: {
@@ -2786,7 +2811,7 @@ export interface operations {
                      *             "bookingDate": "2026-08-13",
                      *             "outcome": "FAILED",
                      *             "code": "CONFLICT",
-                     *             "message": "You already have a request for 2026-08-13"
+                     *             "message": "You already have a PRIMARY booking for this date."
                      *           },
                      *           {
                      *             "bookingDate": "2026-08-14",
@@ -4171,6 +4196,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Per-date outcomes for the band. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["WeeklyRunResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    runWeeklyCommonPoolAllocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-date common-pool outcomes for the band. */
             200: {
                 headers: {
                     "X-Correlation-Id": components["headers"]["CorrelationId"];
