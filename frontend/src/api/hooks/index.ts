@@ -16,6 +16,7 @@ export {
   useAllocations,
   useWeeklyRunPreview,
   useRunWeeklyAllocation,
+  useRunWeeklyCommonPoolAllocation,
 } from './allocation';
 export type { AllocationsFilter } from './allocation';
 export { useAvailability } from './availability';

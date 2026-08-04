@@ -45,14 +45,39 @@ const runLabel = (iso: string): string =>
   });
 
 /**
- * Book slots (Phase 7). The user picks one or more dates inside the rolling window, sees each date's
- * slot grid before committing, and cannot submit a date whose grid is full — the server enforces the
- * same rule, so demand never exceeds supply and nobody is rejected after the fact.
+ * Per-date status line (D18/D22): while OPEN this is a demand count, never a fullness readout — a
+ * request never consumes a box, so "requests so far" is the honest word, not "free". Once DECIDED it
+ * reports what was actually allocated.
+ */
+function dayStatusLine(day: DayAvailability): string {
+  if (day.phase === 'DECIDED') {
+    const blockedSuffix = day.blocked > 0 ? ` · ${day.blocked} blocked` : '';
+    return `${day.allocatedCount} of ${day.quota} allocated${blockedSuffix}`;
+  }
+  return `${day.quota} slots · ${day.requestCount} request${day.requestCount === 1 ? '' : 's'} so far`;
+}
+
+/**
+ * Book slots (Phase 8, D18/D22). The user picks one or more dates inside the rolling window and sees
+ * each date's slot grid before committing. A request never consumes capacity — it is a queue entry,
+ * scored and ranked at the weekly run, not a reservation. There is therefore no "date is full" refusal:
+ * a date is only unpickable when it is outside the window, already decided, or already requested.
  *
  * Multi-date: the trip details below apply to every selected date, and each date is booked
- * independently. A date that fills up between loading the grid and submitting does not cost the user
- * the others — the outcome panel reports per date what happened.
+ * independently. The outcome panel reports per date what happened; a date that turns out to already be
+ * decided or duplicate does not cost the user the others.
  */
+function scoreComponents(
+  distanceKm: number,
+  people: number,
+  scoring: { distanceWeight: number; carpoolWeight: number; maxDistanceKm: number; maxPeople: number },
+): { distanceScore: number; carpoolScore: number; finalScore: number } {
+  const distanceScore = (Math.min(distanceKm, scoring.maxDistanceKm) / scoring.maxDistanceKm) * 100;
+  const carpoolScore =
+    scoring.maxPeople > 1 ? ((Math.min(people, scoring.maxPeople) - 1) / (scoring.maxPeople - 1)) * 100 : 0;
+  const finalScore = scoring.distanceWeight * distanceScore + scoring.carpoolWeight * carpoolScore;
+  return { distanceScore, carpoolScore, finalScore };
+}
 export function BookingForm() {
   const me = useMe();
   const vehicles = useMyVehicles();
@@ -74,6 +99,15 @@ export function BookingForm() {
   });
   const { fields, append, remove } = useFieldArray({ control, name: 'carpoolMembers' });
   const carpoolPeople = Number(watch('carpoolPeople')) || 1;
+  const carpoolMembers = watch('carpoolMembers') ?? [];
+  /**
+   * People the *run* will score, which is not the same as `carpoolPeople`. The server counts
+   * `1 + members whose email resolves to an active colleague`, so a declared "4 people" with no member
+   * rows scores as 1. Scoring the typed number instead would show the user a number they were never
+   * ranked on — worse than showing none. Still an estimate: only the server can tell whether an email
+   * actually resolves, so this counts rows that at least carry one.
+   */
+  const scoredPeople = 1 + carpoolMembers.filter((m) => m?.employeeEmail?.trim()).length;
   const bookingDates = watch('bookingDates') ?? [];
   const selectedDates = new Set(bookingDates);
 
@@ -154,11 +188,15 @@ export function BookingForm() {
       <div className="mx-auto max-w-3xl space-y-4">
         {failedCount === 0 ? (
           <SuccessState
-            title={createdCount === 1 ? 'Request submitted' : `${createdCount} requests submitted`}
+            title={createdCount === 1 ? 'Request queued' : `${createdCount} requests queued`}
             description={
               window_
-                ? `Your slot${createdCount === 1 ? '' : 's'} ${createdCount === 1 ? 'is' : 'are'} held. Results are published ${runLabel(window_.nextRunAt)}.`
-                : `${createdCount} booking${createdCount === 1 ? '' : 's'} submitted.`
+                ? // D19: the copy must say "queued", never "held" — a user who thinks they hold a slot and
+                  // then gets waitlisted is the failure mode this phase exists to prevent.
+                  `${createdCount} request${createdCount === 1 ? '' : 's'} queued. Results are published ` +
+                  `${runLabel(window_.nextRunAt)} — you'll be told which dates you got at least ` +
+                  `${window_.approvalLeadDays} day${window_.approvalLeadDays === 1 ? '' : 's'} before each date.`
+                : `${createdCount} request${createdCount === 1 ? '' : 's'} queued.`
             }
           />
         ) : (
@@ -173,13 +211,13 @@ export function BookingForm() {
           >
             <p className="font-medium">
               {createdCount === 0
-                ? 'No dates could be booked'
-                : `${createdCount} of ${requested} dates booked`}
+                ? 'No dates could be queued'
+                : `${createdCount} of ${requested} dates queued`}
             </p>
             <p className="mt-1 text-sm">
               {createdCount === 0
                 ? 'Nothing was submitted — see the reasons below and try different dates.'
-                : 'The rest could not be booked. The dates that worked are already held for you.'}
+                : 'The rest could not be queued. The dates that worked are already queued for you.'}
             </p>
           </div>
         )}
@@ -303,17 +341,23 @@ export function BookingForm() {
         )}
       </div>
 
-      {/* Window overview — pick as many dates as you need, by remaining capacity, at a glance. */}
+      {/* Window overview — pick as many dates as you need. Demand is a count, never a fullness gate
+          (D18/D22): nothing here blocks a submission because a day "looks busy". */}
       <Card>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="space-y-0.5">
               <h2 className="text-sm font-medium text-text">Choose your dates</h2>
               <p className="text-xs text-text-muted">
-                Pick one or more — the details below apply to every date you select.
+                Pick one or more — the details below apply to every date you select. Requests are ranked
+                by score (distance + carpool size) at the weekly run, not first-come-first-served —
+                submitting early does not improve your chances.
               </p>
             </div>
-            <SlotGridLegend />
+            {/* Keyed to the date whose grid is actually on show, not to the list. Taking DECIDED from
+                "any row is decided" put "Booked"/"Your booking" in the legend for a window whose visible
+                grid is OPEN — teaching the land-grab D22 removes. */}
+            <SlotGridLegend phase={focused?.phase ?? 'OPEN'} />
           </div>
 
           {openDates.length > 0 && (
@@ -383,13 +427,11 @@ export function BookingForm() {
                         <span className="flex flex-col">
                           <span className="text-sm font-medium text-text">{dayLabel(day.date)}</span>
                           <span className="text-xs text-text-muted">
-                            {day.requestable
-                              ? `${day.available} of ${day.quota} free`
-                              : (day.message ?? 'Not available')}
+                            {day.requestable ? dayStatusLine(day) : (day.message ?? 'Not available')}
                           </span>
                         </span>
                       </span>
-                      <SlotGrid boxes={day.boxes} size="sm" />
+                      <SlotGrid boxes={day.boxes} phase={day.phase} size="sm" />
                     </button>
                   </li>
                 );
@@ -416,12 +458,9 @@ export function BookingForm() {
                     <span className="ml-2 text-xs font-normal text-primary">selected</span>
                   )}
                 </p>
-                <p className="text-sm text-text-muted">
-                  {focused.available} of {focused.quota} slots free
-                  {focused.blocked > 0 && ` · ${focused.blocked} blocked`}
-                </p>
+                <p className="text-sm text-text-muted">{dayStatusLine(focused)}</p>
               </div>
-              <SlotGrid boxes={focused.boxes} />
+              <SlotGrid boxes={focused.boxes} phase={focused.phase} />
               {!focused.requestable && focused.message && (
                 <p role="status" className="text-sm text-warning">
                   {focused.message}
@@ -492,6 +531,38 @@ export function BookingForm() {
               error={errors.carpoolPeople?.message}
             />
           </div>
+
+          {/* Live score panel (§4, D3): recomputes client-side as carpool members are added/removed, so
+              the user sees the same number the weekly run will score them on, with no round-trip. It
+              scores `scoredPeople`, not the declared headcount — see the note on that value. */}
+          {window_?.scoring &&
+            (me.data?.distanceKm != null ? (
+              (() => {
+                const { distanceScore, carpoolScore, finalScore } = scoreComponents(
+                  me.data.distanceKm,
+                  scoredPeople,
+                  window_.scoring,
+                );
+                return (
+                  <div role="status" className="space-y-0.5" data-testid="score-panel">
+                    <p className="text-sm text-text-muted">
+                      Estimated score:{' '}
+                      <span className="font-medium text-text">{finalScore.toFixed(1)}</span> —{' '}
+                      {me.data.distanceKm} km ({distanceScore.toFixed(1)}) + {scoredPeople}{' '}
+                      {scoredPeople === 1 ? 'person' : 'people'} ({carpoolScore.toFixed(1)})
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Only colleagues we recognise from their work email count towards your carpool score
+                      — add them below.
+                    </p>
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="text-sm text-text-muted">
+                Set your home → office distance in your profile to see your score.
+              </p>
+            ))}
 
           <fieldset className="space-y-3 border-t border-border pt-5">
             <div className="space-y-1">
