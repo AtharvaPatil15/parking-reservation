@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
-import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, SlotGrid } from '../../components';
+import { Badge, Card, EmptyState, ErrorState, LoadingState, SlotGrid, buttonClasses } from '../../components';
 import { useAvailability, useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
-import { formatCountdown, todayIstIso } from '../../lib/dates';
+import { formatCountdown, formatLongCountdown, todayIstIso } from '../../lib/dates';
 import { statusTone } from './statusTone';
 import type { components } from '../../api/types';
 
@@ -48,6 +48,9 @@ export function UserDashboard() {
   // asks from today and lets the server keep its default upper bound.
   const availability = useAvailability({ from: todayIstIso() });
   const secondsLeft = useCountdown(dash.data?.cutoffCountdownSeconds);
+  // The run countdown must tick like the cutoff above; rendering the payload value directly
+  // left it frozen at whatever the last fetch returned.
+  const runSecondsLeft = useCountdown(dash.data?.nextAllocationRunCountdownSeconds);
 
   if (dash.isLoading) return <LoadingState label="Loading your dashboard…" />;
   if (dash.isError || !dash.data) return <ErrorState title="Couldn't load your dashboard" />;
@@ -93,9 +96,9 @@ export function UserDashboard() {
         <Card title="Next allocation run">
           <div className="space-y-2">
             <p className="text-text">{formatRun(d.nextAllocationRunAt)} IST</p>
-            {d.nextAllocationRunCountdownSeconds != null && (
+            {runSecondsLeft != null && (
               <p className="text-sm text-text-muted">
-                Runs in {formatCountdown(Math.max(0, d.nextAllocationRunCountdownSeconds))}
+                {runSecondsLeft <= 0 ? 'Running now…' : `Runs in ${formatLongCountdown(runSecondsLeft)}`}
               </p>
             )}
           </div>
@@ -143,8 +146,8 @@ export function UserDashboard() {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4">
-        <Link to="/book">
-          <Button>Book a slot</Button>
+        <Link to="/book" className={buttonClasses()}>
+          Book a slot
         </Link>
         <p className="text-sm text-text-muted">
           {d.previousBookingsCount} past booking{d.previousBookingsCount === 1 ? '' : 's'} ·{' '}

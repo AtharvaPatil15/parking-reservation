@@ -31,7 +31,7 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
         <thead className="bg-surface-2 text-xs uppercase tracking-wide text-text-muted">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className={cn('px-6 py-3 font-medium', alignClass(col.align))}>
+              <th key={col.key} className={cn('px-4 py-3 font-medium sm:px-6', alignClass(col.align))}>
                 {col.header}
               </th>
             ))}
@@ -48,7 +48,7 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
             rows.map((row) => (
               <tr key={rowKey(row)} className={cn('border-t border-border', rowClassName?.(row))}>
                 {columns.map((col) => (
-                  <td key={col.key} className={cn('px-6 py-3', alignClass(col.align), col.className)}>
+                  <td key={col.key} className={cn('px-4 py-3 sm:px-6', alignClass(col.align), col.className)}>
                     {col.render(row)}
                   </td>
                 ))}

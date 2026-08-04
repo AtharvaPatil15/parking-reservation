@@ -12,6 +12,7 @@ import {
   SuccessState,
   SlotGrid,
   SlotGridLegend,
+  buttonClasses,
 } from '../../components';
 import { useAvailability, useCreateBookings, useMe, useMyVehicles } from '../../api/hooks';
 import { ApiError, apiErrorText } from '../../api/http';
@@ -247,9 +248,17 @@ export function BookingForm() {
           </ul>
         </Card>
 
-        <Button variant="secondary" onClick={bookAgain}>
-          Book more dates
-        </Button>
+        {/* Stacked and full-width on a phone so both actions are comfortable tap targets. The
+            dashboard action is a styled Link, not a Button inside a Link — that would nest
+            <button> inside <a>, which is invalid and confuses screen readers. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Link to="/app" className={buttonClasses('primary', 'md', 'w-full sm:w-auto')}>
+            Go to dashboard
+          </Link>
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={bookAgain}>
+            Book more dates
+          </Button>
+        </div>
       </div>
     );
   }

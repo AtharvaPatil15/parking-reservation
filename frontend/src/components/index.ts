@@ -1,5 +1,6 @@
 // Base component library (P5-02). Import from '@/components' via this barrel.
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button';
+export { buttonClasses } from './buttonStyles';
 export { Input, type InputProps } from './Input';
 export { Select, type SelectProps, type SelectOption } from './Select';
 export { Card, type CardProps } from './Card';
