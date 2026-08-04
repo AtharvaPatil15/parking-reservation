@@ -5,7 +5,6 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
-  | 'CAPACITY_FULL'
   | 'WINDOW_CLOSED'
   | 'RATE_LIMITED'
   | 'INTERNAL';
@@ -52,15 +51,10 @@ export class ConflictError extends AppError {
     super(409, 'CONFLICT', message);
   }
 }
-/**
- * Every slot for the requested date is already held (Phase 7 D12). Distinct from CONFLICT so the
- * client can say "pick another date" instead of "you already booked this one".
- */
-export class CapacityFullError extends AppError {
-  constructor(message = 'No slots remain for this date') {
-    super(409, 'CAPACITY_FULL', message);
-  }
-}
+// `CapacityFullError` / `CAPACITY_FULL` were removed in Phase 8 (D18). A request is a queue entry now,
+// so "this date is full" is no longer a thing a client can be told at submit time — scarcity is
+// resolved by the scored weekly run, and the overflow becomes WAITLISTED. Deleted rather than left
+// reserved, so nothing can quietly reintroduce the gate.
 export class WindowClosedError extends AppError {
   constructor(message = 'Action attempted outside its time window') {
     super(422, 'WINDOW_CLOSED', message);

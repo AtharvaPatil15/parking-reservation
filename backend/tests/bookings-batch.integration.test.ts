@@ -97,38 +97,48 @@ describe('POST /bookings/batch', () => {
     }
   });
 
-  it('keeps the dates that fit when one is full — the point of the endpoint', async () => {
+  // Was: "keeps the dates that fit when one is full". Phase 8 (D18) removed capacity from the submit
+  // path, so a contested date is not a failure any more — it is just a longer queue. The partial-result
+  // path this test used to exercise is now covered by the CONFLICT test below, which is a refusal that
+  // still exists.
+  it('queues a contested date alongside quiet ones, with no per-date failure (D18)', async () => {
     const saToken = await login('superadmin@redbricks.example');
     const companyId = await assentId();
-    const [full, open1, open2] = [futureBookableDate(0), futureBookableDate(1), futureBookableDate(2)];
+    const [contested, open1, open2] = [futureBookableDate(0), futureBookableDate(1), futureBookableDate(2)];
 
-    // Squeeze `full` down to a single slot, then let another user take it.
-    await blockQuotaDownTo(saToken, companyId, full, 1);
+    // One slot on `contested`, and someone has already asked for it.
+    await blockQuotaDownTo(saToken, companyId, contested, 1);
     const rahul = await login('rahul@assent.example');
     const taken = await request(app)
       .post(`${API}/bookings`)
       .set(bearer(rahul))
-      .send({ bookingDate: full, carpoolPeople: 1 });
+      .send({ bookingDate: contested, carpoolPeople: 1 });
     expect(taken.status).toBe(201);
 
     const aditi = await login('aditi@assent.example');
-    const res = await batch(aditi, { bookingDates: [full, open1, open2], carpoolPeople: 1 });
+    const res = await batch(aditi, { bookingDates: [contested, open1, open2], carpoolPeople: 1 });
 
-    // A partial result is still a successful request.
     expect(res.status).toBe(200);
     const data = res.body.data as BatchData;
-    expect(data).toMatchObject({ requested: 3, createdCount: 2, failedCount: 1 });
-    expect(byDate(data, full)).toMatchObject({ outcome: 'FAILED', code: 'CAPACITY_FULL' });
-    expect(byDate(data, full).message).toMatch(/already taken/i);
-    expect(byDate(data, open1).outcome).toBe('CREATED');
-    expect(byDate(data, open2).outcome).toBe('CREATED');
+    expect(data).toMatchObject({ requested: 3, createdCount: 3, failedCount: 0 });
+    for (const date of [contested, open1, open2]) {
+      expect(byDate(data, date).outcome).toBe('CREATED');
+    }
 
-    // The two that fit are really persisted; the full one is not.
+    // All three persisted, including the one with more demand than supply.
     const mine = await prisma.bookingRequest.findMany({
       where: { user: { email: 'aditi@assent.example' } },
       orderBy: { bookingDate: 'asc' },
     });
-    expect(mine.map((r) => r.bookingDate.toISOString().slice(0, 10))).toEqual([open1, open2]);
+    expect(mine.map((r) => r.bookingDate.toISOString().slice(0, 10))).toEqual([contested, open1, open2]);
+    expect(mine.every((r) => r.status === 'SUBMITTED')).toBe(true);
+
+    // Two people now contest one slot — which the weekly run resolves by score, not by arrival order.
+    expect(
+      await prisma.bookingRequest.count({
+        where: { bookingDate: new Date(`${contested}T00:00:00.000Z`), bookingType: 'PRIMARY' },
+      }),
+    ).toBe(2);
   });
 
   it('reports an already-requested date as CONFLICT without touching the rest', async () => {

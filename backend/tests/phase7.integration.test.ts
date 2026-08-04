@@ -14,12 +14,15 @@ import { DEFAULT_WINDOW_CONFIG, requestableDates } from '../src/modules/bookings
 import { currentIstCalendarDate } from '../src/modules/bookings/bookings.time';
 
 /**
- * Phase 7 end-to-end: the rolling booking window, the reserve-on-request slot grid, the weekly batch,
- * and the security gate.
+ * Phase 7 end-to-end: the rolling booking window, the slot grid, the weekly batch, and the security
+ * gate.
  *
- * The guarantee under test is the whole point of the phase: because a request reserves capacity the
- * moment it is submitted (D12), demand can never exceed supply, so the scored run has nobody to
- * reject. The capacity test below asserts exactly that.
+ * **Phase 8 note.** This file originally asserted reserve-on-request (D12): a live request consumed a
+ * box, and the last requester for a full date was refused with `CAPACITY_FULL`. D18 replaced that with
+ * a queue, so the affected tests here now assert the *opposite* behaviour rather than being deleted —
+ * a deleted test is a lost guarantee. The queue's own end-to-end coverage lives in
+ * `phase8.integration.test.ts`; what stays here is everything Phase 8 did **not** change: the window
+ * arithmetic, the duplicate guard, run idempotency, and the gate.
  */
 
 const DATE = futureBookableDate();
@@ -73,25 +76,32 @@ describe('GET /availability — the slot grid (Phase 7 §4)', () => {
     expect(day.boxes.every((b: { state: string }) => b.state === 'AVAILABLE')).toBe(true);
   });
 
-  it('counts a live request as taken immediately, and marks the caller their own box (D12)', async () => {
+  // Was: "counts a live request as taken immediately, and marks the caller their own box (D12)".
+  // Inverted for Phase 8 (D18/D22) — a queued request must consume no capacity and paint no box.
+  it('counts a live request as demand only, leaving every box untouched (D18)', async () => {
     await bookOk(ASSENT_USERS[0]);
 
     const own = await request(app).get(`${API}/availability`).set(bearer(await login(ASSENT_USERS[0])));
     const ownDay = own.body.data.days.find((d: { date: string }) => d.date === DATE);
-    expect(ownDay.taken).toBe(1);
-    expect(ownDay.available).toBe(11);
+    expect(ownDay.phase).toBe('OPEN');
+    expect(ownDay.requestCount).toBe(1);
+    expect(ownDay.allocatedCount).toBe(0);
+    expect(ownDay.available).toBe(12); // NOT 11 — asking for a slot does not take one
     expect(ownDay.mine).toBe(true);
-    expect(ownDay.boxes[0].state).toBe('MINE');
-    // Their own date is closed to them — one request per person per date.
+    expect(ownDay.myStatus).toBe('SUBMITTED');
+    expect(ownDay.mySlotNumber).toBeNull();
+    expect(ownDay.boxes.every((b: { state: string }) => b.state === 'AVAILABLE')).toBe(true);
+    // Their own date is still closed *to them* — one request per person per date.
     expect(ownDay.requestable).toBe(false);
     expect(ownDay.reason).toBe('ALREADY_BOOKED');
 
-    // A colleague sees the same slot as taken, but not as theirs.
+    // A colleague sees the demand in the count, and a grid that is still entirely open to them.
     const other = await request(app).get(`${API}/availability`).set(bearer(await login(ASSENT_USERS[1])));
     const otherDay = other.body.data.days.find((d: { date: string }) => d.date === DATE);
-    expect(otherDay.taken).toBe(1);
+    expect(otherDay.requestCount).toBe(1);
     expect(otherDay.mine).toBe(false);
-    expect(otherDay.boxes[0].state).toBe('TAKEN');
+    expect(otherDay.myStatus).toBeNull();
+    expect(otherDay.boxes.every((b: { state: string }) => b.state === 'AVAILABLE')).toBe(true);
     expect(otherDay.requestable).toBe(true);
   });
 
@@ -114,11 +124,12 @@ describe('GET /availability — the slot grid (Phase 7 §4)', () => {
     const sa = await login('superadmin@redbricks.example');
     const res = await request(app).get(`${API}/availability`).set(bearer(sa));
     const day = res.body.data.days.find((d: { date: string }) => d.date === DATE);
-    expect(day.taken).toBe(0); // Assent's request is invisible here
+    expect(day.requestCount).toBe(0); // Assent's request is invisible here
+    expect(day.allocatedCount).toBe(0);
   });
 });
 
-describe('POST /bookings — window + capacity gates (Phase 7 D9/D11/D12)', () => {
+describe('POST /bookings — window gates (Phase 7 D9/D11, Phase 8 D18)', () => {
   it('refuses a date the window has already closed (422 WINDOW_CLOSED)', async () => {
     const yesterdayish = new Date();
     yesterdayish.setUTCDate(yesterdayish.getUTCDate() + 1);
@@ -147,7 +158,11 @@ describe('POST /bookings — window + capacity gates (Phase 7 D9/D11/D12)', () =
     expect(res.body.error.message).toMatch(/weekday/i);
   });
 
-  it('refuses the last request when the date is full, and never rejects at run time (D12/D13)', async () => {
+  // Was: "refuses the last request when the date is full, and never rejects at run time (D12/D13)".
+  // Phase 8 removed the submit-time refusal entirely (D18): scarcity is now resolved by score at run
+  // time, and the overflow is WAITLISTED. Kept here — inverted — because this is the exact scenario
+  // the old behaviour was pinned on. Ranking correctness itself is covered in phase8.
+  it('queues past capacity and lets the run decide, never refusing up front (D18/D19)', async () => {
     const sa = await login('superadmin@redbricks.example');
     const assentId = await companyIdOf(ASSENT_USERS[0]);
     // Squeeze capacity to 2 so three eligible users cannot all fit.
@@ -156,30 +171,30 @@ describe('POST /bookings — window + capacity gates (Phase 7 D9/D11/D12)', () =
     expect((await book(ASSENT_USERS[0])).status).toBe(201);
     expect((await book(ASSENT_USERS[1])).status).toBe(201);
 
-    // The third request is refused UP FRONT rather than being taken and rejected later.
+    // The third request is ACCEPTED — it goes in the queue rather than being turned away.
     const third = await book(ASSENT_USERS[2]);
-    expect(third.status).toBe(409);
-    expect(third.body.error.code).toBe('CAPACITY_FULL');
+    expect(third.status).toBe(201);
+    expect(third.body.data.status).toBe('SUBMITTED');
 
-    // The grid agrees, and says why.
+    // The grid still offers the date: three people queued for two slots is not "full".
     const grid = await request(app).get(`${API}/availability`).set(bearer(await login(ASSENT_USERS[2])));
     const day = grid.body.data.days.find((d: { date: string }) => d.date === DATE);
-    expect(day.available).toBe(0);
-    expect(day.requestable).toBe(false);
-    expect(day.reason).toBe('FULL');
+    expect(day.requestCount).toBe(3);
+    expect(day.available).toBe(2); // capacity, not capacity-minus-demand
+    expect(day.reason).toBe('ALREADY_BOOKED'); // closed to *this* user only, because they just asked
 
-    // …and the run therefore allocates everyone who asked, with nobody waitlisted or rejected.
+    // …and the run decides: two win, one waits. Nobody is REJECTED (D19).
     const run = await request(app)
       .post(`${API}/allocation/primary/run`)
       .set(bearer(sa))
       .send({ bookingDate: DATE })
       .expect(200);
     expect(run.body.data.allocatedCount).toBe(2);
-    expect(run.body.data.waitlistedCount).toBe(0);
+    expect(run.body.data.waitlistedCount).toBe(1);
     expect(await prisma.bookingRequest.count({ where: { bookingDate: dateUtc, status: 'REJECTED' } })).toBe(0);
   });
 
-  it('refuses a duplicate request for the same date (409 CONFLICT, not CAPACITY_FULL)', async () => {
+  it('refuses a duplicate request for the same date (409 CONFLICT)', async () => {
     await bookOk(ASSENT_USERS[0]);
     const again = await book(ASSENT_USERS[0]);
     expect(again.status).toBe(409);

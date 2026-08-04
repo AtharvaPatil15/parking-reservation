@@ -9,6 +9,12 @@
 >
 > Implementation date: **2026-08-05**. Owners: **Prithviraj** (backend) + **Devashish** (contract +
 > frontend).
+>
+> **Status — backend track complete.** P8-01 … P8-05, P8-07, P8-08 built; **P8-06 (the weekly cap)
+> was cut** — see D20. 113 unit + 98 integration tests green, typecheck clean. Corrections found while
+> building are folded into §5 and §9 below; the two that matter most are that `slotNumber` is a
+> **string**, and that `npm run db:seed` **does** overwrite stored config. The frontend/contract track
+> (P8-09 … P8-14) is untouched and still Devashish's.
 
 ---
 
@@ -46,13 +52,15 @@ so they can arrange another way in. Fairness comes from the score, not from who 
 |---|---|---|---|
 | **D18** | **Requests never consume capacity** | A submitted request is a *queue entry* (`SUBMITTED`), not a reservation. `createBooking` performs **no** capacity check and can never return `CAPACITY_FULL`. Supersedes D12. | The whole point of the phase. Capacity is decided once, by score, at run time. |
 | **D19** | **Rejection returns, honestly** | Over-subscription resolves to `WAITLISTED`, never `REJECTED`, and always at least `approvalLeadDays` before the date. The UI says "queued", never "held". | Phase 7's promise is downgraded from *nobody loses* to *nobody loses late or by surprise*. That is the honest version. |
-| **D20** | **Per-user weekly cap** | New config `allocation.maxDaysPerUserPerWeek` (default `3`). Once a user has been allocated that many dates inside one run's band, their remaining dates in that band go to the waitlist regardless of score. | Without it the top-scoring user wins all five weekdays and the bottom user parks never. A cap is explainable to a user ("you got 3 of 5, the cap is 3") and needs no change to the scoring maths. Set the key to `5` to disable it. |
+| ~~D20~~ | ~~Per-user weekly cap~~ | **REJECTED (Prithviraj, 2026-08-05).** No cap. A user who ranks first on all five weekdays wins all five. Built, then removed — the code, the config key and its tests are gone, and the ranking loop is pure score ranking again. | The score already *is* the fairness rule: it encodes need (distance + carpool size), so overriding it to spread slots around would be a second, competing notion of fair fighting the first. A hard cap also left dates unallocated once every queued candidate had hit it. What residual spreading exists lives where it belongs — tie-breaker 4, "fewer allocations in the prior 30 days", which only breaks *exact* score ties. |
 | **D21** | **Lead time drops to 1 day** | `booking.approvalLeadDays` default **3 → 1**. | Requirement: "today is Sunday, I request Mon–Fri". With `L = 3` the earliest requestable date on a Sunday is Wednesday, so Mon/Tue are closed before the queue is even consulted. `L = 1` makes the Sunday 20:00 run own exactly `[Mon, Sat)` = Mon–Fri. Cost: a waitlisted user gets one day's notice, not three. Config row, not code. |
 | **D22** | **Two-phase grid** | The availability grid has a `phase`: `OPEN` (before the date's run) shows **only** green available + grey-dotted blocked; `DECIDED` (after) shows blue = your slot, grey-solid = allocated to someone else, grey-dotted = blocked. Demand pre-run is communicated as a **count**, not as boxes. | Requirement. Requests must be invisible pre-run or the grid re-teaches the land-grab. The count keeps users informed without making it a race. |
 
-> **If you disagree with D20 or D21, change them before starting** — they are the only two decisions
-> that alter behaviour rather than mechanism. D20 lives in one loop and one config key; D21 is a
-> single seed value. Everything else in this phase follows from D18.
+> D20 was the one decision here that added a *second* fairness rule on top of the score. It was
+> rejected on purpose: **the score decides, and it decides every day of the week.** If a user ever
+> complains that one colleague parks all week, the answer is that they earned it on distance and
+> carpool size — and the lever to pull is `allocation.distanceWeight` / `allocation.carpoolWeight`, not
+> a quota on winning.
 
 ---
 
@@ -137,14 +145,14 @@ full `tieBreakerData`, so any outcome is explainable and replayable.
   "allocatedCount": 0,          // NEW: 0 while OPEN
   "available": 10,              // quota − blocked while OPEN; − allocatedCount while DECIDED
   "mine": true,                 // I have a live request for this date
-  "myStatus": "SUBMITTED",      // NEW: null | SUBMITTED | ALLOCATED | WAITLISTED | RELEASED
-  "mySlotNumber": null,         // NEW: set when myStatus = ALLOCATED
+  "myStatus": "SUBMITTED",      // NEW: null | SUBMITTED | ALLOCATED | WAITLISTED | RELEASED | …
+  "mySlotNumber": null,         // NEW: string, set when myStatus = ALLOCATED (e.g. "B1-07")
   "requestable": true,
   "reason": null,               // FULL is REMOVED from the enum
   "message": null,
   "boxes": [
-    { "index": 1, "state": "AVAILABLE" },
-    { "index": 11, "state": "BLOCKED" }
+    { "index": 1, "state": "AVAILABLE", "slotNumber": null },
+    { "index": 11, "state": "BLOCKED", "slotNumber": null }
   ]
 }
 ```
@@ -152,8 +160,14 @@ full `tieBreakerData`, so any outcome is explainable and replayable.
 - **`taken` is removed.** Any client still reading it is reading the old FCFS model.
 - **`reason: "FULL"` is removed.** Nothing is full before the run. `NO_QUOTA` and `ALREADY_BOOKED`
   stay.
-- **`SlotBox` gains `slotNumber: number | null`** — the real `ParkingSlot.slotNumber`, populated
-  only when `phase = DECIDED`. `index` stays the 1-based grid position.
+- **`SlotBox` gains `slotNumber: string | null`** — the real `ParkingSlot.slotNumber`, populated only
+  when `phase = DECIDED`. A **string**, not a number: `ParkingSlot.slotNumber` is a free-form label
+  (`B1-07` in the seed), not an ordinal. `index` stays the 1-based grid position, and the two must not
+  be conflated in the UI — `index` orders the grid, `slotNumber` is what the user looks for on the
+  tarmac.
+- `myStatus` is the caller's **best** status for the date. A user can hold both a PRIMARY and a
+  COMMON_POOL row for one day (the common-pool run enrolls the primary waitlist), and "you got a slot"
+  is the answer that matters.
 - **`BookingWindowSummary` gains `scoring: { distanceWeight, carpoolWeight, maxDistanceKm, maxPeople }`**
   so the booking form can show the user their live score as they add carpool members, with no extra
   round-trip.
@@ -183,14 +197,13 @@ is deliberate: nothing can then quietly reintroduce the gate.
 
 | Key | Type | Default | Validation |
 |---|---|---|---|
-| `allocation.maxDaysPerUserPerWeek` | NUMBER | `3` | integer ≥ 1 |
 | `booking.approvalLeadDays` | NUMBER | `3` → **`1`** | integer ≥ 1 (unchanged rule, new default) |
 
 ---
 
 ## 6. Task breakdown
 
-Fourteen tasks. **Zero file overlap between the two owners** — that is the main design goal of the
+Thirteen tasks (P8-06 was cut — see D20). **Zero file overlap between the two owners** — that is the main design goal of the
 split, because you are both working in one day.
 
 | ID | Task | Owner | Files | Depends on |
@@ -201,9 +214,8 @@ split, because you are both working in one day.
 | P8-03 | Two-phase availability grid | Prithviraj | `bookings.availability.ts`, `bookings.controller.ts` | P8-00 |
 | P8-04 | Expose scoring weights in the window summary | Prithviraj | `bookings.window.ts` | P8-00 |
 | P8-05 | Ranking hardening (quota + slot pool) | Prithviraj | `allocation.service.ts` | — |
-| P8-06 | Per-user weekly cap (D20) | Prithviraj | `allocation.service.ts` | P8-05 |
 | P8-07 | Config + seed changes | Prithviraj | `seed.ts`, `configValidation` | P8-00 |
-| P8-08 | Backend tests: invert + add | Prithviraj | `backend/tests/*` | P8-01…P8-06 |
+| P8-08 | Backend tests: invert + add | Prithviraj | `backend/tests/*` | P8-01…P8-05 |
 | P8-09 | OpenAPI + regenerate frontend types | Devashish | `openapi.yaml`, `api/types.ts` | P8-00 |
 | P8-10 | Mock handlers: queue semantics | Devashish | `mocks/handlers.ts` | P8-09 |
 | P8-11 | `SlotGrid`: phase-aware | Devashish | `SlotGrid.tsx` | P8-09 |
@@ -217,7 +229,7 @@ split, because you are both working in one day.
 
 Sit together. Agree §5 exactly as written (or amend it), then Devashish writes the schema changes
 into `openapi.yaml` and pushes that commit alone. **Both of you branch off that commit.** Also settle
-D20 and D21 now — after this point the contract is frozen for the day and any change costs both of
+D21 now — after this point the contract is frozen for the day and any change costs both of
 you a merge.
 
 Deliverable: one pushed commit touching only `openapi.yaml`.
@@ -347,29 +359,24 @@ under-provisioned building fails the run with an explicit message instead of sta
 
 ---
 
-### P8-06 · Per-user weekly cap (D20) — *Prithviraj*
+### ~~P8-06 · Per-user weekly cap~~ — **CUT**
 
-`runWeeklyAllocation` ([:572-627](../backend/src/modules/allocation/allocation.service.ts#L572-L627))
-loops the band's dates in ascending order, calling `runPrimaryAllocation` per date. Thread a
-per-user allocated-count for the band through that loop and pass it into the per-date run; a user at
-`allocation.maxDaysPerUserPerWeek` is skipped for the remaining dates and lands `WAITLISTED` with
-`tieBreakerData.cappedByWeeklyLimit = true` so the outcome stays explainable.
+Built, then removed on Prithviraj's call (see D20). **A user who ranks first every weekday wins every
+weekday.** Nothing caps it, and nothing should be added later without revisiting D20 — the
+`allocation.service.ts` ranking loop is deliberately back to plain "rank by score, take the top
+`quota` within each company".
 
-Note the existing tie-breaker 4 (`allocationsPrev30d`) *does* already drift within a week — Monday's
-win counts against you on Tuesday, because `prev30` counts allocations with
-`bookingDate < thisDate`. But it is only a **tie-breaker**, so it fires only on exactly equal
-scores. It cannot stop a high scorer taking all five days. That is what the cap is for.
-
-**Do this task last.** If the day runs short, drop it: the fallback is "highest score wins every
-day", which is defensible and is simply D20 with the key set to `5`. Everything else in Phase 8 is
-required for the model to be correct; this one is a fairness refinement.
+For the record, on the fairness question the cap was meant to answer: tie-breaker 4
+(`allocationsPrev30d`) *does* already drift within a week — Monday's win counts against you on Tuesday,
+because `prev30` counts allocations with `bookingDate < thisDate`. But it is only a **tie-breaker**, so
+it fires only on exactly equal scores, and it will not stop a high scorer taking all five days. That is
+the intended behaviour now, not a gap.
 
 ---
 
 ### P8-07 · Config + seed — *Prithviraj*
 
 - `booking.approvalLeadDays`: seeded default `3` → **`1`** (D21).
-- New key `allocation.maxDaysPerUserPerWeek` = `3`, NUMBER, integer ≥ 1 (D20).
 - Add both to the Super Admin config screen's validation
   ([`configValidation.ts`](../frontend/src/features/superadmin/configValidation.ts)) — **coordinate
   with Devashish**, it is a frontend file. Simplest: Prithviraj states the rule, Devashish makes the
@@ -401,8 +408,7 @@ required for the model to be correct; this one is a fairness refinement.
    **all five**.
 3. Each tie-breaker exercised through the real run, not just the `score.ts` units.
 4. Carpool changes the winner: Aditi + 3 scored members (58.6) beats solo Sara (57.15).
-5. Weekly cap (D20): one user requests Mon–Fri and wins everything on score → exactly
-   `maxDaysPerUserPerWeek` allocations, rest waitlisted with `cappedByWeeklyLimit`.
+5. Multi-date: one user who outranks everyone on Mon–Fri wins **all five** — no cap (D20 rejected).
 6. Quota hardening (P8-05a): a company with an existing allocation cannot exceed quota on a re-run.
 7. Slot shortfall (P8-05b) fails the run loudly.
 8. Grid phase transition: same date, before vs after the run, different box states.
@@ -514,11 +520,11 @@ Prithviraj builds the real backend. Neither of you is blocked waiting for the ot
 
 | Time | Prithviraj (backend) | Devashish (contract + frontend) |
 |---|---|---|
-| 09:30–10:00 | **P8-00 together** — freeze §5, settle D20/D21 | **P8-00 together** |
+| 09:30–10:00 | **P8-00 together** — freeze §5, settle D21 | **P8-00 together** |
 | 10:00–11:00 | P8-08 step 1: write the unfairness test, watch it fail | P8-09 openapi + regenerate types, push early so P's `types.ts` matches |
 | 11:00–13:00 | P8-01, P8-02, P8-07 | P8-10 mock handlers + `OPEN`/`DECIDED` toggle |
 | 14:00–16:00 | P8-03 two-phase grid, P8-04 weights | P8-11 `SlotGrid`, P8-12 `BookingForm` |
-| 16:00–17:30 | P8-05 hardening, P8-06 cap *(droppable)* | P8-13 dashboard results panel |
+| 16:00–17:30 | P8-05 hardening | P8-13 dashboard results panel |
 | 17:30–18:30 | P8-08 remaining tests | P8-14 frontend tests |
 | 18:30 | **Integrate**: `VITE_USE_MOCKS=false`, walk [`phase-8-e2e-test-flow.md`](phase-8-e2e-test-flow.md) §7 together | |
 
@@ -551,9 +557,20 @@ Prithviraj specifies). Anything else touching both trees means the split has dri
    mitigation and is not optional.
 3. **A user with no profile distance is now systematically last** — hence P8-02. If P8-02 is skipped,
    the fairness fix quietly creates a new unfairness.
-4. **The weekly cap (D20) is the only droppable task.** Everything else is load-bearing.
-5. **Existing dev DBs will not pick up the new `approvalLeadDays`.** Change it in the Super Admin
-   config UI or Sunday→Mon-Fri will not reproduce. Same class of gotcha as the Phase 7 quota rows.
+4. **One user can win the whole week, by design (D20 rejected).** If the same person outranks everyone
+   on all five weekdays, they get all five. Expect this to be questioned by users; the answer is that
+   they scored highest on distance and carpool size every day, and the lever is the weights, not a cap.
+   The only automatic spreading is tie-breaker 4 (fewer allocations in the prior 30 days), which fires
+   solely on exact score ties.
+5. ~~Existing dev DBs will not pick up the new `approvalLeadDays`.~~ **Wrong — `npm run db:seed` does
+   overwrite config values** (its upsert sets `value`/`valueType`/`description` on update), so a
+   reseed is enough and no UI step is needed. The real gotcha is the other way round: **a reseed
+   silently discards any Super-Admin config edits**. Verified on the live dev DB —
+   `booking.approvalLeadDays` went to `1`.
+7. **Config reads are cached in-process** (`src/config/systemConfig.ts`), invalidated only by
+   `PATCH /config`. Writing a config row straight to the database leaves the running server on the old
+   value — which looks exactly like a broken feature. Cost an hour; noted here so it costs nobody else
+   one.
 6. **`CAPACITY_FULL` removal is a breaking API change.** Only these clients exist and both are in
    this repo, so it is safe — but the `types.ts` regeneration must land before P's backend is
    integration-tested against the frontend.
