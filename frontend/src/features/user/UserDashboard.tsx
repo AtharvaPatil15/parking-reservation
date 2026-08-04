@@ -21,6 +21,9 @@ function formatRun(value: string) {
 export function UserDashboard() {
   const dash = useUserDashboard();
   const secondsLeft = useCountdown(dash.data?.cutoffCountdownSeconds);
+  // The run countdown must tick like the cutoff above; rendering the payload value directly
+  // left it frozen at whatever the last fetch returned.
+  const runSecondsLeft = useCountdown(dash.data?.nextAllocationRunCountdownSeconds);
 
   if (dash.isLoading) return <LoadingState label="Loading your dashboard…" />;
   if (dash.isError || !dash.data) return <ErrorState title="Couldn't load your dashboard" />;
@@ -65,9 +68,9 @@ export function UserDashboard() {
         <Card title="Next allocation run">
           <div className="space-y-2">
             <p className="text-text">{formatRun(d.nextAllocationRunAt)} IST</p>
-            {d.nextAllocationRunCountdownSeconds != null && (
+            {runSecondsLeft != null && (
               <p className="text-sm text-text-muted">
-                Runs in {formatCountdown(Math.max(0, d.nextAllocationRunCountdownSeconds))}
+                {runSecondsLeft <= 0 ? 'Running now…' : `Runs in ${formatCountdown(runSecondsLeft)}`}
               </p>
             )}
           </div>

@@ -64,20 +64,24 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative w-full rounded-card border border-border bg-surface shadow-pop outline-none',
+          // Cap the panel to the viewport and lay it out as a column so a long body scrolls
+          // internally — on a short/mobile screen the header and footer stay reachable.
+          'relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-card border border-border bg-surface shadow-pop outline-none',
           sizeClasses[size],
         )}
       >
         {title && (
-          <div className="border-b border-border px-6 py-4">
+          <div className="shrink-0 border-b border-border px-4 py-4 sm:px-6">
             <h2 id={titleId} className="text-base font-semibold tracking-tight text-text">
               {title}
             </h2>
           </div>
         )}
-        <div className="px-6 py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>
+          <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-border px-4 py-4 sm:px-6">
+            {footer}
+          </div>
         )}
       </div>
     </div>,

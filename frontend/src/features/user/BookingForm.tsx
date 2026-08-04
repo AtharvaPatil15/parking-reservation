@@ -209,9 +209,15 @@ export function BookingForm() {
           </ul>
         </Card>
 
-        <Button variant="secondary" onClick={bookAgain}>
-          Book more dates
-        </Button>
+        {/* Stacked and full-width on a phone so both actions are comfortable tap targets. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Link to="/app" className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto">Go to dashboard</Button>
+          </Link>
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={bookAgain}>
+            Book more dates
+          </Button>
+        </div>
       </div>
     );
   }

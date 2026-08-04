@@ -47,4 +47,38 @@ describe('BookingList (admin roster)', () => {
     expect(screen.getByText('Contact: 9990000001')).toBeInTheDocument();
     expect(screen.getByText('Pickup: Pickup 1')).toBeInTheDocument();
   });
+
+  it('renders the details as a dialog rather than inline in the table cell', async () => {
+    renderList();
+
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole('button', { name: /details/i })[0]);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    // The panel content lives inside the dialog, not beside the row that opened it.
+    expect(dialog).toHaveTextContent('People carried');
+    expect(dialog).toHaveTextContent('Passenger details');
+  });
+
+  it('closes the details dialog again', async () => {
+    renderList();
+
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('button', { name: /details/i })[0]);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows a range summary from the shared pager', async () => {
+    renderList();
+
+    expect(await screen.findByText('Priya Rao')).toBeInTheDocument();
+    expect(screen.getByText(/of \d+$/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Prev' })).toBeDisabled();
+  });
 });
