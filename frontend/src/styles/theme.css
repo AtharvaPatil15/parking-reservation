@@ -25,7 +25,13 @@
   --primary-hover: 44 69 93; /* #2C455D */
   --primary-subtle: 238 246 255; /* #EEF6FF */
 
-  --accent: 89 128 166; /* #5980A6 — the accent at base weight */
+  /* Ramp step 700, not the 500 base. The design system's readme is explicit that
+     its accent-to-ground pair is tuned to ~3:1 — fine for chrome and large text,
+     but not for body copy — and prescribes a deep step for paragraph-size accent
+     text. #5980A6 measured 3.71:1 on this ground and 3.36:1 on --accent-subtle,
+     both under 4.5:1, and this token carries body-size text (the allocated slot
+     number, and Badge's accent tone). #416180 clears it. */
+  --accent: 65 97 128; /* #416180 — accent step 700 */
   --accent-subtle: 219 233 248; /* #DBE9F8 */
 
   /* Status roles keep their meaning (see features/user/statusTone.ts); only the

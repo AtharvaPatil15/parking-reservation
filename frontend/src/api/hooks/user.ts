@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type UserProfile = components['schemas']['UserProfile'];
@@ -68,7 +69,7 @@ export function useUserDashboard() {
 }
 
 /** GET /me/bookings — paged history for the current user. */
-export function useMyBookings(page = 1, pageSize = 10, status = '') {
+export function useMyBookings(page = 1, pageSize = DEFAULT_PAGE_SIZE, status = '') {
   return useQuery({
     queryKey: queryKeys.myBookings(page, pageSize, status),
     queryFn: () =>

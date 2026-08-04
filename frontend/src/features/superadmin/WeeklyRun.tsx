@@ -126,7 +126,7 @@ export function WeeklyRun() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">Weekly allocation</h2>
+        <h1 className="text-4xl">Weekly allocation</h1>
         <p className="text-text-muted">
           Runs every {win.runDay.toLowerCase()} at {win.runTime} IST. Next: {runLabel(win.nextRunAt)}.
         </p>

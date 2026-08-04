@@ -78,7 +78,7 @@ export function Blocks() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">Quota blocks</h2>
+        <h1 className="text-4xl">Quota blocks</h1>
         <p className="text-text-muted">Hold back a count of your quota for a date range, with a reason.</p>
       </div>
 
@@ -106,7 +106,7 @@ export function Blocks() {
             <label className="flex min-h-11 items-center gap-2 pt-6 text-sm text-text">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-border text-primary"
+                className="h-4 w-4 border-border text-primary"
                 checked={permanent}
                 onChange={(e) => setPermanent(e.target.checked)}
               />

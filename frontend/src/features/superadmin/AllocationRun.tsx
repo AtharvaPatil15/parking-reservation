@@ -87,7 +87,7 @@ export function AllocationRun() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">Allocation</h2>
+        <h1 className="text-4xl">Allocation</h1>
         <p className="text-text-muted">
           Run the scoring engine for a booking date, then open the common pool to redistribute unused slots.
         </p>

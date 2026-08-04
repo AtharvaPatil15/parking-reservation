@@ -418,7 +418,7 @@ export function BookingForm() {
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[10px] font-bold leading-none',
+                            'flex h-4 w-4 shrink-0 items-center justify-center  border text-[10px] font-bold leading-none',
                             isSelected
                               ? 'border-primary bg-primary text-white'
                               : 'border-border bg-surface text-transparent',

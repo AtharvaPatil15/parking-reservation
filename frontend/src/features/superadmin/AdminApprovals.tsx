@@ -138,7 +138,7 @@ export function AdminApprovals() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">Privileged registrations</h2>
+        <h1 className="text-4xl">Privileged registrations</h1>
         <p className="text-text-muted">
           People who registered as a company admin or as building security. Only you can action these.
         </p>

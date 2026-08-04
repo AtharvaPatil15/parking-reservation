@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type AllocationRunSummary = components['schemas']['AllocationRunSummary'];
@@ -89,7 +90,7 @@ export interface AllocationsFilter {
  * scoped to their own company server-side; SUPER_ADMIN sees all and may pass `companyId`/`type`/`date`.
  */
 export function useAllocations(filter: AllocationsFilter = {}) {
-  const { date, companyId, type, page = 1, pageSize = 20 } = filter;
+  const { date, companyId, type, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
   return useQuery<{ items: AllocationRosterItem[]; meta: PageMeta }>({
     queryKey: queryKeys.allocations(date ?? '', companyId ?? '', type ?? '', page),
     queryFn: () =>

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type CompanyAdminDashboard = components['schemas']['CompanyAdminDashboard'];
@@ -24,7 +25,7 @@ export function useCompanyAdminDashboard(date?: string) {
 }
 
 /** GET /companies/{id}/users — paged company members, optionally filtered by status. */
-export function useCompanyUsers(companyId: string | undefined, page = 1, pageSize = 10, status?: UserStatus) {
+export function useCompanyUsers(companyId: string | undefined, page = 1, pageSize = DEFAULT_PAGE_SIZE, status?: UserStatus) {
   return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
     queryKey: companyId
       ? queryKeys.companyUsers(companyId, page, pageSize, status ?? 'all')
@@ -65,7 +66,7 @@ export function useRemoveCompanyUser(companyId: string | undefined) {
 }
 
 /** GET /companies/{id}/blocks — paged quota blocks. */
-export function useBlocks(companyId: string | undefined, page = 1, pageSize = 10) {
+export function useBlocks(companyId: string | undefined, page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   return useQuery<{ items: SlotBlock[]; meta: PageMeta }>({
     queryKey: companyId ? queryKeys.blocks(companyId, page, pageSize) : ['companies', 'pending', 'blocks'],
     queryFn: () =>

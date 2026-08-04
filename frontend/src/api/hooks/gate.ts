@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type VehicleSummary = components['schemas']['VehicleSummary'];
@@ -72,7 +73,7 @@ export interface GateEventsFilter {
 
 /** GET /gate/events — today's gate log (building-wide). */
 export function useGateEvents(filter: GateEventsFilter = {}) {
-  const { date, status, page = 1, pageSize = 20 } = filter;
+  const { date, status, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
   return useQuery<{ items: GateEvent[]; meta: PageMeta }>({
     queryKey: queryKeys.gateEvents(date ?? '', status ?? '', page),
     queryFn: () =>
@@ -95,7 +96,7 @@ export interface UnbookedFilter {
 
 /** GET /gate/unbooked — entries let through without a booking (D16). CA own company / SA all. */
 export function useUnbookedEntries(filter: UnbookedFilter = {}) {
-  const { date, companyId, page = 1, pageSize = 20 } = filter;
+  const { date, companyId, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
   return useQuery<{ items: GateEvent[]; meta: PageMeta }>({
     queryKey: queryKeys.unbookedEntries(date ?? '', companyId ?? '', page),
     queryFn: () =>

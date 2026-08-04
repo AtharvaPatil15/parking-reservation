@@ -89,7 +89,7 @@ export function Approvals() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">User approvals</h2>
+        <h1 className="text-4xl">User approvals</h1>
         <p className="text-text-muted">Approve or reject people who signed up for your company.</p>
       </div>
 

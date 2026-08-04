@@ -241,7 +241,7 @@ export function ConfigTimings() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl">System configuration</h2>
+        <h1 className="text-4xl">System configuration</h1>
         <p className="text-text-muted">Booking windows, scoring weights, and limits. Validated before saving.</p>
       </div>
 
@@ -253,7 +253,7 @@ export function ConfigTimings() {
               <h3 className="text-sm font-semibold text-text">Next 5 runs</h3>
               <ol className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                 {previewRuns.map((run) => (
-                  <li key={run.toISOString()} className="rounded border border-border bg-surface-muted px-3 py-2 text-sm">
+                  <li key={run.toISOString()} className="border border-border bg-surface-2 px-3 py-2 text-sm">
                     {formatRun(run)} IST
                   </li>
                 ))}

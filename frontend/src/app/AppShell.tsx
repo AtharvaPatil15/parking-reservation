@@ -27,7 +27,6 @@ export function AppShell() {
 
 function ShellFrame({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const navItems = useNavDrawerItems();
 
   return (
     <div className="flex min-h-screen bg-canvas text-text">
@@ -41,7 +40,13 @@ function ShellFrame({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <CrumbStrip onOpenNav={navItems.length > 0 ? () => setDrawerOpen(true) : undefined} />
+        {/* The hamburger is unconditional. It used to be gated on the role shell
+            having registered nav items, but five routes mount this shell with no
+            role shell inside (/security, /book, /booking/:id, /my-bookings,
+            /profile) — so below `lg` those screens had no way to reach the rail,
+            and therefore no Sign out and no Profile. For SECURITY, whose only
+            route is /security, that meant no way to sign out at all. */}
+        <CrumbStrip onOpenNav={() => setDrawerOpen(true)} />
         {/* Full-bleed beside the rail: the content region uses the whole frame at
             every width rather than stopping at a fixed column, so a wide monitor
             gets the room instead of an empty band. Prose blocks cap their own

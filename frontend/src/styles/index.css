@@ -43,6 +43,15 @@
     @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-canvas;
   }
 
+  /* The nav rail is its own dark plane, so the ring's offset must be the rail's
+     own colour — not --canvas. In dark mode --canvas (#15181B) and --field
+     (#0E1215) are 1.06:1 apart, so a canvas-coloured offset band vanished and
+     the ring read as a smudge on the app's primary navigation. */
+  .bg-field :focus-visible {
+    --tw-ring-offset-color: rgb(var(--field));
+    @apply ring-field-accent;
+  }
+
   ::selection {
     background: rgb(var(--primary) / 0.3);
   }

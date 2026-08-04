@@ -84,7 +84,8 @@ export default {
         card: '0',
       },
       boxShadow: {
-        card: '0 1px 2px rgb(20 22 24 / 0.05)',
+        /* Cards are transparent line drawings in this system, so they carry no
+           shadow — only floating surfaces (popovers, dialogs) do. */
         pop: '0 1px 2px rgb(20 22 24 / 0.05), 0 8px 24px -6px rgb(20 22 24 / 0.14)',
         dialog: '0 2px 4px rgb(20 22 24 / 0.07), 0 24px 60px -12px rgb(20 22 24 / 0.28)',
       },

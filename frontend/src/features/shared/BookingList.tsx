@@ -80,7 +80,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         {b.history && b.history.length > 1 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {b.history.map((h) => (
-              <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
+              <span key={h.id} className="bg-surface-2 px-1.5 py-0.5 text-xs text-text-muted">
                 {displayTypeLabel(h)} {h.status}
               </span>
             ))}
@@ -107,8 +107,11 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
             <Button variant="secondary" size="sm" onClick={() => setOpenBookingId(isOpen ? null : b.id)}>
               {isOpen ? 'Hide' : 'Details'}
             </Button>
+            {/* max-w, not a fixed width: this sits in a table cell inside a
+                horizontally-scrolling wrapper, so a hard 28rem widened the table
+                and pushed the panel off-screen on a phone. */}
             {isOpen && (
-              <div className="mt-2 w-[28rem] rounded-card border border-border bg-surface p-4 text-left shadow-lg">
+              <div className="mt-2 w-full max-w-[28rem] rounded-card border border-border bg-surface p-4 text-left shadow-pop">
                 <dl className="grid grid-cols-2 gap-3 text-sm">
                   {detailLine('People carried', b.carpoolPeople)}
                   {detailLine('Passengers', Math.max(0, b.carpoolPeople - 1))}

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
@@ -24,7 +25,7 @@ export interface AdminBookingsFilter {
  * their own company server-side; SUPER_ADMIN sees all and may pass `companyId`/`date` filters.
  */
 export function useAdminBookings(filter: AdminBookingsFilter = {}) {
-  const { date, companyId, page = 1, pageSize = 20 } = filter;
+  const { date, companyId, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
   return useQuery<{ items: AdminBooking[]; meta: PageMeta }>({
     queryKey: queryKeys.adminBookings(date ?? '', companyId ?? '', page),
     queryFn: () =>

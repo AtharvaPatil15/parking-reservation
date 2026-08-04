@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
+import { DEFAULT_PAGE_SIZE } from '../pagination';
 import type { components } from '../types';
 
 type SuperAdminDashboard = components['schemas']['SuperAdminDashboard'];
@@ -40,7 +41,7 @@ export function useCompanyQuotaSummary(date: string) {
 }
 
 /** GET /companies — paged company list. */
-export function useCompanies(page = 1, pageSize = 10) {
+export function useCompanies(page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   return useQuery<{ items: Company[]; meta: PageMeta }>({
     queryKey: queryKeys.companies(page, pageSize),
     queryFn: () =>
@@ -64,7 +65,7 @@ export function useCreateCompany() {
 }
 
 /** GET /users/pending-admins — the Super Admin's pending company-admin request queue (F11). */
-export function usePendingAdmins(page = 1, pageSize = 10) {
+export function usePendingAdmins(page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
     queryKey: queryKeys.pendingAdmins(page, pageSize),
     queryFn: () =>
@@ -73,7 +74,7 @@ export function usePendingAdmins(page = 1, pageSize = 10) {
 }
 
 /** GET /users/admin-requests/history — processed company-admin requests (approval history). */
-export function useAdminRequestHistory(page = 1, pageSize = 10) {
+export function useAdminRequestHistory(page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   return useQuery<{ items: UserProfile[]; meta: PageMeta }>({
     queryKey: queryKeys.adminRequestHistory(page, pageSize),
     queryFn: () =>
@@ -112,7 +113,7 @@ export function useRemovePrivilegedUser() {
 }
 
 /** GET /slots — paged slot list, optionally filtered by status. */
-export function useSlots(page = 1, pageSize = 10, status?: components['schemas']['SlotStatus']) {
+export function useSlots(page = 1, pageSize = DEFAULT_PAGE_SIZE, status?: components['schemas']['SlotStatus']) {
   return useQuery<{ items: ParkingSlot[]; meta: PageMeta }>({
     queryKey: queryKeys.slots(page, pageSize, status ?? 'all'),
     queryFn: () =>

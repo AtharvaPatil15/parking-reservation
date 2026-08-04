@@ -42,10 +42,10 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       {chrome && (
         <div className="flex flex-col gap-px px-4 pb-2.5 pt-3.5">
           {/* The area heading proper — the role names the section you are in. */}
-          <h1 className="whitespace-nowrap text-[9.5px] font-normal uppercase tracking-[0.13em] text-field-ink-3">
+          <h1 className="whitespace-nowrap text-3xs font-normal uppercase tracking-[0.13em] text-field-ink-3">
             {chrome.label}
           </h1>
-          <span className="font-mono text-[9.5px] text-field-accent">{chrome.code}</span>
+          <span className="font-mono text-3xs text-field-accent">{chrome.code}</span>
         </div>
       )}
 
