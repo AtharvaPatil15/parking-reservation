@@ -29,6 +29,38 @@ async function loadTargetUser(actor: Actor, userId: string) {
 }
 
 /**
+ * One applicant, in full — what the approval screens show in a details dialog before deciding
+ * (2026-08-05).
+ *
+ * The queue rows carry name/email/status and nothing else, which is not enough to approve on: an admin
+ * wants the home→office distance (it is what the person's allocation score is built from), the address
+ * behind it, and which cars they have. Read through `loadTargetUser`, so a Company Admin asking about
+ * another tenant's user gets the same "not found" as everywhere else.
+ *
+ * Vehicles are matched by `userId` OR by email: the registry links a car to a user by same-email
+ * resolution, and a row imported before the person registered may only ever have the email.
+ */
+export async function getUserDetail(actor: Actor, userId: string) {
+  const user = await loadTargetUser(actor, userId);
+  const vehicles = await prisma.vehicle.findMany({
+    where: {
+      isActive: true,
+      OR: [{ userId: user.id }, ...(user.email ? [{ ownerEmail: user.email }] : [])],
+    },
+    select: {
+      id: true,
+      vehicleNumber: true,
+      displayNumber: true,
+      vehicleType: true,
+      makeModel: true,
+      colour: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  return { user, vehicles };
+}
+
+/**
  * Roles whose registration only the Super Admin may action: company admins (F11) and, from Phase 7,
  * security/gate operators (D15). Both are privileged — a Company Admin must not be able to grant
  * either into their own tenant.

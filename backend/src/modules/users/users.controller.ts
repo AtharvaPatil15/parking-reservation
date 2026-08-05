@@ -18,6 +18,13 @@ export const listAdminRequestHistory = asyncHandler(async (req, res) => {
   sendSuccess(res, rows.map(toUserProfile), 200, { page: p.page, pageSize: p.pageSize, total });
 });
 
+/** GET /users/:id — the full applicant, for the approval screens' details dialog. */
+export const getUserDetail = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const { user, vehicles } = await service.getUserDetail(req.user, req.params.id);
+  sendSuccess(res, { ...toUserProfile(user), vehicles });
+});
+
 export const setApproval = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const user = await service.setApproval(

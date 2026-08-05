@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -51,6 +51,124 @@ describe('GateConsole', () => {
     renderConsole();
     expect(await screen.findByRole('button', { name: /^check in$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^check out$/i })).toBeInTheDocument();
+  });
+
+  /**
+   * The guard's landing page has to answer "is there room?" before it answers anything else — and since a
+   * walk-in registration now waits on an admin, `Free` is what tells them whether calling that admin is
+   * even worth it.
+   */
+  it('shows per-company slots with what is still free', async () => {
+    server.use(
+      http.get('*/api/v1/gate/capacity', () =>
+        HttpResponse.json({
+          success: true,
+          data: {
+            bookingDate: '2026-08-05',
+            rows: [
+              { companyId: 'c1', companyName: 'Assent', slots: 12, blocked: 2, requests: 14, allocated: 10, free: 0, inside: 7 },
+              { companyId: 'c2', companyName: 'Acme', slots: 8, blocked: 0, requests: 5, allocated: 5, free: 3, inside: 2 },
+            ],
+            building: {
+              totalSlots: 20, allottedSlots: 20, blocked: 2, requests: 19,
+              allocated: 15, free: 3, inside: 9, insideUnattributed: 0,
+            },
+          },
+        }),
+      ),
+    );
+    renderConsole();
+
+    const assent = (await screen.findByText('Assent')).closest('tr')!;
+    // Nothing left for Assent — said as "Full" rather than a bare 0, which reads as missing data.
+    expect(within(assent).getByText('Full')).toBeInTheDocument();
+    const acme = screen.getByText('Acme').closest('tr')!;
+    expect(within(acme).getByText('3')).toBeInTheDocument();
+
+    // The building line is assembled from several spans, so assert on its text content rather than
+    // hunting for a phrase that no single node owns.
+    const buildingLine = screen.getByText('Building').parentElement!;
+    expect(buildingLine.textContent).toMatch(/20 slots/);
+    expect(buildingLine.textContent).toMatch(/3 free/);
+    expect(buildingLine.textContent).toMatch(/9 inside/);
+  });
+
+  it('lists the cars it has registered that are still waiting on an admin', async () => {
+    server.use(
+      http.get('*/api/v1/vehicles/registrations', () =>
+        HttpResponse.json({
+          success: true,
+          data: [
+            {
+              id: 'vreg-1', vehicleNumber: 'MH14XY9911', displayNumber: 'MH 14 XY 9911',
+              ownerName: 'Nikhil Rao', ownerEmail: null, contactNumber: '9876500011',
+              companyId: 'c1', companyName: 'Assent', vehicleType: 'CAR', makeModel: null,
+              colour: null, notes: null, status: 'PENDING', requestedById: 'sec-1',
+              decidedById: null, decidedAt: null, decisionNote: null, vehicleId: null,
+              createdAt: '2026-08-05T05:00:00.000Z',
+            },
+          ],
+          meta: { page: 1, pageSize: 5, total: 1 },
+        }),
+      ),
+    );
+    renderConsole();
+
+    expect(await screen.findByText(/waiting for approval \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/MH 14 XY 9911/)).toBeInTheDocument();
+  });
+
+  /**
+   * The one case the gate refuses a car — and the reason has to be on screen next to the disabled button,
+   * naming who to call, not delivered as a server error after a pointless round-trip.
+   */
+  it('will not check in a car whose registration is still pending', async () => {
+    lookup({
+      vehicleNumber: 'MH14XY9911',
+      known: false,
+      vehicle: null,
+      bookingDate: '2026-08-05',
+      hasBooking: false,
+      booking: null,
+      openVisit: null,
+      pendingRegistration: {
+        id: 'vreg-1',
+        ownerName: 'Nikhil Rao',
+        companyId: 'c1',
+        companyName: 'Assent',
+        requestedAt: '2026-08-05T05:00:00.000Z',
+      },
+    });
+    renderConsole();
+    await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+    await userEvent.type(screen.getByLabelText(/car number/i), 'MH14XY9911');
+
+    expect(await screen.findByText(/waiting for assent to approve this car/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /waiting for approval/i })).toBeDisabled();
+    // The "you can still let them in" reassurance must not appear — it would contradict the hold.
+    expect(screen.queryByText(/you can still let them in/i)).not.toBeInTheDocument();
+  });
+
+  it('offers to register an unknown car, and keeps the plate already typed', async () => {
+    lookup({
+      vehicleNumber: 'MH99NEW0001',
+      known: false,
+      vehicle: null,
+      bookingDate: '2026-08-05',
+      hasBooking: false,
+      booking: null,
+      openVisit: null,
+      pendingRegistration: null,
+    });
+    renderConsole();
+    await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+    await userEvent.type(screen.getByLabelText(/car number/i), 'MH99NEW0001');
+
+    await userEvent.click(await screen.findByRole('button', { name: /register this car/i }));
+
+    // Re-keying a plate at a barrier is exactly the sort of friction that gets a feature ignored.
+    expect(await screen.findByRole('heading', { name: /register a car/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/car number/i)).toHaveValue('MH99NEW0001');
   });
 
   it('fills in the driver from the car number and shows the allocated slot', async () => {

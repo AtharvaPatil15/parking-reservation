@@ -9,6 +9,11 @@ export type GateMode = 'CHECK_IN' | 'CHECK_OUT';
 export interface GateDrawerProps {
   mode: GateMode | null;
   onClose: () => void;
+  /**
+   * Offer "register this car" for an unknown plate. Given the plate already typed, so the guard does
+   * not key it a second time.
+   */
+  onRegister?: (vehicleNumber: string) => void;
 }
 
 const timeOnly = (iso: string): string =>
@@ -22,7 +27,7 @@ const timeOnly = (iso: string): string =>
  * barrier must never be blocked by this screen. The warning is informational, and the entry is
  * flagged for the company admin to follow up.
  */
-export function GateDrawer({ mode, onClose }: GateDrawerProps) {
+export function GateDrawer({ mode, onClose, onRegister }: GateDrawerProps) {
   const [number, setNumber] = useState('');
   const { toast } = useToast();
 
@@ -46,6 +51,12 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
   const mutation = isCheckIn ? checkIn : checkOut;
   const found = lookup.data;
   const tooShort = number.trim().length < 4;
+  /**
+   * The only state in which this screen refuses a car: a walk-in registration the guard raised has not
+   * been decided yet. Disabling submit rather than letting the server 409 keeps the reason on screen
+   * next to the button, instead of appearing as an error after a pointless round-trip.
+   */
+  const heldForApproval = isCheckIn ? (found?.pendingRegistration ?? null) : null;
 
   function submit() {
     if (tooShort) return;
@@ -85,8 +96,8 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={mutation.isPending} disabled={tooShort}>
-            {isCheckIn ? 'Confirm check in' : 'Confirm check out'}
+          <Button onClick={submit} loading={mutation.isPending} disabled={tooShort || heldForApproval !== null}>
+            {heldForApproval ? 'Waiting for approval' : isCheckIn ? 'Confirm check in' : 'Confirm check out'}
           </Button>
         </>
       }
@@ -184,14 +195,34 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
                 </dl>
               </>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-sm font-semibold text-text">{found.vehicleNumber}</p>
                 <p className="text-sm text-warning">Not in the vehicle registry.</p>
+                {/* A new employee is the case this covers; a visitor is not, and the guard can still
+                    check an unregistered car straight in without registering it. */}
+                {isCheckIn && onRegister && !found.pendingRegistration && (
+                  <Button variant="secondary" size="sm" onClick={() => onRegister(number.trim())}>
+                    Register this car
+                  </Button>
+                )}
               </div>
             )}
 
-            {/* Never a blocker — say plainly what will be recorded, then let the guard proceed. */}
-            {isCheckIn && !found.hasBooking && (
+            {heldForApproval && (
+              <div className="space-y-1 rounded-control border border-warning/30 bg-warning-subtle px-3 py-2">
+                <p role="status" className="text-sm font-medium text-warning">
+                  Waiting for {heldForApproval.companyName} to approve this car.
+                </p>
+                <p className="text-sm text-text-muted">
+                  Registered for {heldForApproval.ownerName} at {timeOnly(heldForApproval.requestedAt)}. Call
+                  them, then check in once it shows as approved.
+                </p>
+              </div>
+            )}
+
+            {/* Never a blocker — say plainly what will be recorded, then let the guard proceed. Hidden
+                while the car is held: "you can still let them in" would contradict the panel above. */}
+            {isCheckIn && !found.hasBooking && !heldForApproval && (
               <p role="status" className="text-sm text-warning">
                 No parking booking for today. You can still let them in — the entry is recorded and the company
                 admin is notified.
