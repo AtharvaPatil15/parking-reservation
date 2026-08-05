@@ -61,6 +61,15 @@ export interface GateLookup {
     status: string;
     bookingType: string;
     allocatedSlotNumber: string | null;
+    /**
+     * Who the booking belongs to. Independent of `vehicle`: when the plate is not in the registry
+     * these are the only identity the gate has, so they are populated either way.
+     */
+    employeeName: string | null;
+    contactNumber: string | null;
+    companyId: string | null;
+    companyName: string | null;
+    userId: string | null;
   } | null;
   /** The still-open visit for today, if the car is already inside. */
   openVisit: { id: string; checkInAt: string } | null;
@@ -120,6 +129,13 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
           status: booking.status,
           bookingType: booking.bookingType,
           allocatedSlotNumber: booking.allocation?.slot?.slotNumber ?? null,
+          // Who the booking belongs to. For an unregistered plate this is the only identity available,
+          // so the console can name the driver instead of just saying the car is unknown.
+          employeeName: booking.user?.fullName ?? null,
+          contactNumber: booking.user?.contactNumber ?? null,
+          companyId: booking.company?.id ?? null,
+          companyName: booking.company?.name ?? null,
+          userId: booking.user?.id ?? null,
         }
       : null,
     openVisit: openVisit ? { id: openVisit.id, checkInAt: openVisit.checkInAt.toISOString() } : null,
@@ -132,7 +148,13 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
  * the registry does not know yet.
  */
 async function findTodaysBooking(vehicleNumber: string, userId: string | null, bookingDate: Date) {
-  const include = { allocation: { include: { slot: { select: { slotNumber: true } } } } } as const;
+  // The booker's identity matters on its own, not just the slot: when the plate is NOT in the registry
+  // this booking is the only thing that can tell the guard who is at the barrier.
+  const include = {
+    allocation: { include: { slot: { select: { slotNumber: true } } } },
+    user: { select: { id: true, fullName: true, contactNumber: true } },
+    company: { select: { id: true, name: true } },
+  } as const;
   const base = { bookingDate, status: { in: LIVE_BOOKING_STATUSES } };
 
   if (userId) {
@@ -179,13 +201,16 @@ export async function checkIn(securityUserId: string, input: CheckInInput, now: 
         data: {
           vehicleNumber: lookup.vehicleNumber,
           vehicleId: lookup.vehicle?.id ?? null,
-          userId: lookup.vehicle?.userId ?? null,
-          companyId: lookup.vehicle?.companyId ?? null,
+          // Registry first, then the matched booking. Taking these from the vehicle alone meant an
+          // unregistered plate recorded companyId: null even when its booking said exactly whose it
+          // was — so the visit never reached that company's gate log and only SUPER_ADMIN could see it.
+          userId: lookup.vehicle?.userId ?? lookup.booking?.userId ?? null,
+          companyId: lookup.vehicle?.companyId ?? lookup.booking?.companyId ?? null,
           bookingRequestId: lookup.booking?.id ?? null,
           bookingDate,
           hadBooking: lookup.hasBooking,
           status: 'CHECKED_IN',
-          ownerNameSnapshot: lookup.vehicle?.ownerName ?? null,
+          ownerNameSnapshot: lookup.vehicle?.ownerName ?? lookup.booking?.employeeName ?? null,
           checkInAt: now,
           checkedInById: securityUserId,
           notes: input.notes ?? null,

@@ -24,6 +24,22 @@ export const createMyVehicleSchema = z.object({
 });
 export type CreateMyVehicleInput = z.infer<typeof createMyVehicleSchema>;
 
+/**
+ * openapi `UpdateMyVehicleRequest` — same field set as create, every one optional, plus a
+ * "change something" guard so an empty PATCH is a 400 rather than a silent no-op.
+ */
+export const updateMyVehicleSchema = z
+  .object({
+    vehicleNumber: vehicleNumber.optional(),
+    displayNumber: z.string().trim().min(4).max(24).optional(),
+    vehicleType: z.enum(['CAR', 'EV_CAR', 'BIKE']).optional(),
+    makeModel: z.string().trim().min(1).max(80).nullable().optional(),
+    colour: z.string().trim().min(1).max(40).nullable().optional(),
+    notes: z.string().trim().min(1).max(500).nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: 'At least one field is required' });
+export type UpdateMyVehicleInput = z.infer<typeof updateMyVehicleSchema>;
+
 const bookingStatus = z.enum([
   'DRAFT', 'SUBMITTED', 'CANCELLED', 'ALLOCATED', 'WAITLISTED', 'REJECTED', 'RELEASED', 'EXPIRED',
 ]);

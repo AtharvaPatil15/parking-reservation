@@ -36,6 +36,7 @@ export {
   useUpdateMe,
   useMyVehicles,
   useCreateMyVehicle,
+  useUpdateMyVehicle,
   useRemoveMyVehicle,
   useMyBookings,
   useUserDashboard,

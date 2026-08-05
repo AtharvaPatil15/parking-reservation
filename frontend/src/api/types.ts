@@ -205,7 +205,11 @@ export interface paths {
         delete: operations["removeMyVehicle"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit one of the current user's saved cars
+         * @description Role: any authenticated user, own cars only. Partial update — only the supplied fields change. The car number itself may be changed and goes through the same claimability check as `POST /me/vehicles`, so the 409 behaviour is identical however a plate is set. If the new number already has a registry row this user may claim (typically one they removed earlier), the edit merges into that row and deactivates this one, because `vehicleNumber` is globally unique and gate visit history references vehicles by id.
+         */
+        patch: operations["updateMyVehicle"];
         trace?: never;
     };
     "/me/bookings": {
@@ -275,6 +279,8 @@ export interface paths {
         /**
          * Submit a parking request for the next bookable weekday
          * @description Role: USER. Creates a PRIMARY booking for a bookable weekday (Mon–Fri, D7). `travelDistanceKm` is snapshotted from the user's profile at submission (F6); `carpoolPeople` includes the driver as person 1 (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
+         *
+         *     Side effect: a `vehicleNumber` that is not yet one of the user's saved cars is added to their profile / the building vehicle registry, exactly as `POST /me/vehicles` would. Without it the gate console cannot find the car by typeahead and shows no driver or slot for it. Best-effort — if the plate already belongs to another user the booking still succeeds and no error is raised.
          */
         post: operations["createBooking"];
         delete?: never;
@@ -295,6 +301,8 @@ export interface paths {
         /**
          * Submit parking requests for several dates at once
          * @description Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`, applying the same trip details (vehicle, carpool, special requirement) to every date.
+         *
+         *     As with the single-date endpoint, an unsaved `vehicleNumber` is mirrored into the user's profile so security can find the car — once for the whole batch, and only if at least one date queued.
          *
          *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
          *
@@ -1097,6 +1105,8 @@ export interface paths {
         /**
          * Resolve owner + today's booking from a car number
          * @description Roles SECURITY, SUPER_ADMIN. The car number is normalized (uppercased, separators stripped), so any spacing works. Never 404s for an unrecognised plate — `known: false` is a normal, recordable case (D16). Also reports whether the car is already inside (`openVisit`).
+         *
+         *     `known` and `hasBooking` are INDEPENDENT. A plate absent from the registry can still carry today's booking, matched on the number typed onto the booking itself — in which case `booking` holds the driver, company and allocated slot even though `vehicle` is null. Clients must render `booking` on its own merits; hiding it behind `known` makes a booked arrival look like a stranger.
          */
         get: operations["lookupVehicle"];
         put?: never;
@@ -1355,6 +1365,17 @@ export interface components {
             /** @description Any spacing/case; normalized server-side for security lookup. */
             vehicleNumber: string;
             /** @description Optional display form shown to security. */
+            displayNumber?: string;
+            vehicleType?: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            notes?: string | null;
+        };
+        /** @description Partial edit of a saved car — same fields as create, all optional. At least one is required. Omitting a field leaves it unchanged; sending null on a nullable field clears it. Changing `vehicleNumber` also resets `displayNumber` to the new number unless one is given explicitly. */
+        UpdateMyVehicleRequest: {
+            /** @description Any spacing/case; normalized server-side. Re-checked for conflicts. */
+            vehicleNumber?: string;
+            /** @description Display form shown to security. */
             displayNumber?: string;
             vehicleType?: components["schemas"]["VehicleType"];
             makeModel?: string | null;
@@ -1801,11 +1822,18 @@ export interface components {
              */
             bookingDate: string;
             hasBooking: boolean;
+            /** @description Today's live booking for this car, matched on the registered owner or — when the plate is not in the registry — on the number typed onto the booking itself. The identity fields carry the booker, which for an unknown plate is the ONLY thing that can tell the guard who is at the barrier, so a client must not gate them on `known`. */
             booking?: {
                 id: string;
                 status: components["schemas"]["BookingStatus"];
                 bookingType: components["schemas"]["BookingType"];
                 allocatedSlotNumber?: string | null;
+                /** @description Who made the booking. */
+                employeeName?: string | null;
+                contactNumber?: string | null;
+                companyId?: string | null;
+                companyName?: string | null;
+                userId?: string | null;
             } | null;
             /** @description Set when the car is already inside and has not checked out. */
             openVisit?: {
@@ -2551,6 +2579,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateMyVehicle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMyVehicleRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated car */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getMyBookings: {

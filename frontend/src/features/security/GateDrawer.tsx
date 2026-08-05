@@ -144,50 +144,71 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
 
         {found && (
           <div className="space-y-3 rounded-control border border-border bg-surface-2/50 p-4">
-            {found.known && found.vehicle ? (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-text">{found.vehicle.displayNumber}</p>
-                  <Badge tone={found.hasBooking ? 'success' : 'warning'}>
-                    {found.hasBooking ? 'Booked today' : 'No booking today'}
-                  </Badge>
-                </div>
+            {/* `known` and `hasBooking` are independent, and this panel must not conflate them. An
+                unregistered plate can still carry today's booking (matched on the number typed onto the
+                booking), and that booking names the driver and their slot. Hiding all of it behind
+                "not in the registry" is what made a booked arrival look like a stranger to the guard. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-text">
+                {found.vehicle?.displayNumber ?? found.vehicleNumber}
+              </p>
+              <Badge tone={found.hasBooking ? 'success' : 'warning'}>
+                {found.hasBooking ? 'Booked today' : 'No booking today'}
+              </Badge>
+            </div>
+
+            {(() => {
+              // Registry first (it is the richer, curated record), then the booking.
+              const driver = found.vehicle?.ownerName ?? found.booking?.employeeName ?? null;
+              const company = found.vehicle?.companyName ?? found.booking?.companyName ?? null;
+              const contact = found.vehicle?.contactNumber ?? found.booking?.contactNumber ?? null;
+              const description = [found.vehicle?.makeModel, found.vehicle?.colour].filter(Boolean).join(' · ');
+              const slot = found.booking?.allocatedSlotNumber ?? null;
+              if (!driver && !company && !contact && !description && !slot) return null;
+              return (
                 <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-text-muted">Driver</dt>
-                  <dd className="text-text">{found.vehicle.ownerName}</dd>
-                  {found.vehicle.companyName && (
+                  {driver && (
+                    <>
+                      <dt className="text-text-muted">Driver</dt>
+                      <dd className="text-text">{driver}</dd>
+                    </>
+                  )}
+                  {company && (
                     <>
                       <dt className="text-text-muted">Company</dt>
-                      <dd className="text-text">{found.vehicle.companyName}</dd>
+                      <dd className="text-text">{company}</dd>
                     </>
                   )}
-                  {found.vehicle.contactNumber && (
+                  {contact && (
                     <>
                       <dt className="text-text-muted">Contact</dt>
-                      <dd className="text-text">{found.vehicle.contactNumber}</dd>
+                      <dd className="text-text">{contact}</dd>
                     </>
                   )}
-                  {(found.vehicle.makeModel || found.vehicle.colour) && (
+                  {description && (
                     <>
                       <dt className="text-text-muted">Vehicle</dt>
-                      <dd className="text-text">
-                        {[found.vehicle.makeModel, found.vehicle.colour].filter(Boolean).join(' · ')}
-                      </dd>
+                      <dd className="text-text">{description}</dd>
                     </>
                   )}
-                  {found.booking?.allocatedSlotNumber && (
+                  {slot && (
                     <>
                       <dt className="text-text-muted">Slot</dt>
-                      <dd className="font-medium text-text">{found.booking.allocatedSlotNumber}</dd>
+                      <dd className="font-medium text-text">{slot}</dd>
                     </>
                   )}
                 </dl>
-              </>
-            ) : (
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-text">{found.vehicleNumber}</p>
-                <p className="text-sm text-warning">Not in the vehicle registry.</p>
-              </div>
+              );
+            })()}
+
+            {/* Still worth saying — it explains why there is no car description, and tells the guard the
+                plate is worth adding to the registry. Now a footnote, not a replacement for the facts. */}
+            {!found.known && (
+              <p className="text-sm text-warning">
+                {found.hasBooking
+                  ? 'Not in the vehicle registry — matched by the number on the booking.'
+                  : 'Not in the vehicle registry.'}
+              </p>
             )}
 
             {/* Never a blocker — say plainly what will be recorded, then let the guard proceed. */}

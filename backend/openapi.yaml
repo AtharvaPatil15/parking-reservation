@@ -337,6 +337,44 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
 
   /me/vehicles/{id}:
+    patch:
+      tags: [User]
+      operationId: updateMyVehicle
+      summary: Edit one of the current user's saved cars
+      description: >
+        Role: any authenticated user, own cars only. Partial update — only the supplied fields change.
+        The car number itself may be changed and goes through the same claimability check as
+        `POST /me/vehicles`, so the 409 behaviour is identical however a plate is set. If the new number
+        already has a registry row this user may claim (typically one they removed earlier), the edit
+        merges into that row and deactivates this one, because `vehicleNumber` is globally unique and
+        gate visit history references vehicles by id.
+      x-maturity: DEMO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMyVehicleRequest' }
+      responses:
+        '200':
+          description: The updated car
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VehicleSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [User]
       operationId: removeMyVehicle
@@ -512,6 +550,12 @@ paths:
         (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company
         employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or
         a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
+
+
+        Side effect: a `vehicleNumber` that is not yet one of the user's saved cars is added to their
+        profile / the building vehicle registry, exactly as `POST /me/vehicles` would. Without it the
+        gate console cannot find the car by typeahead and shows no driver or slot for it. Best-effort —
+        if the plate already belongs to another user the booking still succeeds and no error is raised.
       x-maturity: DEMO
       x-required-roles: [USER]
       requestBody:
@@ -564,6 +608,10 @@ paths:
       description: >
         Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`,
         applying the same trip details (vehicle, carpool, special requirement) to every date.
+
+
+        As with the single-date endpoint, an unsaved `vehicleNumber` is mirrored into the user's profile
+        so security can find the car — once for the whole batch, and only if at least one date queued.
 
 
         **Partial success is intentional and is why this returns 200, never 201.** Each date is
@@ -2076,6 +2124,13 @@ paths:
         Roles SECURITY, SUPER_ADMIN. The car number is normalized (uppercased, separators stripped),
         so any spacing works. Never 404s for an unrecognised plate — `known: false` is a normal,
         recordable case (D16). Also reports whether the car is already inside (`openVisit`).
+
+
+        `known` and `hasBooking` are INDEPENDENT. A plate absent from the registry can still carry
+        today's booking, matched on the number typed onto the booking itself — in which case `booking`
+        holds the driver, company and allocated slot even though `vehicle` is null. Clients must render
+        `booking` on its own merits; hiding it behind `known` makes a booked arrival look like a
+        stranger.
       x-maturity: MVP
       x-required-roles: [SECURITY, SUPER_ADMIN]
       parameters:
@@ -2555,6 +2610,25 @@ components:
         displayNumber:
           type: string
           description: Optional display form shown to security.
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        makeModel: { type: string, nullable: true }
+        colour: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    UpdateMyVehicleRequest:
+      type: object
+      minProperties: 1
+      description: >
+        Partial edit of a saved car — same fields as create, all optional. At least one is required.
+        Omitting a field leaves it unchanged; sending null on a nullable field clears it. Changing
+        `vehicleNumber` also resets `displayNumber` to the new number unless one is given explicitly.
+      properties:
+        vehicleNumber:
+          type: string
+          description: Any spacing/case; normalized server-side. Re-checked for conflicts.
+        displayNumber:
+          type: string
+          description: Display form shown to security.
         vehicleType: { $ref: '#/components/schemas/VehicleType' }
         makeModel: { type: string, nullable: true }
         colour: { type: string, nullable: true }
@@ -3110,12 +3184,22 @@ components:
         booking:
           type: object
           nullable: true
+          description: >
+            Today's live booking for this car, matched on the registered owner or — when the plate is
+            not in the registry — on the number typed onto the booking itself. The identity fields carry
+            the booker, which for an unknown plate is the ONLY thing that can tell the guard who is at
+            the barrier, so a client must not gate them on `known`.
           required: [id, status, bookingType]
           properties:
             id: { type: string }
             status: { $ref: '#/components/schemas/BookingStatus' }
             bookingType: { $ref: '#/components/schemas/BookingType' }
             allocatedSlotNumber: { type: string, nullable: true }
+            employeeName: { type: string, nullable: true, description: Who made the booking. }
+            contactNumber: { type: string, nullable: true }
+            companyId: { type: string, nullable: true }
+            companyName: { type: string, nullable: true }
+            userId: { type: string, nullable: true }
         openVisit:
           type: object
           nullable: true

@@ -13,7 +13,9 @@ import { parseCalendarDate, currentIstCalendarDate } from './bookings.time';
 import { checkRequestable, toIsoDate } from './bookings.window';
 import { loadWindowConfig } from './bookings.windowConfig';
 import { score, rankCandidates } from '../allocation/score';
+import { ensureVehicleOnProfile } from '../me/me.service';
 import { buildAuditData } from '../../lib/audit';
+import { logger } from '../../lib/logger';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
 import type {
@@ -181,7 +183,43 @@ async function assertTripDetails(input: TripDetails): Promise<{ trimmedEmails: s
   return { trimmedEmails };
 }
 
-export async function createBooking(userId: string, input: CreateBookingInput, now: Date = new Date()) {
+/**
+ * Mirror a booking's car number into the user's own profile / the building vehicle registry.
+ *
+ * A plate typed straight into the booking form used to exist only as a `BookingRequest.vehicleNumber`
+ * snapshot. The gate console keys its typeahead on the `Vehicle` table, and shows the driver, the
+ * "Booked today" badge and the allocated slot only for a plate it recognises — so an unsaved car
+ * arrived at the barrier looking like a stranger even though the booking was right there.
+ *
+ * Saving it once, at booking time, makes every later arrival on that car a recognised one.
+ */
+async function mirrorVehicleToProfile(
+  userId: string,
+  vehicleNumber: string,
+  vehicleType: CreateBookingInput['vehicleType'],
+): Promise<void> {
+  // The profile registry only models these three; bookings are car-only today (`assertTripDetails`),
+  // so anything else falls back to the registry's own CAR default rather than being refused.
+  const registryType =
+    vehicleType === 'CAR' || vehicleType === 'EV_CAR' || vehicleType === 'BIKE' ? vehicleType : undefined;
+  const result = await ensureVehicleOnProfile(userId, vehicleNumber, registryType);
+  if (!result.registered) {
+    // Expected for a plate another colleague already owns. Worth a line, never worth failing on.
+    logger.info({ userId, vehicleNumber, reason: result.reason }, 'Booking car not mirrored to the registry');
+  }
+}
+
+export async function createBooking(
+  userId: string,
+  input: CreateBookingInput,
+  now: Date = new Date(),
+  /**
+   * Whether to mirror `vehicleNumber` into the user's profile/registry after a successful create.
+   * The batch path sets this false and does it once itself — the mirror is idempotent, but there is no
+   * point repeating it per date.
+   */
+  registerVehicle = true,
+) {
   // 1. Rolling booking window: valid date + bookable weekday (D7) + inside the open window (D9/D11).
   const windowCfg = await loadWindowConfig();
   const windowCheck = checkRequestable(input.bookingDate, now, windowCfg);
@@ -231,7 +269,7 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
   // "one PRIMARY request per user per date", which the composite unique enforces directly. A plain
   // transaction is therefore enough, and cheaper — it just keeps the guards and the insert together.
   try {
-    return await prisma.$transaction(async (tx) => {
+    const booking = await prisma.$transaction(async (tx) => {
       // Once a date's run has completed it is decided and closed, whatever the window says.
       const decided = await tx.allocationRun.findFirst({
         where: { runType: 'PRIMARY', bookingDate: bookingDateUtc, status: 'COMPLETED' },
@@ -273,6 +311,13 @@ export async function createBooking(userId: string, input: CreateBookingInput, n
         },
       });
     });
+
+    // Deliberately AFTER the transaction commits, not inside it: a registry clash must never roll back
+    // a perfectly valid booking. See `ensureVehicleOnProfile` for why failures are swallowed.
+    if (registerVehicle && input.vehicleNumber) {
+      await mirrorVehicleToProfile(userId, input.vehicleNumber, input.vehicleType);
+    }
+    return booking;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = Array.isArray(err.meta?.target)
@@ -327,7 +372,8 @@ export async function createBookings(
     try {
       // Fresh object per date: createBooking mutates `input.vehicleType` (car-only normalisation), so
       // sharing one would leak that write across iterations.
-      const booking = await createBooking(userId, { ...shared, bookingDate }, now);
+      // `registerVehicle: false` — the car is the same on every date, so it is mirrored once below.
+      const booking = await createBooking(userId, { ...shared, bookingDate }, now, false);
       results.push({ bookingDate, outcome: 'CREATED', booking });
     } catch (err) {
       if (err instanceof AppError) {
@@ -339,6 +385,13 @@ export async function createBookings(
   }
 
   const createdCount = results.filter((r) => r.outcome === 'CREATED').length;
+
+  // Mirror the shared car once, and only if at least one date actually queued — a batch that failed
+  // every date should not leave a new car behind in the registry.
+  if (createdCount > 0 && shared.vehicleNumber) {
+    await mirrorVehicleToProfile(userId, shared.vehicleNumber, shared.vehicleType);
+  }
+
   return {
     requested: results.length,
     createdCount,

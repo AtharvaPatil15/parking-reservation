@@ -135,6 +135,46 @@ describe('GateConsole', () => {
     expect(screen.getByRole('button', { name: /confirm check in/i })).toBeEnabled();
   });
 
+  /**
+   * `known` and `hasBooking` are independent, and the console used to conflate them: everything useful
+   * — driver, "Booked today", the allocated slot — rendered only for a registry hit, so a plate typed
+   * straight into the booking form arrived looking like a stranger while the API was already returning
+   * its booking and slot. The guard saw "Not in the vehicle registry" and nothing else.
+   */
+  it('shows the driver and slot for an unregistered plate that still has a booking', async () => {
+    lookup({
+      vehicleNumber: 'KA05ZZ9999',
+      known: false,
+      vehicle: null,
+      bookingDate: '2026-08-03',
+      hasBooking: true,
+      booking: {
+        id: 'bk-9',
+        status: 'ALLOCATED',
+        bookingType: 'PRIMARY',
+        allocatedSlotNumber: 'B1-07',
+        employeeName: 'Rahul Mehta',
+        contactNumber: '9822001102',
+        companyId: 'mock-co',
+        companyName: 'Mock Co',
+        userId: 'usr-9',
+      },
+      openVisit: null,
+    });
+    renderConsole();
+    await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+    await userEvent.type(screen.getByLabelText(/car number/i), 'KA05ZZ9999');
+
+    expect(await screen.findByText('Booked today')).toBeInTheDocument();
+    expect(screen.getByText('Rahul Mehta')).toBeInTheDocument();
+    expect(screen.getByText('Mock Co')).toBeInTheDocument();
+    expect(screen.getByText('B1-07')).toBeInTheDocument();
+    // The registry note stays, but as a footnote that explains itself — not as the whole answer.
+    expect(screen.getByText(/matched by the number on the booking/i)).toBeInTheDocument();
+    // And no scary "no booking today" warning, because there IS one.
+    expect(screen.queryByText(/you can still let them in/i)).not.toBeInTheDocument();
+  });
+
   it('flags a car that is already inside', async () => {
     lookup({
       vehicleNumber: 'MH12AB1234',
