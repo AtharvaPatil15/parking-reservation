@@ -3,6 +3,7 @@ import { Badge, Button, Drawer, Input, Spinner, useToast } from '../../component
 import { useGateCheckIn, useGateCheckOut, useVehicleLookup, useVehicleSearch } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { cn } from '../../lib/cn';
+import { normalizePlate } from '../../lib/plate';
 
 export type GateMode = 'CHECK_IN' | 'CHECK_OUT';
 
@@ -46,6 +47,27 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
   const mutation = isCheckIn ? checkIn : checkOut;
   const found = lookup.data;
   const tooShort = number.trim().length < 4;
+
+  /**
+   * Is the typed text a *fragment* of a real plate rather than a plate?
+   *
+   * The two queries behind this drawer answer different questions: the typeahead matches a SUBSTRING
+   * (`vehicleNumber contains`), while the lookup matches the plate EXACTLY. So typing `7777` when
+   * `MH15LM7777` is registered legitimately produces a suggestion AND `known: false` — and the drawer
+   * used to render both, contradicting itself: "registered to Assent user 1" directly above "Not in the
+   * vehicle registry". Worse, Confirm stayed live, so an unfinished keystroke could be recorded as a
+   * real visit against the plate `7777`.
+   *
+   * The registry containing cars that *contain* the input, but none that *equal* it, is exactly the
+   * signal that the guard has not finished typing.
+   */
+  const typedPlate = normalizePlate(number);
+  const suggestionList = suggestions.data ?? [];
+  const looksLikePrefix =
+    !tooShort &&
+    !found?.known &&
+    suggestionList.length > 0 &&
+    !suggestionList.some((v) => v.vehicleNumber === typedPlate);
 
   function submit() {
     if (tooShort) return;
@@ -142,52 +164,86 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
           </p>
         )}
 
-        {found && (
+        {/* An unfinished plate gets a prompt, never a verdict — see `looksLikePrefix`. Deliberately not
+            disabling Confirm: the barrier must never be blocked (D16), so this warns about what would be
+            recorded and points at the suggestions instead of refusing. */}
+        {looksLikePrefix && (
+          <p
+            role="status"
+            className="rounded-control border border-warning/30 bg-warning-subtle px-3 py-2 text-sm text-warning"
+          >
+            <span className="font-medium">{typedPlate}</span> is not a full car number — pick the car above,
+            or keep typing. Confirming now would record the visit against “{typedPlate}” as typed.
+          </p>
+        )}
+
+        {found && !looksLikePrefix && (
           <div className="space-y-3 rounded-control border border-border bg-surface-2/50 p-4">
-            {found.known && found.vehicle ? (
-              <>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-text">{found.vehicle.displayNumber}</p>
-                  <Badge tone={found.hasBooking ? 'success' : 'warning'}>
-                    {found.hasBooking ? 'Booked today' : 'No booking today'}
-                  </Badge>
-                </div>
+            {/* `known` and `hasBooking` are independent, and this panel must not conflate them. An
+                unregistered plate can still carry today's booking (matched on the number typed onto the
+                booking), and that booking names the driver and their slot. Hiding all of it behind
+                "not in the registry" is what made a booked arrival look like a stranger to the guard. */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-text">
+                {found.vehicle?.displayNumber ?? found.vehicleNumber}
+              </p>
+              <Badge tone={found.hasBooking ? 'success' : 'warning'}>
+                {found.hasBooking ? 'Booked today' : 'No booking today'}
+              </Badge>
+            </div>
+
+            {(() => {
+              // Registry first (it is the richer, curated record), then the booking.
+              const driver = found.vehicle?.ownerName ?? found.booking?.employeeName ?? null;
+              const company = found.vehicle?.companyName ?? found.booking?.companyName ?? null;
+              const contact = found.vehicle?.contactNumber ?? found.booking?.contactNumber ?? null;
+              const description = [found.vehicle?.makeModel, found.vehicle?.colour].filter(Boolean).join(' · ');
+              const slot = found.booking?.allocatedSlotNumber ?? null;
+              if (!driver && !company && !contact && !description && !slot) return null;
+              return (
                 <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-sm">
-                  <dt className="text-text-muted">Driver</dt>
-                  <dd className="text-text">{found.vehicle.ownerName}</dd>
-                  {found.vehicle.companyName && (
+                  {driver && (
+                    <>
+                      <dt className="text-text-muted">Driver</dt>
+                      <dd className="text-text">{driver}</dd>
+                    </>
+                  )}
+                  {company && (
                     <>
                       <dt className="text-text-muted">Company</dt>
-                      <dd className="text-text">{found.vehicle.companyName}</dd>
+                      <dd className="text-text">{company}</dd>
                     </>
                   )}
-                  {found.vehicle.contactNumber && (
+                  {contact && (
                     <>
                       <dt className="text-text-muted">Contact</dt>
-                      <dd className="text-text">{found.vehicle.contactNumber}</dd>
+                      <dd className="text-text">{contact}</dd>
                     </>
                   )}
-                  {(found.vehicle.makeModel || found.vehicle.colour) && (
+                  {description && (
                     <>
                       <dt className="text-text-muted">Vehicle</dt>
-                      <dd className="text-text">
-                        {[found.vehicle.makeModel, found.vehicle.colour].filter(Boolean).join(' · ')}
-                      </dd>
+                      <dd className="text-text">{description}</dd>
                     </>
                   )}
-                  {found.booking?.allocatedSlotNumber && (
+                  {slot && (
                     <>
                       <dt className="text-text-muted">Slot</dt>
-                      <dd className="font-medium text-text">{found.booking.allocatedSlotNumber}</dd>
+                      <dd className="font-medium text-text">{slot}</dd>
                     </>
                   )}
                 </dl>
-              </>
-            ) : (
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-text">{found.vehicleNumber}</p>
-                <p className="text-sm text-warning">Not in the vehicle registry.</p>
-              </div>
+              );
+            })()}
+
+            {/* Still worth saying — it explains why there is no car description, and tells the guard the
+                plate is worth adding to the registry. Now a footnote, not a replacement for the facts. */}
+            {!found.known && (
+              <p className="text-sm text-warning">
+                {found.hasBooking
+                  ? 'Not in the vehicle registry — matched by the number on the booking.'
+                  : 'Not in the vehicle registry.'}
+              </p>
             )}
 
             {/* Never a blocker — say plainly what will be recorded, then let the guard proceed. */}

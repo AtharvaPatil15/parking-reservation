@@ -24,7 +24,7 @@ export interface AdminBookingsFilter {
  * their own company server-side; SUPER_ADMIN sees all and may pass `companyId`/`date` filters.
  */
 export function useAdminBookings(filter: AdminBookingsFilter = {}) {
-  const { date, companyId, page = 1, pageSize = 20 } = filter;
+  const { date, companyId, page = 1, pageSize = 10 } = filter;
   return useQuery<{ items: AdminBooking[]; meta: PageMeta }>({
     queryKey: queryKeys.adminBookings(date ?? '', companyId ?? '', page),
     queryFn: () =>
