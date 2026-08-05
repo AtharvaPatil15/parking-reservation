@@ -3,6 +3,7 @@ import { Badge, Button, Drawer, Input, Spinner, useToast } from '../../component
 import { useGateCheckIn, useGateCheckOut, useVehicleLookup, useVehicleSearch } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 import { cn } from '../../lib/cn';
+import { normalizePlate } from '../../lib/plate';
 
 export type GateMode = 'CHECK_IN' | 'CHECK_OUT';
 
@@ -46,6 +47,27 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
   const mutation = isCheckIn ? checkIn : checkOut;
   const found = lookup.data;
   const tooShort = number.trim().length < 4;
+
+  /**
+   * Is the typed text a *fragment* of a real plate rather than a plate?
+   *
+   * The two queries behind this drawer answer different questions: the typeahead matches a SUBSTRING
+   * (`vehicleNumber contains`), while the lookup matches the plate EXACTLY. So typing `7777` when
+   * `MH15LM7777` is registered legitimately produces a suggestion AND `known: false` — and the drawer
+   * used to render both, contradicting itself: "registered to Assent user 1" directly above "Not in the
+   * vehicle registry". Worse, Confirm stayed live, so an unfinished keystroke could be recorded as a
+   * real visit against the plate `7777`.
+   *
+   * The registry containing cars that *contain* the input, but none that *equal* it, is exactly the
+   * signal that the guard has not finished typing.
+   */
+  const typedPlate = normalizePlate(number);
+  const suggestionList = suggestions.data ?? [];
+  const looksLikePrefix =
+    !tooShort &&
+    !found?.known &&
+    suggestionList.length > 0 &&
+    !suggestionList.some((v) => v.vehicleNumber === typedPlate);
 
   function submit() {
     if (tooShort) return;
@@ -142,7 +164,20 @@ export function GateDrawer({ mode, onClose }: GateDrawerProps) {
           </p>
         )}
 
-        {found && (
+        {/* An unfinished plate gets a prompt, never a verdict — see `looksLikePrefix`. Deliberately not
+            disabling Confirm: the barrier must never be blocked (D16), so this warns about what would be
+            recorded and points at the suggestions instead of refusing. */}
+        {looksLikePrefix && (
+          <p
+            role="status"
+            className="rounded-control border border-warning/30 bg-warning-subtle px-3 py-2 text-sm text-warning"
+          >
+            <span className="font-medium">{typedPlate}</span> is not a full car number — pick the car above,
+            or keep typing. Confirming now would record the visit against “{typedPlate}” as typed.
+          </p>
+        )}
+
+        {found && !looksLikePrefix && (
           <div className="space-y-3 rounded-control border border-border bg-surface-2/50 p-4">
             {/* `known` and `hasBooking` are independent, and this panel must not conflate them. An
                 unregistered plate can still carry today's booking (matched on the number typed onto the
