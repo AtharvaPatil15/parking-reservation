@@ -518,7 +518,7 @@ export function BookingForm() {
                 list={savedCars.length > 0 ? 'profile-cars' : undefined}
                 {...register('vehicleNumber')}
                 error={errors.vehicleNumber?.message}
-                hint={savedCars.length > 0 ? 'Choose a saved car or type another number.' : 'Optional - helps security match you at the gate.'}
+                hint={savedCars.length > 0 ? 'Choose a saved car or type another number.  (EX-MH14AB1234)' : 'Optional - helps security match you at the gate.'}
               />
               {savedCars.length > 0 && (
                 <datalist id="profile-cars">

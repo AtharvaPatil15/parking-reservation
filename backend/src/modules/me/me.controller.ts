@@ -67,6 +67,11 @@ export const createMyVehicle = asyncHandler(async (req, res) => {
   sendSuccess(res, toVehicle(await service.createMyVehicle(req.user.id, req.body)), 201);
 });
 
+export const updateMyVehicle = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  sendSuccess(res, toVehicle(await service.updateMyVehicle(req.user.id, req.params.id, req.body)), 200);
+});
+
 export const removeMyVehicle = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   await service.removeMyVehicle(req.user.id, req.params.id);

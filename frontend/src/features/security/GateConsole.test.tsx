@@ -253,6 +253,142 @@ describe('GateConsole', () => {
     expect(screen.getByRole('button', { name: /confirm check in/i })).toBeEnabled();
   });
 
+  /**
+   * `known` and `hasBooking` are independent, and the console used to conflate them: everything useful
+   * — driver, "Booked today", the allocated slot — rendered only for a registry hit, so a plate typed
+   * straight into the booking form arrived looking like a stranger while the API was already returning
+   * its booking and slot. The guard saw "Not in the vehicle registry" and nothing else.
+   */
+  it('shows the driver and slot for an unregistered plate that still has a booking', async () => {
+    lookup({
+      vehicleNumber: 'KA05ZZ9999',
+      known: false,
+      vehicle: null,
+      bookingDate: '2026-08-03',
+      hasBooking: true,
+      booking: {
+        id: 'bk-9',
+        status: 'ALLOCATED',
+        bookingType: 'PRIMARY',
+        allocatedSlotNumber: 'B1-07',
+        employeeName: 'Rahul Mehta',
+        contactNumber: '9822001102',
+        companyId: 'mock-co',
+        companyName: 'Mock Co',
+        userId: 'usr-9',
+      },
+      openVisit: null,
+    });
+    renderConsole();
+    await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+    await userEvent.type(screen.getByLabelText(/car number/i), 'KA05ZZ9999');
+
+    expect(await screen.findByText('Booked today')).toBeInTheDocument();
+    expect(screen.getByText('Rahul Mehta')).toBeInTheDocument();
+    expect(screen.getByText('Mock Co')).toBeInTheDocument();
+    expect(screen.getByText('B1-07')).toBeInTheDocument();
+    // The registry note stays, but as a footnote that explains itself — not as the whole answer.
+    expect(screen.getByText(/matched by the number on the booking/i)).toBeInTheDocument();
+    // And no scary "no booking today" warning, because there IS one.
+    expect(screen.queryByText(/you can still let them in/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The two queries behind the field answer different questions: the typeahead matches a substring, the
+   * lookup matches the plate exactly. Typing a fragment of a registered plate therefore produces a
+   * suggestion AND `known: false` — and the drawer used to render both, so it said "registered to Assent
+   * user 1" directly above "Not in the vehicle registry", with Confirm still live.
+   */
+  describe('a half-typed plate', () => {
+    const FULL = {
+      id: 'veh-7',
+      vehicleNumber: 'MH15LM7777',
+      displayNumber: 'MH15LM7777',
+      ownerName: 'Assent user 1',
+      ownerEmail: 'user1@assent.example',
+      contactNumber: '9822001177',
+      vehicleType: 'CAR',
+      makeModel: null,
+      colour: null,
+      companyId: 'mock-co',
+      companyName: 'Assent',
+    };
+
+    /** Substring search finds the car; exact lookup only resolves the complete plate. */
+    function registryWith(vehicle: typeof FULL) {
+      server.use(
+        http.get('*/api/v1/vehicles', ({ request }) => {
+          const term = (new URL(request.url).searchParams.get('search') ?? '').toUpperCase();
+          const hit = term && vehicle.vehicleNumber.includes(term.replace(/[^A-Z0-9]/g, ''));
+          return HttpResponse.json({ success: true, data: hit ? [vehicle] : [] });
+        }),
+        http.get('*/api/v1/vehicles/lookup', ({ request }) => {
+          const plate = (new URL(request.url).searchParams.get('number') ?? '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+          const exact = plate === vehicle.vehicleNumber;
+          return HttpResponse.json({
+            success: true,
+            data: {
+              vehicleNumber: plate,
+              known: exact,
+              vehicle: exact ? vehicle : null,
+              bookingDate: '2026-08-03',
+              hasBooking: false,
+              booking: null,
+              openVisit: null,
+            },
+          });
+        }),
+      );
+    }
+
+    it('prompts instead of contradicting itself', async () => {
+      registryWith(FULL);
+      renderConsole();
+      await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+      await userEvent.type(screen.getByLabelText(/car number/i), '7777');
+
+      // The suggestion proves the car IS registered…
+      expect(await screen.findByText('MH15LM7777')).toBeInTheDocument();
+      // …so the drawer must not simultaneously declare it unregistered.
+      expect(screen.queryByText(/not in the vehicle registry/i)).not.toBeInTheDocument();
+      expect(screen.queryByText('No booking today')).not.toBeInTheDocument();
+      expect(screen.queryByText(/you can still let them in/i)).not.toBeInTheDocument();
+
+      // A prompt, and an honest statement of what confirming would do.
+      expect(screen.getByText(/is not a full car number/i)).toBeInTheDocument();
+      expect(screen.getByText(/record the visit against/i)).toBeInTheDocument();
+      // Still submittable — the barrier is never blocked (D16).
+      expect(screen.getByRole('button', { name: /confirm check in/i })).toBeEnabled();
+    });
+
+    it('resolves to the real verdict once the suggestion is picked', async () => {
+      registryWith(FULL);
+      renderConsole();
+      await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+      await userEvent.type(screen.getByLabelText(/car number/i), '7777');
+
+      await userEvent.click(await screen.findByRole('button', { name: /MH15LM7777/i }));
+
+      expect(await screen.findByText('Assent user 1')).toBeInTheDocument();
+      expect(screen.queryByText(/is not a full car number/i)).not.toBeInTheDocument();
+    });
+
+    it('still gives a plain verdict for a plate that is genuinely unknown', async () => {
+      // No suggestions at all — nothing in the registry contains it, so the input is not a fragment of
+      // anything and "not in the registry" is the correct, useful answer.
+      registryWith(FULL);
+      renderConsole();
+      await userEvent.click(await screen.findByRole('button', { name: /^check in$/i }));
+      await userEvent.type(screen.getByLabelText(/car number/i), 'ZZ99QQ0000');
+
+      expect(await screen.findByText(/not in the vehicle registry/i)).toBeInTheDocument();
+      expect(screen.queryByText(/is not a full car number/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /confirm check in/i })).toBeEnabled();
+    });
+  });
+
   it('flags a car that is already inside', async () => {
     lookup({
       vehicleNumber: 'MH12AB1234',
