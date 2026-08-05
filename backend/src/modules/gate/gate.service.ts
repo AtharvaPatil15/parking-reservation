@@ -1,13 +1,15 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors';
 import { isUniqueViolation } from '../../lib/prismaErrors';
 import { normalizePlate } from '../../lib/plate';
 import { buildAuditData } from '../../lib/audit';
 import { currentIstCalendarDate, isValidCalendarDate, parseCalendarDate } from '../bookings/bookings.time';
 import { LIVE_BOOKING_STATUSES } from '../bookings/bookings.availability';
+import { countInServiceSlots, getEffectiveQuota } from '../slots/slots.service';
 import type { PageArgs } from '../../lib/pagination';
 import type { Role } from '../../lib/roles';
+import type { CreateRegistrationInput, RegistrationDecisionInput } from './gate.schema';
 
 /**
  * Gate service (Phase 7 §5) — the security persona's whole job: look a car number up, stamp a
@@ -73,6 +75,17 @@ export interface GateLookup {
   } | null;
   /** The still-open visit for today, if the car is already inside. */
   openVisit: { id: string; checkInAt: string } | null;
+  /**
+   * An outstanding walk-in registration for this plate. While one exists the car is **not** admitted —
+   * surfaced here so the drawer can say who has to approve it instead of just greying out the button.
+   */
+  pendingRegistration: {
+    id: string;
+    ownerName: string;
+    companyId: string;
+    companyName: string;
+    requestedAt: string;
+  } | null;
 }
 
 /**
@@ -89,7 +102,7 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
   }
   const bookingDate = currentIstCalendarDate(now);
 
-  const [vehicle, openVisit] = await Promise.all([
+  const [vehicle, openVisit, pending] = await Promise.all([
     prisma.vehicle.findFirst({
       where: { vehicleNumber, isActive: true },
       include: { company: { select: { name: true } } },
@@ -98,6 +111,10 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
       where: { vehicleNumber, bookingDate, status: 'CHECKED_IN' },
       orderBy: { checkInAt: 'desc' },
       select: { id: true, checkInAt: true },
+    }),
+    prisma.vehicleRegistrationRequest.findFirst({
+      where: { vehicleNumber, status: 'PENDING' },
+      include: registrationInclude,
     }),
   ]);
 
@@ -139,6 +156,15 @@ export async function lookupVehicle(rawNumber: string, now: Date = new Date()): 
         }
       : null,
     openVisit: openVisit ? { id: openVisit.id, checkInAt: openVisit.checkInAt.toISOString() } : null,
+    pendingRegistration: pending
+      ? {
+          id: pending.id,
+          ownerName: pending.ownerName,
+          companyId: pending.companyId,
+          companyName: pending.company.name,
+          requestedAt: pending.createdAt.toISOString(),
+        }
+      : null,
   };
 }
 
@@ -191,6 +217,18 @@ export async function checkIn(securityUserId: string, input: CheckInInput, now: 
   if (lookup.openVisit) {
     throw new ConflictError(
       `${lookup.vehicleNumber} is already checked in (since ${lookup.openVisit.checkInAt}) — check it out first`,
+    );
+  }
+  /**
+   * A car with an outstanding walk-in registration waits (Prithviraj, 2026-08-05: "once approved let
+   * them in"). This is the one place the gate refuses a car, and it is a narrow exception to D16 rather
+   * than a retreat from it: the plate is only in this state because a guard chose to register it, i.e.
+   * declared it a new employee rather than a visitor. An unrecognised plate nobody registered is still
+   * recorded and admitted, exactly as before.
+   */
+  if (lookup.pendingRegistration) {
+    throw new ConflictError(
+      `${lookup.vehicleNumber} is waiting for ${lookup.pendingRegistration.companyName} to approve its registration — call them, then check in once it shows as approved`,
     );
   }
   const bookingDate = parseCalendarDate(lookup.bookingDate);
@@ -364,6 +402,363 @@ export function countUnbookedEntries(
       ...(principal.role === 'SUPER_ADMIN' ? {} : { companyId: principal.companyId }),
     },
   });
+}
+
+// ---- Walk-in vehicle registration (2026-08-05) ------------------------------
+
+const registrationInclude = { company: { select: { name: true } } } as const;
+
+/**
+ * Register a walk-in car — the guard met a new employee at the barrier whose car nobody had added.
+ *
+ * Creates a **request**, not a Vehicle: the named company's admin (or the Super Admin) decides. Until
+ * they do, `checkIn` refuses the plate, so "once approved, let them in" is enforced by the gate rather
+ * than left to the guard to remember.
+ */
+export async function createRegistration(
+  securityUserId: string,
+  input: CreateRegistrationInput,
+): Promise<unknown> {
+  const vehicleNumber = normalizePlate(input.vehicleNumber);
+  if (!vehicleNumber) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'vehicleNumber', message: 'Enter a car number' },
+    ]);
+  }
+
+  const company = await prisma.company.findFirst({
+    where: { id: input.companyId, deletedAt: null, status: 'ACTIVE' },
+    select: { id: true, name: true },
+  });
+  if (!company) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'companyId', message: 'Company not found or not active' },
+    ]);
+  }
+
+  // Already in the registry — there is nothing to approve, and the guard should just check them in.
+  const existing = await prisma.vehicle.findFirst({ where: { vehicleNumber, isActive: true } });
+  if (existing) {
+    throw new ConflictError(`${vehicleNumber} is already registered — check it in as normal`);
+  }
+  const pending = await prisma.vehicleRegistrationRequest.findFirst({
+    where: { vehicleNumber, status: 'PENDING' },
+    include: registrationInclude,
+  });
+  if (pending) {
+    throw new ConflictError(
+      `${vehicleNumber} is already waiting for approval from ${pending.company.name}`,
+    );
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const created = await tx.vehicleRegistrationRequest.create({
+        data: {
+          vehicleNumber,
+          displayNumber: input.displayNumber?.trim() || input.vehicleNumber.trim().toUpperCase(),
+          ownerName: input.ownerName,
+          ownerEmail: input.ownerEmail ?? null,
+          contactNumber: input.contactNumber ?? null,
+          companyId: company.id,
+          vehicleType: input.vehicleType ?? 'CAR',
+          makeModel: input.makeModel ?? null,
+          colour: input.colour ?? null,
+          notes: input.notes ?? null,
+          requestedById: securityUserId,
+        },
+        include: registrationInclude,
+      });
+      await tx.auditLog.create({
+        data: buildAuditData({
+          actionType: 'VEHICLE_REGISTRATION_REQUESTED',
+          entityType: 'VehicleRegistrationRequest',
+          entityId: created.id,
+          newValue: {
+            vehicleNumber,
+            ownerName: created.ownerName,
+            companyId: company.id,
+            requestedById: securityUserId,
+          },
+        }),
+      });
+      return created;
+    });
+  } catch (err) {
+    // The partial unique index caught a concurrent duplicate for the same plate.
+    if (isUniqueViolation(err)) {
+      throw new ConflictError(`${vehicleNumber} is already waiting for approval`);
+    }
+    throw err;
+  }
+}
+
+/**
+ * List registration requests, scoped by who is asking:
+ *  - COMPANY_ADMIN → their own company's, and only theirs. Approving is a tenant decision.
+ *  - SUPER_ADMIN   → every company's, narrowable with `companyId`.
+ *  - SECURITY      → the ones **they** submitted, whatever the company. The guard has to know when a
+ *    request has been approved, otherwise "once approved let them in" leaves them phoning the admin
+ *    back to ask. Scoped to their own submissions, not the whole building's queue.
+ */
+export async function listRegistrations(
+  principal: { id: string; role: Role; companyId: string },
+  filter: { status?: 'PENDING' | 'APPROVED' | 'REJECTED'; companyId?: string },
+  page: PageArgs,
+) {
+  const scope =
+    principal.role === 'SUPER_ADMIN'
+      ? filter.companyId
+        ? { companyId: filter.companyId }
+        : {}
+      : principal.role === 'COMPANY_ADMIN'
+        ? { companyId: principal.companyId }
+        : { requestedById: principal.id };
+
+  const where = { ...scope, ...(filter.status ? { status: filter.status } : {}) };
+  const [rows, total] = await Promise.all([
+    prisma.vehicleRegistrationRequest.findMany({
+      where,
+      include: registrationInclude,
+      // Pending first, then most recent: an admin opening this screen wants the decisions they owe.
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      skip: page.skip,
+      take: page.take,
+    }),
+    prisma.vehicleRegistrationRequest.count({ where }),
+  ]);
+  return { rows, total };
+}
+
+/** Pending count for the approval-tab badge, scoped the same way as the list. */
+export function countPendingRegistrations(principal: { role: Role; companyId: string }): Promise<number> {
+  return prisma.vehicleRegistrationRequest.count({
+    where: {
+      status: 'PENDING',
+      ...(principal.role === 'SUPER_ADMIN' ? {} : { companyId: principal.companyId }),
+    },
+  });
+}
+
+/**
+ * Approve or reject a walk-in registration. Approving upserts the real `Vehicle`, which is what lets the
+ * gate admit the car — the decision and its effect are one transaction, so an approved request can never
+ * exist without the registry row it promised.
+ *
+ * `userId` is resolved by email against an ACTIVE user of that company, the same soft link the vehicle
+ * import uses. Left null when there is no match: a new employee may have no account yet, and the gate
+ * only needs the car to be known.
+ */
+export async function decideRegistration(
+  actor: { id: string; role: Role; companyId: string },
+  id: string,
+  input: RegistrationDecisionInput,
+) {
+  const request = await prisma.vehicleRegistrationRequest.findUnique({
+    where: { id },
+    include: registrationInclude,
+  });
+  if (!request) throw new NotFoundError('Registration request not found');
+  // A Company Admin may only decide their own company's requests — the same tenant rule as every other
+  // admin action. Checked after the lookup so a wrong-tenant id is a 403, not a 404 that leaks nothing.
+  if (actor.role !== 'SUPER_ADMIN' && request.companyId !== actor.companyId) {
+    throw new ForbiddenError('This registration belongs to another company');
+  }
+  if (request.status !== 'PENDING') {
+    throw new ValidationError(`This request was already ${request.status.toLowerCase()}`);
+  }
+
+  if (input.decision === 'REJECT') {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.vehicleRegistrationRequest.update({
+        where: { id },
+        data: {
+          status: 'REJECTED',
+          decidedById: actor.id,
+          decidedAt: new Date(),
+          decisionNote: input.note ?? null,
+        },
+        include: registrationInclude,
+      });
+      await tx.auditLog.create({
+        data: buildAuditData({
+          actionType: 'VEHICLE_REGISTRATION_DECIDED',
+          entityType: 'VehicleRegistrationRequest',
+          entityId: id,
+          oldValue: { status: 'PENDING' },
+          newValue: { status: 'REJECTED', decidedById: actor.id, note: input.note ?? null },
+        }),
+      });
+      return updated;
+    });
+  }
+
+  const linkedUser = request.ownerEmail
+    ? await prisma.user.findFirst({
+        where: {
+          email: request.ownerEmail,
+          companyId: request.companyId,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+        select: { id: true },
+      })
+    : null;
+
+  return prisma.$transaction(async (tx) => {
+    const vehicleData = {
+      displayNumber: request.displayNumber,
+      ownerName: request.ownerName,
+      ownerEmail: request.ownerEmail,
+      contactNumber: request.contactNumber,
+      companyId: request.companyId,
+      userId: linkedUser?.id ?? null,
+      vehicleType: request.vehicleType,
+      makeModel: request.makeModel,
+      colour: request.colour,
+      notes: request.notes,
+      isActive: true,
+    };
+    // Upsert, not create: the plate may exist as a deactivated row from an earlier stint, and a plain
+    // create would hit the unique constraint on a car that is legitimately being re-registered.
+    const vehicle = await tx.vehicle.upsert({
+      where: { vehicleNumber: request.vehicleNumber },
+      update: vehicleData,
+      create: { vehicleNumber: request.vehicleNumber, ...vehicleData },
+    });
+    const updated = await tx.vehicleRegistrationRequest.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        decidedById: actor.id,
+        decidedAt: new Date(),
+        decisionNote: input.note ?? null,
+        vehicleId: vehicle.id,
+      },
+      include: registrationInclude,
+    });
+    await tx.auditLog.create({
+      data: buildAuditData({
+        actionType: 'VEHICLE_REGISTRATION_DECIDED',
+        entityType: 'VehicleRegistrationRequest',
+        entityId: id,
+        oldValue: { status: 'PENDING' },
+        newValue: {
+          status: 'APPROVED',
+          decidedById: actor.id,
+          vehicleId: vehicle.id,
+          linkedUserId: linkedUser?.id ?? null,
+          note: input.note ?? null,
+        },
+      }),
+    });
+    return updated;
+  });
+}
+
+export interface CompanyCapacityRow {
+  companyId: string;
+  companyName: string;
+  /** Slots the company holds for this date (effective-dated quota). */
+  slots: number;
+  /** Quota withdrawn for the date — without this the row does not add up and looks like a bug. */
+  blocked: number;
+  /** Every booking request for the date, whatever the outcome: the demand. */
+  requests: number;
+  /** Requests that won a slot — primary + common pool. */
+  allocated: number;
+  /** `slots - blocked - allocated`, floored at 0. What is still unclaimed. */
+  free: number;
+  /** Cars currently inside, from the gate log. Answers "are those allocated slots actually occupied?" */
+  inside: number;
+}
+
+/**
+ * Per-company capacity for a date — the gate's "is there room?" panel (2026-08-05).
+ *
+ * Built for the guard, not for a dashboard. Since a walk-in registration now waits for an admin's
+ * approval, the guard needs to know *before* they pick up the phone whether that company has anything
+ * left; and `allocated` vs `inside` tells them how many of today's slot-holders are still expected.
+ *
+ * Building-wide by design (D15): the gate serves every tenant, so it reads every tenant's numbers. That
+ * is the same scope the guard already has over the gate log.
+ *
+ * `free` is quota-relative, NOT `slots - inside`: an allocated slot whose owner has not arrived yet is
+ * taken, not free. A guard who admitted a car into it would be double-booking somebody's reservation.
+ */
+export async function getGateCapacity(dateStr: string | undefined, now: Date = new Date()) {
+  if (dateStr && !isValidCalendarDate(dateStr)) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'date', message: 'Not a valid calendar date' },
+    ]);
+  }
+  const date = dateStr ? parseCalendarDate(dateStr) : currentIstCalendarDate(now);
+
+  const [companies, totalSlots, allocations, requests, blocks, insideRows] = await Promise.all([
+    prisma.company.findMany({
+      where: { status: 'ACTIVE', deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    countInServiceSlots(),
+    prisma.parkingAllocation.groupBy({ by: ['companyId'], where: { bookingDate: date }, _count: { _all: true } }),
+    prisma.bookingRequest.groupBy({ by: ['companyId'], where: { bookingDate: date }, _count: { _all: true } }),
+    prisma.slotBlock.groupBy({
+      by: ['companyId'],
+      where: { startDate: { lte: date }, endDate: { gte: date } },
+      _sum: { blockedCount: true },
+    }),
+    // Cars inside *now*, not "checked in on this date": a visit that began yesterday and has not been
+    // checked out is still occupying a space. Only meaningful for today, which is the default.
+    prisma.gateEvent.groupBy({ by: ['companyId'], where: { status: 'CHECKED_IN' }, _count: { _all: true } }),
+  ]);
+
+  const allocatedBy = new Map(allocations.map((a) => [a.companyId, a._count._all]));
+  const requestsBy = new Map(requests.map((r) => [r.companyId, r._count._all]));
+  const blockedBy = new Map(blocks.map((b) => [b.companyId, b._sum.blockedCount ?? 0]));
+  const insideBy = new Map(insideRows.filter((g) => g.companyId).map((g) => [g.companyId!, g._count._all]));
+
+  const rows: CompanyCapacityRow[] = await Promise.all(
+    companies.map(async (c) => {
+      const slots = await getEffectiveQuota(c.id, date);
+      const blocked = blockedBy.get(c.id) ?? 0;
+      const allocated = allocatedBy.get(c.id) ?? 0;
+      return {
+        companyId: c.id,
+        companyName: c.name,
+        slots,
+        blocked,
+        requests: requestsBy.get(c.id) ?? 0,
+        allocated,
+        free: Math.max(0, slots - blocked - allocated),
+        inside: insideBy.get(c.id) ?? 0,
+      };
+    }),
+  );
+
+  const sum = (pick: (r: CompanyCapacityRow) => number) => rows.reduce((total, r) => total + pick(r), 0);
+  // An unregistered car has no company, so its visit lands in no row above — counted here only, which is
+  // why the building total can exceed the sum of the companies. Reported separately rather than hidden.
+  const insideUnattributed = insideRows
+    .filter((g) => !g.companyId)
+    .reduce((total, g) => total + g._count._all, 0);
+
+  return {
+    bookingDate: isoDate(date),
+    rows,
+    building: {
+      // The physical building, not the sum of quotas — those can be under-allotted, and a guard asking
+      // "how big is this car park" means the former.
+      totalSlots,
+      allottedSlots: sum((r) => r.slots),
+      blocked: sum((r) => r.blocked),
+      requests: sum((r) => r.requests),
+      allocated: sum((r) => r.allocated),
+      free: sum((r) => r.free),
+      inside: sum((r) => r.inside) + insideUnattributed,
+      insideUnattributed,
+    },
+  };
 }
 
 function buildEventWhere(

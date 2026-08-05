@@ -13,3 +13,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS "User_email_active_key"
 CREATE UNIQUE INDEX IF NOT EXISTS "GateEvent_open_visit_key"
   ON "GateEvent" ("vehicleNumber", "bookingDate")
   WHERE "status" = 'CHECKED_IN';
+
+-- One OPEN walk-in registration request per car. A plate may accumulate any number of REJECTED
+-- requests (turned away once, registered properly later), but two people must not be able to queue the
+-- same plate for two different companies. The service pre-checks for a clean 409; this is the backstop.
+CREATE UNIQUE INDEX IF NOT EXISTS "VehicleRegistrationRequest_pending_key"
+  ON "VehicleRegistrationRequest" ("vehicleNumber")
+  WHERE "status" = 'PENDING';

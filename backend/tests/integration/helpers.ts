@@ -75,11 +75,22 @@ export async function blockQuotaDownTo(
   }
 }
 
-/** Wipe transactional data between tests, leaving the seeded baseline (users/slots/quota/config). */
+/**
+ * Wipe transactional data between tests, leaving the seeded baseline (users/slots/quota/config).
+ *
+ * `gateEvent` was missing here until 2026-08-05, which made gate state leak across tests: a car checked
+ * in by one `it` stayed checked in, so the next attempt on the same plate came back `409 already checked
+ * in` — a failure that looks like a bug in whatever you were actually testing.
+ *
+ * `vehicleRegistrationRequest` for the same reason: a leaked PENDING row holds its plate at the barrier
+ * for the rest of the run.
+ */
 export async function resetTransactional(): Promise<void> {
   await prisma.allocationScoreBreakdown.deleteMany({});
   await prisma.parkingAllocation.deleteMany({});
   await prisma.bookingRequest.deleteMany({});
   await prisma.allocationRun.deleteMany({});
   await prisma.slotBlock.deleteMany({});
+  await prisma.gateEvent.deleteMany({});
+  await prisma.vehicleRegistrationRequest.deleteMany({});
 }

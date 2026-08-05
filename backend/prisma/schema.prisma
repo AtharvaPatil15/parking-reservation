@@ -111,6 +111,12 @@ enum GateEventStatus {
   CHECKED_OUT
 }
 
+enum VehicleRegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum HolidayType {
   COMPANY
   BUILDING
@@ -172,6 +178,7 @@ model Company {
   workingDayConfigs       WorkingDayConfiguration[]
   vehicles                Vehicle[]
   gateEvents              GateEvent[]
+  vehicleRegistrations    VehicleRegistrationRequest[]
 
   @@index([status])
 }
@@ -501,6 +508,52 @@ model Vehicle {
   @@index([companyId])
   @@index([ownerEmail])
   @@index([userId])
+}
+
+// A car the guard met at the barrier and asked to have added to the registry — a new employee turning
+// up before anyone had registered their car.
+//
+// It is a REQUEST, not a Vehicle: security states what they can see (plate, who says they own it, which
+// company) and the named company's admin — or the Super Admin — decides. Approval upserts the real
+// `Vehicle`; nothing else in the system reads this table.
+//
+// Unlike an unrecognised plate, a car with a PENDING request is **not** admitted (Prithviraj,
+// 2026-08-05): registering is the guard declaring "this is a new employee", and the answer to that is
+// the admin's to give. D16 still governs the untouched path — a plate nobody tried to register is
+// recorded and let in as a visitor.
+//
+// NOTE (partial unique): only one PENDING request may exist per plate, but a plate may accumulate any
+// number of REJECTED ones. Prisma's DSL cannot express that, so `prisma/partial-unique.sql` adds
+// `UNIQUE (vehicleNumber) WHERE status = 'PENDING'`. The service checks first for a clean 409.
+model VehicleRegistrationRequest {
+  id            String                    @id @default(cuid())
+  vehicleNumber String // normalized, as the gate looks it up
+  displayNumber String // plate as the guard wrote it down
+  ownerName     String
+  ownerEmail    String?
+  contactNumber String?
+  companyId     String // never optional: with no company there is nobody to approve it
+  vehicleType   VehicleType               @default(CAR)
+  makeModel     String?
+  colour        String?
+  notes         String?
+  status        VehicleRegistrationStatus @default(PENDING)
+
+  requestedById String? // security user (soft ref)
+  decidedById   String? // approving admin (soft ref)
+  decidedAt     DateTime?
+  decisionNote  String?
+  // Set on approval — the registry row this became, so the decision is traceable to its effect.
+  vehicleId     String?
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([status])
+  @@index([vehicleNumber])
 }
 
 // One row per gate visit. The car number is snapshotted so an UNKNOWN plate can still be recorded

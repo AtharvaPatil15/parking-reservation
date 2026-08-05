@@ -9,12 +9,15 @@ import {
   Table,
   type Column,
 } from '../../components';
-import { useGateEvents } from '../../api/hooks';
+import { useGateEvents, useVehicleRegistrations } from '../../api/hooks';
 import { useAuth } from '../../lib/auth';
 import { GateDrawer, type GateMode } from './GateDrawer';
+import { GateCapacity } from './GateCapacity';
+import { RegisterVehicleDrawer } from './RegisterVehicleDrawer';
 import type { components } from '../../api/types';
 
 type GateEvent = components['schemas']['GateEvent'];
+type VehicleRegistration = components['schemas']['VehicleRegistration'];
 
 const timeOnly = (iso: string): string =>
   new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -27,11 +30,24 @@ const timeOnly = (iso: string): string =>
 export function GateConsole() {
   const { user } = useAuth();
   const [mode, setMode] = useState<GateMode | null>(null);
+  // `null` = closed. A string (possibly empty) = open, pre-filled with the plate already typed.
+  const [registerFor, setRegisterFor] = useState<string | null>(null);
   const events = useGateEvents();
+  // Only the guard's own submissions come back here (scoped server-side), which is exactly the list they
+  // need: each pending row is a car sitting at the barrier waiting on somebody's approval.
+  const registrations = useVehicleRegistrations({ pageSize: 5 });
 
   const rows = events.data?.items ?? [];
   const inside = rows.filter((e) => e.status === 'CHECKED_IN').length;
   const unbooked = rows.filter((e) => !e.hadBooking).length;
+
+  const myRegistrations: VehicleRegistration[] = registrations.data?.items ?? [];
+  const pendingRegistrations = myRegistrations.filter((r) => r.status === 'PENDING');
+  // Only recent approvals are worth surfacing: this panel exists to tell the guard "the car outside can
+  // come in now", and once it is inside the row is just noise.
+  const approvedRegistrations = myRegistrations.filter(
+    (r) => r.status === 'APPROVED' && !rows.some((e) => e.vehicleNumber === r.vehicleNumber),
+  );
 
   const columns: Column<GateEvent>[] = [
     {
@@ -80,6 +96,50 @@ export function GateConsole() {
         </Button>
       </div>
 
+      {/* Third action, deliberately smaller than the two above: registering a car is the exception, and
+          making it the same size as "check in" would invite it as a default. */}
+      <Button variant="ghost" className="w-full" onClick={() => setRegisterFor('')}>
+        Register a car for a new employee
+      </Button>
+
+      <GateCapacity />
+
+      {pendingRegistrations.length > 0 && (
+        <Card
+          title={`Waiting for approval (${pendingRegistrations.length})`}
+          description="These cars stay outside until the company approves them. Call the company if it is taking too long."
+        >
+          <ul className="divide-y divide-border text-sm">
+            {pendingRegistrations.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="font-medium text-text">
+                  {r.displayNumber} <span className="font-normal text-text-muted">· {r.ownerName}</span>
+                </span>
+                <span className="text-text-muted">{r.companyName}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {approvedRegistrations.length > 0 && (
+        <Card
+          title="Approved — you can let these in"
+          description="Registered and approved. Check them in as normal."
+        >
+          <ul className="divide-y divide-border text-sm">
+            {approvedRegistrations.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="font-medium text-text">
+                  {r.displayNumber} <span className="font-normal text-text-muted">· {r.ownerName}</span>
+                </span>
+                <Badge tone="success">Approved</Badge>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card>
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -109,7 +169,19 @@ export function GateConsole() {
         </div>
       </Card>
 
-      <GateDrawer mode={mode} onClose={() => setMode(null)} />
+      <GateDrawer
+        mode={mode}
+        onClose={() => setMode(null)}
+        onRegister={(plate) => {
+          setMode(null);
+          setRegisterFor(plate);
+        }}
+      />
+      <RegisterVehicleDrawer
+        open={registerFor !== null}
+        initialNumber={registerFor ?? ''}
+        onClose={() => setRegisterFor(null)}
+      />
     </div>
   );
 }

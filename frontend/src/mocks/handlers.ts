@@ -33,6 +33,10 @@ type WeeklyRunResult = components['schemas']['WeeklyRunResult'];
 type VehicleSummary = components['schemas']['VehicleSummary'];
 type GateLookup = components['schemas']['GateLookup'];
 type GateEvent = components['schemas']['GateEvent'];
+type GateCapacity = components['schemas']['GateCapacity'];
+type GateCapacityRow = components['schemas']['GateCapacityRow'];
+type VehicleRegistration = components['schemas']['VehicleRegistration'];
+type UserDetail = components['schemas']['UserDetail'];
 
 const baseURL = '/api/v1';
 const ok = <T,>(data: T, status = 200) => HttpResponse.json({ success: true, data }, { status });
@@ -536,6 +540,68 @@ function mockBand(win: BookingWindow): { from: string; toExclusive: string; date
   return { from, toExclusive, dates };
 }
 
+/**
+ * Two walk-in requests so the demo has both halves: one waiting (its plate is held at the barrier) and
+ * one already approved, which is what the guard is watching for.
+ */
+function seedRegistrations(): VehicleRegistration[] {
+  const base = {
+    ownerEmail: null,
+    makeModel: null,
+    colour: null,
+    notes: null,
+    decisionNote: null,
+    requestedById: 'mock-security-1',
+    vehicleType: 'CAR' as const,
+  };
+  return [
+    {
+      ...base,
+      id: 'vreg-pending-1',
+      vehicleNumber: 'MH14XY9911',
+      displayNumber: 'MH 14 XY 9911',
+      ownerName: 'Nikhil Rao',
+      contactNumber: '9876500011',
+      companyId: 'company-1',
+      companyName: 'Assent Compliance',
+      status: 'PENDING',
+      decidedById: null,
+      decidedAt: null,
+      vehicleId: null,
+      createdAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    },
+    {
+      ...base,
+      id: 'vreg-approved-1',
+      vehicleNumber: 'MH12PQ4455',
+      displayNumber: 'MH 12 PQ 4455',
+      ownerName: 'Divya Menon',
+      contactNumber: '9876500022',
+      companyId: 'company-1',
+      companyName: 'Assent Compliance',
+      status: 'APPROVED',
+      decidedById: 'mock-admin-1',
+      decidedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      vehicleId: null,
+      createdAt: new Date(Date.now() - 90 * 60_000).toISOString(),
+    },
+  ];
+}
+
+/** The outstanding walk-in request for a plate, if any — what holds the car at the barrier. */
+function pendingRegistrationFor(plate: string): GateLookup['pendingRegistration'] {
+  const r = registrationState.find((x) => x.vehicleNumber === plate && x.status === 'PENDING');
+  return r
+    ? {
+        id: r.id,
+        ownerName: r.ownerName,
+        companyId: r.companyId,
+        companyName: r.companyName,
+        requestedAt: r.createdAt,
+      }
+    : null;
+}
+
 /** Cars with a booking today — drives `hasBooking`, i.e. whether the gate warns (D16). */
 const bookedTodayPlates = new Set(['MH12AB1234']);
 
@@ -555,6 +621,7 @@ let parkingAreaState = seedParkingAreas();
 let availabilityState = seedAvailability();
 let vehicleState = seedVehicles();
 let gateEventState = seedGateEvents();
+let registrationState = seedRegistrations();
 let profileState: Record<string, Partial<UserProfile>> = {};
 let seq = 0;
 const nextId = (prefix: string) => `${prefix}-${++seq}`;
@@ -582,6 +649,7 @@ export function resetMockData(): void {
   availabilityState = seedAvailability();
   vehicleState = seedVehicles();
   gateEventState = seedGateEvents();
+  registrationState = seedRegistrations();
   profileState = {};
   seq = 0;
 }
@@ -1397,6 +1465,7 @@ const hero = [
           }
         : null,
       openVisit: open ? { id: open.id, checkInAt: open.checkInAt } : null,
+      pendingRegistration: pendingRegistrationFor(plate),
     });
   }),
   http.post(`${baseURL}/gate/check-in`, async ({ request }) => {
@@ -1406,7 +1475,16 @@ const hero = [
     if (gateEventState.some((e) => e.vehicleNumber === plate && e.status === 'CHECKED_IN')) {
       return fail(409, 'CONFLICT', `${plate} is already checked in — check it out first`);
     }
-    // D16: an unknown plate is recorded, not refused.
+    // A car whose walk-in registration is still pending waits. The one case the gate refuses.
+    const held = pendingRegistrationFor(plate);
+    if (held) {
+      return fail(
+        409,
+        'CONFLICT',
+        `${plate} is waiting for ${held.companyName} to approve its registration — call them, then check in once it shows as approved`,
+      );
+    }
+    // D16: an unknown plate nobody tried to register is recorded, not refused.
     const vehicle = vehicleState.find((v) => v.vehicleNumber === plate) ?? null;
     const event: GateEvent = {
       id: nextId('gate'),
@@ -1438,6 +1516,139 @@ const hero = [
   http.get(`${baseURL}/gate/events`, ({ request }) => {
     const { page, pageSize } = pageParams(request);
     return okPage<GateEvent>(gateEventState, page, pageSize);
+  }),
+
+  // --- Gate capacity + walk-in registration (2026-08-05) ---
+  http.get(`${baseURL}/gate/capacity`, () => {
+    const rows: GateCapacityRow[] = companyState
+      .filter((c) => c.status === 'ACTIVE')
+      .map((c, i) => {
+        const slots = quotaState.find((q) => q.companyId === c.id)?.slotCount ?? MOCK_QUOTA;
+        const blocked = i === 0 ? 2 : 0;
+        const allocated = Math.max(0, slots - blocked - (i === 0 ? 0 : 3));
+        return {
+          companyId: c.id,
+          companyName: c.name,
+          slots,
+          blocked,
+          // Demand above capacity on the first company, so the waitlist story is visible here too.
+          requests: allocated + (i === 0 ? 4 : 0),
+          allocated,
+          free: Math.max(0, slots - blocked - allocated),
+          inside: gateEventState.filter((e) => e.companyId === c.id && e.status === 'CHECKED_IN').length,
+        };
+      });
+    const sum = (pick: (r: GateCapacityRow) => number) => rows.reduce((t, r) => t + pick(r), 0);
+    const insideUnattributed = gateEventState.filter((e) => !e.companyId && e.status === 'CHECKED_IN').length;
+    return ok<GateCapacity>({
+      bookingDate: isoOf(new Date()),
+      rows,
+      building: {
+        totalSlots: slotState.length,
+        allottedSlots: sum((r) => r.slots),
+        blocked: sum((r) => r.blocked),
+        requests: sum((r) => r.requests),
+        allocated: sum((r) => r.allocated),
+        free: sum((r) => r.free),
+        inside: sum((r) => r.inside) + insideUnattributed,
+        insideUnattributed,
+      },
+    });
+  }),
+  http.post(`${baseURL}/vehicles/registrations`, async ({ request }) => {
+    const b = (await request.json().catch(() => ({}))) as Record<string, string | undefined>;
+    const plate = normalizeMockPlate(b.vehicleNumber ?? '');
+    if (plate.length < 4) return fail(400, 'VALIDATION_ERROR', 'Enter a car number');
+    if (!b.ownerName) return fail(400, 'VALIDATION_ERROR', 'Enter the person’s name');
+    if (!b.companyId) return fail(400, 'VALIDATION_ERROR', 'Pick the company they work for');
+    if (vehicleState.some((v) => v.vehicleNumber === plate)) {
+      return fail(409, 'CONFLICT', `${plate} is already registered — check it in as normal`);
+    }
+    if (pendingRegistrationFor(plate)) {
+      return fail(409, 'CONFLICT', `${plate} is already waiting for approval`);
+    }
+    const company = companyState.find((c) => c.id === b.companyId);
+    const created: VehicleRegistration = {
+      id: nextId('vreg'),
+      vehicleNumber: plate,
+      displayNumber: b.displayNumber || (b.vehicleNumber ?? plate).toUpperCase(),
+      ownerName: b.ownerName,
+      ownerEmail: b.ownerEmail ?? null,
+      contactNumber: b.contactNumber ?? null,
+      companyId: b.companyId,
+      companyName: company?.name ?? 'Unknown company',
+      vehicleType: (b.vehicleType as VehicleRegistration['vehicleType']) ?? 'CAR',
+      makeModel: b.makeModel ?? null,
+      colour: b.colour ?? null,
+      notes: b.notes ?? null,
+      status: 'PENDING',
+      requestedById: 'mock-security-1',
+      decidedById: null,
+      decidedAt: null,
+      decisionNote: null,
+      vehicleId: null,
+      createdAt: new Date().toISOString(),
+    };
+    registrationState = [created, ...registrationState];
+    return ok<VehicleRegistration>(created, 201);
+  }),
+  http.get(`${baseURL}/vehicles/registrations`, ({ request }) => {
+    const url = new URL(request.url);
+    const status = url.searchParams.get('status');
+    const { page, pageSize } = pageParams(request);
+    const rows = status ? registrationState.filter((r) => r.status === status) : registrationState;
+    return okPage<VehicleRegistration>(rows, page, pageSize);
+  }),
+  http.post(`${baseURL}/vehicles/registrations/:id/decision`, async ({ params, request }) => {
+    const b = (await request.json().catch(() => ({}))) as { decision?: string; note?: string };
+    const row = registrationState.find((r) => r.id === params.id);
+    if (!row) return fail(404, 'NOT_FOUND', 'Registration request not found');
+    if (row.status !== 'PENDING') {
+      return fail(400, 'VALIDATION_ERROR', `This request was already ${row.status.toLowerCase()}`);
+    }
+    row.decidedById = 'mock-admin-1';
+    row.decidedAt = new Date().toISOString();
+    row.decisionNote = b.note ?? null;
+    if (b.decision === 'APPROVE') {
+      row.status = 'APPROVED';
+      // Approval is what puts the car in the registry — the whole point, so the mock does it too and a
+      // subsequent lookup/check-in in the demo behaves like the real thing.
+      const vehicle: VehicleSummary = {
+        id: nextId('veh'),
+        vehicleNumber: row.vehicleNumber,
+        displayNumber: row.displayNumber,
+        ownerName: row.ownerName,
+        ownerEmail: row.ownerEmail,
+        contactNumber: row.contactNumber,
+        vehicleType: row.vehicleType,
+        makeModel: row.makeModel,
+        colour: row.colour,
+        companyId: row.companyId,
+        companyName: row.companyName,
+      };
+      vehicleState = [vehicle, ...vehicleState];
+      row.vehicleId = vehicle.id;
+    } else {
+      row.status = 'REJECTED';
+    }
+    return ok<VehicleRegistration>(row);
+  }),
+  http.get(`${baseURL}/users/:id`, ({ params }) => {
+    const user = companyUserState.find((u) => u.id === params.id) ?? companyUserState[0];
+    if (!user) return fail(404, 'NOT_FOUND', 'User not found');
+    return ok<UserDetail>({
+      ...user,
+      vehicles: vehicleState
+        .filter((v) => v.ownerEmail === user.email)
+        .map((v) => ({
+          id: v.id,
+          vehicleNumber: v.vehicleNumber,
+          displayNumber: v.displayNumber,
+          vehicleType: v.vehicleType,
+          makeModel: v.makeModel,
+          colour: v.colour,
+        })),
+    });
   }),
   http.get(`${baseURL}/gate/unbooked`, ({ request }) => {
     const { page, pageSize } = pageParams(request);
