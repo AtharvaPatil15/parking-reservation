@@ -55,10 +55,14 @@ describe('GateConsole', () => {
 
   /**
    * The guard's landing page has to answer "is there room?" before it answers anything else — and since a
-   * walk-in registration now waits on an admin, `Free` is what tells them whether calling that admin is
-   * even worth it.
+   * walk-in registration now waits on an admin, what is left is what tells them whether calling that admin
+   * is even worth it.
+   *
+   * Two numbers per row, and they must sum to that company's slots. Rendering the full payload — quota,
+   * blocked, requests, allocated, inside — read as broken arithmetic, because reconciling it requires
+   * knowing that blocked slots are excluded and that a reserved slot is taken before its owner arrives.
    */
-  it('shows per-company slots with what is still free', async () => {
+  it('shows slots filled and slots remaining per company, and they add up', async () => {
     server.use(
       http.get('*/api/v1/gate/capacity', () =>
         HttpResponse.json({
@@ -79,18 +83,37 @@ describe('GateConsole', () => {
     );
     renderConsole();
 
+    // Assent: 12 slots, 2 blocked, 10 given out. All 12 accounted for, nothing left.
     const assent = (await screen.findByText('Assent')).closest('tr')!;
-    // Nothing left for Assent — said as "Full" rather than a bare 0, which reads as missing data.
+    expect(within(assent).getByText('12')).toBeInTheDocument();
+    // Said as "Full" rather than a bare 0, which reads as missing data.
     expect(within(assent).getByText('Full')).toBeInTheDocument();
+
+    // Acme: 8 slots, none blocked, 5 given out → 5 filled, 3 left. `inside: 2` must NOT move these:
+    // remaining is quota-relative, so a reserved slot stays taken until its owner arrives.
     const acme = screen.getByText('Acme').closest('tr')!;
+    expect(within(acme).getByText('5')).toBeInTheDocument();
     expect(within(acme).getByText('3')).toBeInTheDocument();
 
+    // The columns the panel deliberately drops. Each one individually reconciles only if you know the
+    // rules; together they made the panel look like it could not add up.
+    for (const header of [/blocked/i, /booked/i, /given a slot/i, /inside/i]) {
+      expect(screen.queryByRole('columnheader', { name: header })).not.toBeInTheDocument();
+    }
+
     // The building line is assembled from several spans, so assert on its text content rather than
-    // hunting for a phrase that no single node owns.
+    // hunting for a phrase that no single node owns. It totals the ALLOTTED slots (20), because slots no
+    // company holds are not the guard's to give — 17 filled + 3 remaining.
     const buildingLine = screen.getByText('Building').parentElement!;
-    expect(buildingLine.textContent).toMatch(/20 slots/);
-    expect(buildingLine.textContent).toMatch(/3 free/);
-    expect(buildingLine.textContent).toMatch(/9 inside/);
+    expect(buildingLine.textContent).toMatch(/17 filled/);
+    expect(buildingLine.textContent).toMatch(/3 remaining/);
+  });
+
+  it('makes registering a new car a full-size action', async () => {
+    renderConsole();
+    // A ghost link was too small a target for a tablet at a barrier. Named for what it does, not for who
+    // it is for — the guard is looking for the verb.
+    expect(await screen.findByRole('button', { name: /^register a new car$/i })).toBeInTheDocument();
   });
 
   it('lists the cars it has registered that are still waiting on an admin', async () => {
@@ -284,9 +307,12 @@ describe('GateConsole', () => {
     await userEvent.type(screen.getByLabelText(/car number/i), 'KA05ZZ9999');
 
     expect(await screen.findByText('Booked today')).toBeInTheDocument();
-    expect(screen.getByText('Rahul Mehta')).toBeInTheDocument();
-    expect(screen.getByText('Mock Co')).toBeInTheDocument();
-    expect(screen.getByText('B1-07')).toBeInTheDocument();
+    // Scoped to the drawer: the slots panel behind it also names every company, so an unscoped query for
+    // 'Mock Co' matches the capacity row too.
+    const panel = screen.getByText('Booked today').closest('div.space-y-3') as HTMLElement;
+    expect(within(panel).getByText('Rahul Mehta')).toBeInTheDocument();
+    expect(within(panel).getByText('Mock Co')).toBeInTheDocument();
+    expect(within(panel).getByText('B1-07')).toBeInTheDocument();
     // The registry note stays, but as a footnote that explains itself — not as the whole answer.
     expect(screen.getByText(/matched by the number on the booking/i)).toBeInTheDocument();
     // And no scary "no booking today" warning, because there IS one.

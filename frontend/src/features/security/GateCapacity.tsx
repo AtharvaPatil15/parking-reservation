@@ -4,19 +4,20 @@ import type { components } from '../../api/types';
 
 type CapacityRow = components['schemas']['GateCapacityRow'];
 
-const num = (n: number) => <span className="tabular-nums">{n}</span>;
-
 /**
- * Per-company capacity, on the gate's landing page.
+ * Per-company slots today, on the gate's landing page.
  *
- * The guard's question is not "how is utilisation trending", it is "can this car come in". So `Free` is
- * the emphasised column and it is quota-relative — `slots − blocked − given a slot` — NOT
- * `slots − inside`. An allocated slot whose owner has not arrived yet is taken; admitting a car into it
- * would be handing away somebody's reservation.
+ * Two numbers per company and nothing else, because they are the only two a guard acts on and because
+ * they always sum to that company's slots for the day. The endpoint returns more — quota, blocked,
+ * requests, allocated, inside — and showing all of it made the panel look wrong: six numbers that only
+ * reconcile once you know that blocked slots are excluded from free and that a reserved slot counts as
+ * taken before its owner arrives. A guard should not have to derive that at a barrier.
  *
- * `Inside` sits beside it to answer the follow-up: 10 given a slot and 7 inside means 3 are still
- * expected. And since a walk-in registration now waits for an admin, `Free` is what tells the guard
- * whether phoning that admin is even worth it.
+ * `Remaining` is quota-relative — `slots − blocked − given a slot`, NOT `slots − cars inside`. An
+ * allocated slot whose owner has not arrived yet is taken; admitting a walk-in into it would be handing
+ * away somebody's reservation. So `Filled` necessarily counts blocked and reserved slots alongside
+ * occupied ones; the hover breakdown says which is which, and how many cars are physically in the
+ * building is answered by the gate log directly below.
  */
 export function GateCapacity() {
   const capacity = useGateCapacity();
@@ -27,35 +28,36 @@ export function GateCapacity() {
       header: 'Company',
       render: (r) => <span className="font-medium text-text">{r.companyName}</span>,
     },
-    { key: 'slots', header: 'Slots', align: 'right', render: (r) => num(r.slots) },
     {
-      key: 'blocked',
-      header: 'Blocked',
+      key: 'filled',
+      header: 'Slots filled',
       align: 'right',
-      // Shown even when zero: without it `slots − allocated ≠ free` and the panel reads as broken.
-      render: (r) => <span className="tabular-nums text-text-muted">{r.blocked}</span>,
+      // Derived rather than read: `slots - free` is blocked + reserved by construction, so filled and
+      // remaining always add up to the company's slots. Summing fields could drift from `free` if the
+      // server ever changed how it computes it.
+      render: (r) => (
+        <span
+          className="tabular-nums"
+          title={`${r.allocated} given a slot${r.blocked ? ` · ${r.blocked} blocked` : ''} · of ${r.slots} slots`}
+        >
+          {r.slots - r.free}
+        </span>
+      ),
     },
-    { key: 'requests', header: 'Booked today', align: 'right', render: (r) => num(r.requests) },
-    { key: 'allocated', header: 'Given a slot', align: 'right', render: (r) => num(r.allocated) },
     {
       key: 'free',
-      header: 'Free',
+      header: 'Slots remaining',
       align: 'right',
       render: (r) =>
-        r.free > 0 ? (
-          <Badge tone="success">{r.free}</Badge>
-        ) : (
-          <Badge tone="neutral">Full</Badge>
-        ),
+        r.free > 0 ? <Badge tone="success">{r.free}</Badge> : <Badge tone="neutral">Full</Badge>,
     },
-    { key: 'inside', header: 'Inside', align: 'right', render: (r) => num(r.inside) },
   ];
 
-  if (capacity.isLoading) return <LoadingState label="Loading capacity…" />;
+  if (capacity.isLoading) return <LoadingState label="Loading slots…" />;
   if (capacity.isError || !capacity.data) {
     return (
       <ErrorState
-        title="Couldn't load capacity"
+        title="Couldn't load slots"
         description="The gate log below still works."
         action={
           <Button variant="secondary" size="sm" onClick={() => capacity.refetch()}>
@@ -67,30 +69,22 @@ export function GateCapacity() {
   }
 
   const { rows, building } = capacity.data;
+  // The building line totals the companies, so it must sum what the rows show — `allottedSlots`, the
+  // slots actually handed to a company. Physical slots that no company holds are not a guard's to give.
+  const buildingFilled = building.allottedSlots - building.free;
 
   return (
     <Card
       title="Slots today"
-      description="What each company holds, and what is still free. Free counts slots nobody has been given — not slots that happen to be empty right now."
+      description="What is taken and what is left, per company. A slot someone has been given counts as taken even before they arrive."
       padded={false}
     >
       <Table columns={columns} rows={rows} rowKey={(r) => r.companyId} empty="No active companies." />
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-t border-border px-4 py-3 text-sm sm:px-6">
         <span className="font-medium text-text">Building</span>
         <span className="text-text-muted">
-          {/* Physical slots first: "how big is this car park" is a different question from "how much has
-              been allotted", and under-allotment makes the two differ. */}
-          <span className="tabular-nums">{building.totalSlots}</span> slots ·{' '}
-          <span className="tabular-nums">{building.allottedSlots}</span> allotted ·{' '}
-          <span className="tabular-nums">{building.allocated}</span> given out ·{' '}
-          <span className="font-medium text-text tabular-nums">{building.free}</span> free ·{' '}
-          <span className="tabular-nums">{building.inside}</span> inside
-          {building.insideUnattributed > 0 && (
-            <>
-              {' '}
-              (<span className="tabular-nums">{building.insideUnattributed}</span> unregistered)
-            </>
-          )}
+          <span className="tabular-nums">{buildingFilled}</span> filled ·{' '}
+          <span className="font-medium text-text tabular-nums">{building.free}</span> remaining
         </span>
       </div>
     </Card>

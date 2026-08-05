@@ -1565,10 +1565,17 @@ const hero = [
 
   // --- Gate capacity + walk-in registration (2026-08-05) ---
   http.get(`${baseURL}/gate/capacity`, () => {
+    const today = isoOf(new Date());
     const rows: GateCapacityRow[] = companyState
       .filter((c) => c.status === 'ACTIVE')
       .map((c, i) => {
-        const slots = quotaState.find((q) => q.companyId === c.id)?.slotCount ?? MOCK_QUOTA;
+        // `quotaState` is keyed by company id, each value an effective-dated list — the same read the
+        // quota-summary handler does. Treating it as a flat array threw, and the throw surfaced as
+        // "Couldn't load slots" on the gate screen in mock-first mode.
+        const slots =
+          (quotaState[c.id] ?? [])
+            .filter((q) => q.effectiveFrom <= today && (!q.effectiveTo || q.effectiveTo >= today))
+            .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1))[0]?.slotCount ?? MOCK_QUOTA;
         const blocked = i === 0 ? 2 : 0;
         const allocated = Math.max(0, slots - blocked - (i === 0 ? 0 : 3));
         return {
@@ -1679,7 +1686,10 @@ const hero = [
     return ok<VehicleRegistration>(row);
   }),
   http.get(`${baseURL}/users/:id`, ({ params }) => {
-    const user = companyUserState.find((u) => u.id === params.id) ?? companyUserState[0];
+    // Keyed by company id, so flatten before searching — and search every company, because a Super Admin
+    // opens this dialog for applicants from any tenant.
+    const all = Object.values(companyUserState).flat();
+    const user = all.find((u) => u.id === params.id);
     if (!user) return fail(404, 'NOT_FOUND', 'User not found');
     return ok<UserDetail>({
       ...user,

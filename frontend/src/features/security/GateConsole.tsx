@@ -96,10 +96,11 @@ export function GateConsole() {
         </Button>
       </div>
 
-      {/* Third action, deliberately smaller than the two above: registering a car is the exception, and
-          making it the same size as "check in" would invite it as a default. */}
-      <Button variant="ghost" className="w-full" onClick={() => setRegisterFor('')}>
-        Register a car for a new employee
+      {/* Third action. Still visibly secondary to the two above — registering a car is the exception, not
+          a default — but a tablet at a barrier is tapped one-handed, and a ghost link was too small a
+          target for something a guard reaches for with a driver waiting. */}
+      <Button variant="secondary" className="h-16 w-full text-base" onClick={() => setRegisterFor('')}>
+        Register a new car
       </Button>
 
       <GateCapacity />
