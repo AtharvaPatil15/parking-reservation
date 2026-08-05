@@ -377,6 +377,58 @@ describe('security gate (Phase 7 §5)', () => {
     expect(res.body.data.bookingRequestId).toBeTruthy();
   });
 
+  /**
+   * The plate fallback — a booking whose car number was typed by hand and never registered. The match
+   * itself always worked, but the lookup returned no identity for it, so the console could only say
+   * "not in the registry" and the visit was recorded with companyId: null.
+   */
+  it('names the driver and attributes the visit for an unregistered plate that has a booking', async () => {
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: ASSENT_USERS[1] } });
+    const istToday = currentIstCalendarDate(new Date());
+    await prisma.bookingRequest.create({
+      data: {
+        bookingDate: istToday,
+        userId: rahul.id,
+        companyId: rahul.companyId,
+        bookingType: 'PRIMARY',
+        status: 'ALLOCATED',
+        userAddress: rahul.address,
+        pinCode: rahul.pinCode,
+        carpoolMemberCount: 0,
+        // Typed freely, with spacing, and deliberately NOT in the vehicle registry.
+        vehicleNumber: 'kl 07 nb 4321',
+      },
+    });
+
+    const guard = await login(GUARD);
+    const lookup = await request(app)
+      .get(`${API}/vehicles/lookup`)
+      .query({ number: 'KL-07-NB-4321' })
+      .set(bearer(guard))
+      .expect(200);
+
+    expect(lookup.body.data.known).toBe(false);
+    expect(lookup.body.data.vehicle).toBeNull();
+    // …but the booking now carries who it is, which is all the guard actually needs.
+    expect(lookup.body.data.hasBooking).toBe(true);
+    expect(lookup.body.data.booking).toMatchObject({
+      employeeName: 'Rahul Mehta',
+      companyId: rahul.companyId,
+      userId: rahul.id,
+    });
+
+    const res = await request(app)
+      .post(`${API}/gate/check-in`)
+      .set(bearer(guard))
+      .send({ vehicleNumber: 'KL07NB4321' })
+      .expect(201);
+    expect(res.body.data.hadBooking).toBe(true);
+    // Attributed from the booking, so the visit reaches the company's gate log instead of vanishing
+    // into the SUPER_ADMIN-only bucket.
+    expect(res.body.data.companyId).toBe(rahul.companyId);
+    expect(res.body.data.ownerName).toBe('Rahul Mehta');
+  });
+
   it('keeps the gate off-limits to ordinary users, and the unbooked feed off-limits to security', async () => {
     const user = await login(ASSENT_USERS[0]);
     await request(app).post(`${API}/gate/check-in`).set(bearer(user)).send({ vehicleNumber: KNOWN_PLATE }).expect(403);

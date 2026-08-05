@@ -873,6 +873,36 @@ const hero = [
     vehicleState = existing ? vehicleState.map((v) => (v.id === existing.id ? vehicle : v)) : [vehicle, ...vehicleState];
     return ok<VehicleSummary>(vehicle, 201);
   }),
+  // Partial edit of one of the caller's own cars, including its number (P: profile car editing).
+  http.patch(`${baseURL}/me/vehicles/:id`, async ({ params, request }) => {
+    const me = currentMockProfile();
+    const id = String(params.id);
+    const current = vehicleState.find((v) => v.id === id && v.ownerEmail === me.email);
+    if (!current) return fail(404, 'NOT_FOUND', 'Car not found');
+
+    const body = (await request.json()) as Partial<VehicleSummary> & { vehicleNumber?: string };
+    const plate = body.vehicleNumber !== undefined ? normalizeMockPlate(body.vehicleNumber) : current.vehicleNumber;
+    if (!plate) return fail(400, 'VALIDATION_ERROR', 'Car number is required');
+    // Same conflict rule as create: another owner's plate is never claimable.
+    const clash = vehicleState.find((v) => v.vehicleNumber === plate && v.id !== id);
+    if (clash && clash.ownerEmail !== me.email) {
+      return fail(409, 'CONFLICT', 'This car number is already registered to another user');
+    }
+
+    const updated: VehicleSummary = {
+      ...current,
+      vehicleNumber: plate,
+      displayNumber:
+        body.displayNumber ?? (body.vehicleNumber !== undefined ? body.vehicleNumber : current.displayNumber),
+      ...(body.vehicleType !== undefined ? { vehicleType: body.vehicleType } : {}),
+      ...(body.makeModel !== undefined ? { makeModel: body.makeModel } : {}),
+      ...(body.colour !== undefined ? { colour: body.colour } : {}),
+    };
+    vehicleState = vehicleState
+      .filter((v) => !(clash && v.id === clash.id)) // merged into this row, as the server does
+      .map((v) => (v.id === id ? updated : v));
+    return ok<VehicleSummary>(updated);
+  }),
   http.delete(`${baseURL}/me/vehicles/:id`, ({ params }) => {
     const me = currentMockProfile();
     const id = String(params.id);
@@ -1351,8 +1381,20 @@ const hero = [
       vehicle,
       bookingDate: isoOf(new Date()),
       hasBooking,
+      // The booker's identity is populated whether or not the plate is in the registry — that is what
+      // lets the console name an unregistered-but-booked driver.
       booking: hasBooking
-        ? { id: 'mock-booking-1', status: 'ALLOCATED', bookingType: 'PRIMARY', allocatedSlotNumber: 'B1-03' }
+        ? {
+            id: 'mock-booking-1',
+            status: 'ALLOCATED',
+            bookingType: 'PRIMARY',
+            allocatedSlotNumber: 'B1-03',
+            employeeName: vehicle?.ownerName ?? 'Priya Rao',
+            contactNumber: vehicle?.contactNumber ?? '9000000004',
+            companyId: vehicle?.companyId ?? 'mock-co',
+            companyName: vehicle?.companyName ?? 'Mock Co',
+            userId: 'mock-user-1',
+          }
         : null,
       openVisit: open ? { id: open.id, checkInAt: open.checkInAt } : null,
     });
