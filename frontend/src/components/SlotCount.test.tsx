@@ -35,6 +35,16 @@ describe('SlotCount', () => {
     expect(screen.getByText(/no slots are allotted/i)).toBeInTheDocument();
   });
 
+  // The booking form renders this inside its date-row <button>, whose content model is phrasing
+  // content — a <p> in there is invalid HTML. Both branches have to stay phrasing-level.
+  it.each([
+    ['with slots', boxes(['AVAILABLE', 'TAKEN'])],
+    ['with no quota', [] as SlotBox[]],
+  ])('renders no block-level element %s, so it is valid inside a button', (_label, given) => {
+    const { container } = render(<SlotCount boxes={given} />);
+    expect(container.querySelector('p, div')).toBeNull();
+  });
+
   // D18/D22: a request is a queue entry, not a reservation, so an undecided date has nothing filled.
   it('reads 0 filled for a full quota that has not been allocated yet', () => {
     render(<SlotCount boxes={boxes(Array.from({ length: 12 }, () => 'AVAILABLE'))} />);

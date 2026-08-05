@@ -51,9 +51,12 @@ export function SlotCount({ boxes, size = 'md', className }: SlotCountProps) {
 
   if (total === 0) {
     return (
-      <p className={cn('text-text-muted', size === 'sm' ? 'text-xs' : 'text-sm', className)}>
+      // A span, not a p: the booking form renders this inside its date-row <button>, whose content
+      // model is phrasing content only. `block` keeps the vertical rhythm a p gave it in the panels
+      // that stack children with space-y.
+      <span className={cn('block text-text-muted', size === 'sm' ? 'text-xs' : 'text-sm', className)}>
         No slots are allotted to your company for this date.
-      </p>
+      </span>
     );
   }
 
@@ -64,7 +67,9 @@ export function SlotCount({ boxes, size = 'md', className }: SlotCountProps) {
     (blocked > 0 ? `, ${blocked} blocked` : '');
 
   return (
-    <p
+    // See the empty case above: a span, because this renders inside a <button> on the booking form.
+    // `flex` blockifies it, so it lays out exactly as the old <p> did.
+    <span
       className={cn(
         'flex flex-wrap items-baseline gap-x-1.5 whitespace-nowrap text-text-muted',
         size === 'sm' ? 'text-xs' : 'text-sm',
@@ -84,11 +89,11 @@ export function SlotCount({ boxes, size = 'md', className }: SlotCountProps) {
           <>
             <span className="text-border">·</span>
             <span>
-              <span className="font-medium tabular-nums">{blocked}</span> blocked
+              <span className="font-medium tabular-nums text-text">{blocked}</span> blocked
             </span>
           </>
         )}
       </span>
-    </p>
+    </span>
   );
 }
