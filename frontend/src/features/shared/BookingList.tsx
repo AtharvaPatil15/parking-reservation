@@ -20,7 +20,7 @@ const STATUS_TONE: Record<BookingStatus, BadgeTone> = {
   EXPIRED: 'neutral',
 };
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 function displayType(row: AdminBooking) {
   return row.status === 'ALLOCATED' && row.allocationSource ? row.allocationSource : row.bookingType;

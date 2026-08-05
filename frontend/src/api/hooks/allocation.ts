@@ -89,7 +89,7 @@ export interface AllocationsFilter {
  * scoped to their own company server-side; SUPER_ADMIN sees all and may pass `companyId`/`type`/`date`.
  */
 export function useAllocations(filter: AllocationsFilter = {}) {
-  const { date, companyId, type, page = 1, pageSize = 20 } = filter;
+  const { date, companyId, type, page = 1, pageSize = 10 } = filter;
   return useQuery<{ items: AllocationRosterItem[]; meta: PageMeta }>({
     queryKey: queryKeys.allocations(date ?? '', companyId ?? '', type ?? '', page),
     queryFn: () =>

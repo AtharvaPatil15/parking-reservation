@@ -136,17 +136,31 @@ export function ConfigTimings() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  /**
+   * Whether the draft has ever been seeded from a real server payload.
+   *
+   * This has to be tracked, because "the draft disagrees with `entries`" is NOT the same question as
+   * "the user has edited something". Before `config.data` arrives, `entries` is just
+   * `DEFAULT_RUN_ENTRIES`, so the draft would get seeded with the placeholder WEEKLY/SUNDAY; when the
+   * real config then landed with a different run day, the dirty check below read that placeholder as an
+   * unsaved edit and refused to re-seed — leaving every other field bound to `''` and the whole form
+   * blank despite a perfectly good API response.
+   */
+  const seeded = useRef(false);
 
-  // Seed the editable draft from the server on first load, and re-seed on later
-  // (re)loads ONLY when the user has no unsaved edits — so a background refetch
-  // (e.g. window refocus) can't silently wipe in-progress changes.
+  // Seed the editable draft from the server once it has actually loaded, and re-seed on later
+  // (re)loads ONLY when the user has unsaved edits — so a background refetch (e.g. window refocus)
+  // can't silently wipe in-progress changes.
   useEffect(() => {
+    if (!config.data) return; // nothing authoritative yet — never seed from the placeholders
     const current = draftRef.current;
-    const dirty = entries.some((e) => current[e.key] !== undefined && current[e.key] !== e.value);
+    const dirty =
+      seeded.current && entries.some((e) => current[e.key] !== undefined && current[e.key] !== e.value);
     if (dirty) return;
+    seeded.current = true;
     setDraft(Object.fromEntries(entries.map((e) => [e.key, e.value])));
     setErrors({});
-  }, [entries]);
+  }, [entries, config.data]);
 
   function computeErrors(next: Record<string, string>): Record<string, string> {
     const errs: Record<string, string> = {};
