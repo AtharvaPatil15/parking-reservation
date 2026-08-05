@@ -94,3 +94,61 @@ export const listUnbooked = asyncHandler(async (req, res) => {
   );
   sendSuccess(res, rows.map(toGateEvent), 200, { page: p.page, pageSize: p.pageSize, total });
 });
+
+/** GET /gate/capacity — per-company slots/booked/free/inside for a date. The gate's "is there room?". */
+export const getCapacity = asyncHandler(async (req, res) => {
+  sendSuccess(res, await service.getGateCapacity(req.query.date as string | undefined), 200);
+});
+
+type RegistrationRow = Awaited<ReturnType<typeof service.listRegistrations>>['rows'][number];
+
+/** openapi VehicleRegistration — a walk-in request as every screen renders it. */
+function toRegistration(r: RegistrationRow) {
+  return {
+    id: r.id,
+    vehicleNumber: r.vehicleNumber,
+    displayNumber: r.displayNumber,
+    ownerName: r.ownerName,
+    ownerEmail: r.ownerEmail ?? null,
+    contactNumber: r.contactNumber ?? null,
+    companyId: r.companyId,
+    companyName: r.company.name,
+    vehicleType: r.vehicleType,
+    makeModel: r.makeModel ?? null,
+    colour: r.colour ?? null,
+    notes: r.notes ?? null,
+    status: r.status,
+    requestedById: r.requestedById ?? null,
+    decidedById: r.decidedById ?? null,
+    decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
+    decisionNote: r.decisionNote ?? null,
+    vehicleId: r.vehicleId ?? null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+export const createRegistration = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const created = await service.createRegistration(req.user.id, req.body);
+  sendSuccess(res, toRegistration(created as RegistrationRow), 201);
+});
+
+export const listRegistrations = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const p = parsePagination(req.query as Record<string, unknown>);
+  const { rows, total } = await service.listRegistrations(
+    req.user,
+    {
+      status: req.query.status as 'PENDING' | 'APPROVED' | 'REJECTED' | undefined,
+      companyId: req.query.companyId as string | undefined,
+    },
+    p,
+  );
+  sendSuccess(res, rows.map(toRegistration), 200, { page: p.page, pageSize: p.pageSize, total });
+});
+
+export const decideRegistration = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const updated = await service.decideRegistration(req.user, req.params.id, req.body);
+  sendSuccess(res, toRegistration(updated as RegistrationRow), 200);
+});

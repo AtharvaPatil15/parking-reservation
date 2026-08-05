@@ -1476,6 +1476,31 @@ paths:
         in: path
         required: true
         schema: { type: string }
+    get:
+      tags: [Company Users]
+      operationId: getUserDetail
+      summary: One user in full, with their registered cars
+      description: >
+        Role SUPER_ADMIN (any user) or COMPANY_ADMIN (own company only — a cross-tenant id returns
+        `404`, not `403`, so existence is not leaked). Backs the details dialog on both approval
+        screens: the queue rows carry name/email/status, which is not enough to approve on.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN, COMPANY_ADMIN]
+      responses:
+        '200':
+          description: The user, with their active registry rows.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [Company Users]
       operationId: removeUser
@@ -2290,6 +2315,176 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /gate/capacity:
+    get:
+      tags: [Gate]
+      operationId: getGateCapacity
+      summary: Per-company slots, bookings and free spaces for a date
+      description: >
+        Roles SECURITY or SUPER_ADMIN. The gate's "is there room?" panel, building-wide (D15) — the same
+        scope the guard already has over the gate log. Defaults to today's IST business date.
+      x-maturity: MVP
+      x-required-roles: [SECURITY, SUPER_ADMIN]
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Capacity per company, plus a building-wide total.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/GateCapacity' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---------------------------------------------------------------------------
+  # Walk-in vehicle registration (2026-08-05)
+  # ---------------------------------------------------------------------------
+  /vehicles/registrations:
+    post:
+      tags: [Gate]
+      operationId: createVehicleRegistration
+      summary: Ask for a walk-in car to be added to the registry
+      description: >
+        Role SECURITY. A new employee turned up at the barrier with a car nobody had registered. Creates
+        a PENDING request for the named company; the car is **not** admitted until an admin approves it
+        (`POST /gate/check-in` returns `409` while the request is outstanding).
+
+        Only the four things a guard can establish at a barrier are required — plate, owner name,
+        company, and optionally a contact. Notably not address / pin code / home distance: those belong
+        to a user account, which this does not create.
+      x-maturity: MVP
+      x-required-roles: [SECURITY]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleNumber, ownerName, companyId]
+              properties:
+                vehicleNumber: { type: string, minLength: 4, maxLength: 16 }
+                displayNumber: { type: string, description: Defaults to the plate as typed, upper-cased. }
+                ownerName: { type: string, minLength: 2, maxLength: 120 }
+                ownerEmail:
+                  type: string
+                  format: email
+                  description: >
+                    Optional, but it is how approval links the car to an existing account — matched
+                    against an ACTIVE user of the same company.
+                contactNumber: { type: string, minLength: 6, maxLength: 20 }
+                companyId: { type: string, description: Required — with no company there is nobody to approve it. }
+                vehicleType: { $ref: '#/components/schemas/VehicleType' }
+                makeModel: { type: string }
+                colour: { type: string }
+                notes: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: The pending request.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VehicleRegistration' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        # Already in the registry (check it in as normal), or already waiting for approval.
+        '409': { $ref: '#/components/responses/Conflict' }
+    get:
+      tags: [Gate]
+      operationId: listVehicleRegistrations
+      summary: List walk-in registration requests
+      description: >
+        Scoped by role: COMPANY_ADMIN sees their own company's; SUPER_ADMIN sees every company's and may
+        narrow with `companyId`; SECURITY sees **the requests they raised**, whatever the company — they
+        need to know when one has been approved, because the car is waiting at the barrier for it.
+        PENDING first, then newest.
+      x-maturity: MVP
+      x-required-roles: [SECURITY, COMPANY_ADMIN, SUPER_ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/VehicleRegistrationStatus' } }
+        - name: companyId
+          in: query
+          required: false
+          description: SUPER_ADMIN only — narrow to one company.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paged registration requests.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [meta]
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/VehicleRegistration' }
+                      meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /vehicles/registrations/{id}/decision:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Gate]
+      operationId: decideVehicleRegistration
+      summary: Approve or reject a walk-in registration
+      description: >
+        Roles COMPANY_ADMIN (own company only — another tenant's request is `403`) or SUPER_ADMIN.
+        Approving upserts the `Vehicle` and links it to an ACTIVE same-email user of that company when
+        one exists; the decision and the registry row are one transaction, so an approved request can
+        never exist without the car it promised. Rejecting records the decision and leaves the registry
+        untouched. Only a PENDING request can be decided.
+      x-maturity: MVP
+      x-required-roles: [COMPANY_ADMIN, SUPER_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                note: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: The decided request.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VehicleRegistration' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   # ---------------------------------------------------------------------------
   # Reports  (P3-09 — Later)
   # ---------------------------------------------------------------------------
@@ -2589,6 +2784,30 @@ components:
         role: { $ref: '#/components/schemas/RoleName' }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    UserDetail:
+      allOf:
+        - $ref: '#/components/schemas/UserProfile'
+        - type: object
+          description: >
+            A `UserProfile` plus the cars the registry links to them — everything the approval screens
+            show in a details dialog before deciding. The home→office distance already on `UserProfile`
+            is the part that matters most: it is what the person's allocation score is built from.
+          required: [vehicles]
+          properties:
+            vehicles:
+              type: array
+              description: Active registry rows matched by user id or by owner email.
+              items:
+                type: object
+                required: [id, vehicleNumber, displayNumber, vehicleType]
+                properties:
+                  id: { type: string }
+                  vehicleNumber: { type: string }
+                  displayNumber: { type: string }
+                  vehicleType: { $ref: '#/components/schemas/VehicleType' }
+                  makeModel: { type: string, nullable: true }
+                  colour: { type: string, nullable: true }
 
     UpdateProfileRequest:
       type: object
@@ -3238,6 +3457,95 @@ components:
           properties:
             id: { type: string }
             checkInAt: { type: string, format: date-time }
+        pendingRegistration:
+          type: object
+          nullable: true
+          description: >
+            An outstanding walk-in registration for this plate. While set, `POST /gate/check-in` refuses
+            the car with a `409` — the one case where the gate does not admit (a narrow exception to
+            D16: the plate is only in this state because a guard registered it as a new employee).
+            Names the company whose admin has to approve, so the guard knows who to call.
+          required: [id, ownerName, companyId, companyName, requestedAt]
+          properties:
+            id: { type: string }
+            ownerName: { type: string }
+            companyId: { type: string }
+            companyName: { type: string }
+            requestedAt: { type: string, format: date-time }
+
+    VehicleRegistrationStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+
+    VehicleRegistration:
+      type: object
+      description: >
+        A car security asked to have added to the registry — a new employee who turned up before anyone
+        registered their vehicle. A request, not a `Vehicle`: approval by the named company's admin (or
+        the Super Admin) is what creates the registry row and lets the car through the barrier.
+      required: [id, vehicleNumber, displayNumber, ownerName, companyId, companyName, vehicleType, status, createdAt]
+      properties:
+        id: { type: string }
+        vehicleNumber: { type: string, description: Normalized plate. }
+        displayNumber: { type: string, description: Plate as the guard wrote it down. }
+        ownerName: { type: string }
+        ownerEmail: { type: string, nullable: true }
+        contactNumber: { type: string, nullable: true }
+        companyId: { type: string }
+        companyName: { type: string }
+        vehicleType: { $ref: '#/components/schemas/VehicleType' }
+        makeModel: { type: string, nullable: true }
+        colour: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/VehicleRegistrationStatus' }
+        requestedById: { type: string, nullable: true, description: Security user who raised it. }
+        decidedById: { type: string, nullable: true }
+        decidedAt: { type: string, format: date-time, nullable: true }
+        decisionNote: { type: string, nullable: true }
+        vehicleId: { type: string, nullable: true, description: The registry row this became, once approved. }
+        createdAt: { type: string, format: date-time }
+
+    GateCapacityRow:
+      type: object
+      required: [companyId, companyName, slots, blocked, requests, allocated, free, inside]
+      properties:
+        companyId: { type: string }
+        companyName: { type: string }
+        slots: { type: integer, description: Slots the company holds for the date (effective-dated quota). }
+        blocked: { type: integer, description: Quota withdrawn for the date — without it the row does not add up. }
+        requests: { type: integer, description: Every booking request for the date, whatever the outcome. }
+        allocated: { type: integer, description: Requests that won a slot (primary + common pool). }
+        free:
+          type: integer
+          description: >
+            `slots - blocked - allocated`, floored at 0. Quota-relative on purpose, NOT
+            `slots - inside`: an allocated slot whose owner has not arrived is taken, not free.
+        inside: { type: integer, description: Cars of this company currently checked in. }
+
+    GateCapacity:
+      type: object
+      description: >
+        Per-company capacity for a date — the gate's "is there room?" panel. Building-wide by design
+        (D15): the guard serves every tenant, and now has to judge whether a company has anything left
+        before phoning an admin about a walk-in.
+      required: [bookingDate, rows, building]
+      properties:
+        bookingDate: { type: string, format: date }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/GateCapacityRow' }
+        building:
+          type: object
+          required: [totalSlots, allottedSlots, blocked, requests, allocated, free, inside, insideUnattributed]
+          properties:
+            totalSlots: { type: integer, description: In-service slots in the building — not the sum of quotas, which may under-allot. }
+            allottedSlots: { type: integer, description: Sum of every company's quota for the date. }
+            blocked: { type: integer }
+            requests: { type: integer }
+            allocated: { type: integer }
+            free: { type: integer }
+            inside: { type: integer, description: Includes unregistered cars, so this can exceed the sum of the rows. }
+            insideUnattributed: { type: integer, description: Cars inside that belong to no company (unregistered plates). }
 
     GateEventStatus:
       type: string

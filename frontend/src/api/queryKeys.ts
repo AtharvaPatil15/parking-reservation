@@ -38,6 +38,11 @@ export const queryKeys = {
   gateEvents: (date: string, status: string, page: number) => ['gate', 'events', date, status, page] as const,
   unbookedEntries: (date: string, companyId: string, page: number) =>
     ['gate', 'unbooked', date, companyId, page] as const,
+  // Under the 'gate' prefix so a check-in/out invalidation refreshes the capacity panel too.
+  gateCapacity: (date: string) => ['gate', 'capacity', date] as const,
+  vehicleRegistrations: (status: string, companyId: string, page: number) =>
+    ['gate', 'registrations', status, companyId, page] as const,
+  userDetail: (userId: string) => ['users', userId, 'detail'] as const,
 
   // Company-scoped (P5-11 drill-in + P5-12 company admin)
   companyAdminDashboard: ['dashboard', 'company-admin'] as const,

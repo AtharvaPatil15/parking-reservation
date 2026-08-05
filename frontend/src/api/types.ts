@@ -763,7 +763,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One user in full, with their registered cars
+         * @description Role SUPER_ADMIN (any user) or COMPANY_ADMIN (own company only — a cross-tenant id returns `404`, not `403`, so existence is not leaked). Backs the details dialog on both approval screens: the queue rows carry name/email/status, which is not enough to approve on.
+         */
+        get: operations["getUserDetail"];
         put?: never;
         post?: never;
         /**
@@ -1197,6 +1201,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/gate/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-company slots, bookings and free spaces for a date
+         * @description Roles SECURITY or SUPER_ADMIN. The gate's "is there room?" panel, building-wide (D15) — the same scope the guard already has over the gate log. Defaults to today's IST business date.
+         */
+        get: operations["getGateCapacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List walk-in registration requests
+         * @description Scoped by role: COMPANY_ADMIN sees their own company's; SUPER_ADMIN sees every company's and may narrow with `companyId`; SECURITY sees **the requests they raised**, whatever the company — they need to know when one has been approved, because the car is waiting at the barrier for it. PENDING first, then newest.
+         */
+        get: operations["listVehicleRegistrations"];
+        put?: never;
+        /**
+         * Ask for a walk-in car to be added to the registry
+         * @description Role SECURITY. A new employee turned up at the barrier with a car nobody had registered. Creates a PENDING request for the named company; the car is **not** admitted until an admin approves it (`POST /gate/check-in` returns `409` while the request is outstanding).
+         *     Only the four things a guard can establish at a barrier are required — plate, owner name, company, and optionally a contact. Notably not address / pin code / home distance: those belong to a user account, which this does not create.
+         */
+        post: operations["createVehicleRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles/registrations/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a walk-in registration
+         * @description Roles COMPANY_ADMIN (own company only — another tenant's request is `403`) or SUPER_ADMIN. Approving upserts the `Vehicle` and links it to an ACTIVE same-email user of that company when one exists; the decision and the registry row are one transaction, so an approved request can never exist without the car it promised. Rejecting records the decision and leaves the registry untouched. Only a PENDING request can be decided.
+         */
+        post: operations["decideVehicleRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/{type}": {
         parameters: {
             query?: never;
@@ -1352,6 +1423,17 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        UserDetail: components["schemas"]["UserProfile"] & {
+            /** @description Active registry rows matched by user id or by owner email. */
+            vehicles: {
+                id: string;
+                vehicleNumber: string;
+                displayNumber: string;
+                vehicleType: components["schemas"]["VehicleType"];
+                makeModel?: string | null;
+                colour?: string | null;
+            }[];
         };
         /** @description Partial update; all fields optional. */
         UpdateProfileRequest: {
@@ -1868,6 +1950,81 @@ export interface components {
                 /** Format: date-time */
                 checkInAt: string;
             } | null;
+            /** @description An outstanding walk-in registration for this plate. While set, `POST /gate/check-in` refuses the car with a `409` — the one case where the gate does not admit (a narrow exception to D16: the plate is only in this state because a guard registered it as a new employee). Names the company whose admin has to approve, so the guard knows who to call. */
+            pendingRegistration?: {
+                id: string;
+                ownerName: string;
+                companyId: string;
+                companyName: string;
+                /** Format: date-time */
+                requestedAt: string;
+            } | null;
+        };
+        /** @enum {string} */
+        VehicleRegistrationStatus: "PENDING" | "APPROVED" | "REJECTED";
+        /** @description A car security asked to have added to the registry — a new employee who turned up before anyone registered their vehicle. A request, not a `Vehicle`: approval by the named company's admin (or the Super Admin) is what creates the registry row and lets the car through the barrier. */
+        VehicleRegistration: {
+            id: string;
+            /** @description Normalized plate. */
+            vehicleNumber: string;
+            /** @description Plate as the guard wrote it down. */
+            displayNumber: string;
+            ownerName: string;
+            ownerEmail?: string | null;
+            contactNumber?: string | null;
+            companyId: string;
+            companyName: string;
+            vehicleType: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            notes?: string | null;
+            status: components["schemas"]["VehicleRegistrationStatus"];
+            /** @description Security user who raised it. */
+            requestedById?: string | null;
+            decidedById?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            decisionNote?: string | null;
+            /** @description The registry row this became */
+            vehicleId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        GateCapacityRow: {
+            companyId: string;
+            companyName: string;
+            /** @description Slots the company holds for the date (effective-dated quota). */
+            slots: number;
+            /** @description Quota withdrawn for the date — without it the row does not add up. */
+            blocked: number;
+            /** @description Every booking request for the date */
+            requests: number;
+            /** @description Requests that won a slot (primary + common pool). */
+            allocated: number;
+            /** @description `slots - blocked - allocated`, floored at 0. Quota-relative on purpose, NOT `slots - inside`: an allocated slot whose owner has not arrived is taken, not free. */
+            free: number;
+            /** @description Cars of this company currently checked in. */
+            inside: number;
+        };
+        /** @description Per-company capacity for a date — the gate's "is there room?" panel. Building-wide by design (D15): the guard serves every tenant, and now has to judge whether a company has anything left before phoning an admin about a walk-in. */
+        GateCapacity: {
+            /** Format: date */
+            bookingDate: string;
+            rows: components["schemas"]["GateCapacityRow"][];
+            building: {
+                /** @description In-service slots in the building — not the sum of quotas */
+                totalSlots: number;
+                /** @description Sum of every company's quota for the date. */
+                allottedSlots: number;
+                blocked: number;
+                requests: number;
+                allocated: number;
+                free: number;
+                /** @description Includes unregistered cars */
+                inside: number;
+                /** @description Cars inside that belong to no company (unregistered plates). */
+                insideUnattributed: number;
+            };
         };
         /** @enum {string} */
         GateEventStatus: "CHECKED_IN" | "CHECKED_OUT";
@@ -3724,6 +3881,34 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getUserDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user, with their active registry rows. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["UserDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     removeUser: {
         parameters: {
             query?: never;
@@ -4507,6 +4692,154 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getGateCapacity: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capacity per company, plus a building-wide total. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateCapacity"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listVehicleRegistrations: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                status?: components["schemas"]["VehicleRegistrationStatus"];
+                /** @description SUPER_ADMIN only — narrow to one company. */
+                companyId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged registration requests. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createVehicleRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    vehicleNumber: string;
+                    /** @description Defaults to the plate as typed */
+                    displayNumber?: string;
+                    ownerName: string;
+                    /**
+                     * Format: email
+                     * @description Optional, but it is how approval links the car to an existing account — matched against an ACTIVE user of the same company.
+                     */
+                    ownerEmail?: string;
+                    contactNumber?: string;
+                    /** @description Required — with no company there is nobody to approve it. */
+                    companyId: string;
+                    vehicleType?: components["schemas"]["VehicleType"];
+                    makeModel?: string;
+                    colour?: string;
+                    notes?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The pending request. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Already in the registry (check it in as normal), or already waiting for approval. */
+            409: components["responses"]["Conflict"];
+        };
+    };
+    decideVehicleRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "APPROVE" | "REJECT";
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The decided request. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getReport: {

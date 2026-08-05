@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
@@ -33,8 +33,10 @@ describe('Approvals', () => {
 
   it('approves a pending member', async () => {
     renderApprovals();
-    await screen.findByText('Nadia Khan');
-    await userEvent.click(screen.getAllByRole('button', { name: /approve/i })[0]);
+    // Scoped to the member's own row: the screen now carries a second approval queue (walk-in cars from
+    // the gate), so an unscoped /approve/i matches whichever button happens to render first.
+    const row = (await screen.findByText('Nadia Khan')).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: /approve/i }));
     expect(await screen.findByText(/user approved/i)).toBeInTheDocument();
   });
 

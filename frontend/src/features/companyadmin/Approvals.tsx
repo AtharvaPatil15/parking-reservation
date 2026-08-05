@@ -5,6 +5,8 @@ import {
 } from '../../components';
 import { useCompanyUsers, useRemoveCompanyUser, useSetUserApproval } from '../../api/hooks';
 import { useAuth } from '../../lib/auth';
+import { UserDetailsModal } from '../shared/UserDetailsModal';
+import { VehicleRegistrations } from '../shared/VehicleRegistrations';
 import type { components } from '../../api/types';
 
 type UserProfile = components['schemas']['UserProfile'];
@@ -28,6 +30,10 @@ export function Approvals() {
   const { toast } = useToast();
   // Track the row currently mutating so only its buttons show a spinner.
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Taken from the already-loaded page rather than the dialog's own fetch, so the footer buttons render
+  // immediately instead of popping in a moment after the dialog opens.
+  const detailUser = users.data?.items.find((u) => u.id === detailId);
 
   function decide(userId: string, decision: 'APPROVE' | 'REJECT') {
     setPendingId(userId);
@@ -51,7 +57,22 @@ export function Approvals() {
   }
 
   const columns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    {
+      key: 'name',
+      header: 'Name',
+      // The name is the affordance for the details dialog: an admin cannot judge an approval from a name
+      // and an email, and the distance-from-home behind it is what the person's whole allocation score
+      // is built on. A button rather than a row click, so removing/approving stays unambiguous.
+      render: (u) => (
+        <button
+          type="button"
+          onClick={() => setDetailId(u.id)}
+          className="text-left font-medium text-text underline-offset-2 hover:underline"
+        >
+          {u.fullName}
+        </button>
+      ),
+    },
     { key: 'email', header: 'Email', render: (u) => u.email },
     { key: 'status', header: 'Status', render: (u) => <Badge tone={statusTone(u.status)}>{u.status}</Badge> },
     {
@@ -59,6 +80,9 @@ export function Approvals() {
       render: (u) =>
         u.role === 'USER' ? (
           <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDetailId(u.id)}>
+              Details
+            </Button>
             <Button
               size="sm"
               variant="danger"
@@ -93,6 +117,9 @@ export function Approvals() {
         <p className="text-text-muted">Approve or reject people who signed up for your company.</p>
       </div>
 
+      {/* Above the member list: somebody is standing at the barrier waiting on this one. */}
+      <VehicleRegistrations />
+
       <Card title="Members" padded={false}>
         {users.isLoading ? (
           <LoadingState label="Loading members…" />
@@ -107,6 +134,38 @@ export function Approvals() {
           </>
         )}
       </Card>
+
+      <UserDetailsModal
+        userId={detailId}
+        onClose={() => setDetailId(null)}
+        actions={
+          detailUser?.status === 'PENDING' ? (
+            <>
+              <Button
+                variant="secondary"
+                loading={pendingId === detailUser.id && approval.isPending}
+                disabled={pendingId !== null}
+                onClick={() => {
+                  decide(detailUser.id, 'REJECT');
+                  setDetailId(null);
+                }}
+              >
+                Reject
+              </Button>
+              <Button
+                loading={pendingId === detailUser.id && approval.isPending}
+                disabled={pendingId !== null}
+                onClick={() => {
+                  decide(detailUser.id, 'APPROVE');
+                  setDetailId(null);
+                }}
+              >
+                Approve
+              </Button>
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }
