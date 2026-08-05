@@ -218,6 +218,12 @@ describe('POST /auth/refresh — reuse revokes the token family', () => {
       .expect(200);
     const stolen = first.headers['set-cookie'];
 
+    const victim = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const stolenRow = await prisma.refreshToken.findFirstOrThrow({
+      where: { userId: victim.id, revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
     // The attacker redeems it first and receives a live descendant.
     const rotated = await request(app).post(`${API}/auth/refresh`).set('Cookie', stolen).expect(200);
     const descendant = rotated.headers['set-cookie'];
@@ -228,11 +234,49 @@ describe('POST /auth/refresh — reuse revokes the token family', () => {
     // The fix: the descendant the attacker holds is dead too, so the session cannot be continued.
     await request(app).post(`${API}/auth/refresh`).set('Cookie', descendant).expect(401);
 
+    // Scoped to this exact token, so the assertion cannot be satisfied by another test's audit row.
     const audit = await prisma.auditLog.findFirst({
-      where: { actionType: 'REFRESH_TOKEN_REUSE_DETECTED' },
-      orderBy: { createdAt: 'desc' },
+      where: { actionType: 'REFRESH_TOKEN_REUSE_DETECTED', entityId: stolenRow.id },
     });
     expect(audit).not.toBeNull();
+  });
+
+  it('does not file a theft audit when a token is retried after an ordinary logout', async () => {
+    // logout() and removeUser() revoke without rotating, so "revoked" on its own cannot mean stolen
+    // — otherwise signing out and letting a stale tab retry would raise a false alarm, and a signal
+    // that fires during normal use is one nobody acts on when it matters.
+    const email = 'superadmin@redbricks.example';
+    const signedIn = await request(app)
+      .post(`${API}/auth/login`)
+      .send({ email, password: DEV_PASSWORD })
+      .expect(200);
+    const cookie = signedIn.headers['set-cookie'];
+
+    const user = await prisma.user.findFirstOrThrow({ where: { email } });
+    const issued = await prisma.refreshToken.findFirstOrThrow({
+      where: { userId: user.id, revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    await request(app)
+      .post(`${API}/auth/logout`)
+      .set(bearer(signedIn.body.data.accessToken))
+      .set('Cookie', cookie)
+      .expect(200);
+
+    // Revoked but never rotated — the distinction the fix turns on.
+    const afterLogout = await prisma.refreshToken.findFirstOrThrow({ where: { id: issued.id } });
+    expect(afterLogout.revokedAt).not.toBeNull();
+    expect(afterLogout.replacedByTokenHash).toBeNull();
+
+    // The stale retry is still refused...
+    await request(app).post(`${API}/auth/refresh`).set('Cookie', cookie).expect(401);
+
+    // ...but it is not recorded as a theft.
+    const falseAlarm = await prisma.auditLog.findFirst({
+      where: { actionType: 'REFRESH_TOKEN_REUSE_DETECTED', entityId: issued.id },
+    });
+    expect(falseAlarm).toBeNull();
   });
 
   it('still rotates normally when a token is used exactly once', async () => {

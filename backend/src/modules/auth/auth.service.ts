@@ -47,13 +47,16 @@ const dummyHash = (): Promise<string> => (dummyHashPromise ??= argon2.hash(rando
  * The `seen` set bounds the walk: the column is written by this service and should form a simple
  * chain, but a cycle must not spin here.
  */
-async function revokeTokenChain(startHash: string | null): Promise<number> {
-  let hash = startHash;
+async function revokeTokenChain(startHash: string): Promise<number> {
+  let hash: string | null = startHash;
   let revoked = 0;
   const seen = new Set<string>();
   while (hash && !seen.has(hash)) {
-    seen.add(hash);
-    const node = await prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+    // Bound to a definitely-string local: feeding the nullable loop variable straight into the
+    // query makes `node`'s type depend on its own assignment, which TS reports as circular.
+    const current: string = hash;
+    seen.add(current);
+    const node = await prisma.refreshToken.findUnique({ where: { tokenHash: current } });
     if (!node) break;
     if (!node.revokedAt) {
       await prisma.refreshToken.update({ where: { id: node.id }, data: { revokedAt: new Date() } });
@@ -227,16 +230,25 @@ export async function refresh(rawToken: string | undefined, ip?: string): Promis
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(rawToken) } });
   if (!row) throw new UnauthenticatedError('Invalid refresh token');
 
-  // Replay of a token this service already rotated → assume it leaked and kill the chain it spawned
-  // (see `revokeTokenChain`), rather than failing this one call and leaving the descendant live.
+  // Replay of a token this service already **rotated** → assume it leaked and kill the chain it
+  // spawned (see `revokeTokenChain`), rather than failing this one call and leaving the descendant
+  // live.
+  //
+  // `replacedByTokenHash` is what separates the two ways a token becomes revoked, and only one of
+  // them is suspicious: rotation (below) always writes both columns together, while `logout` and
+  // `removeUser` set `revokedAt` alone. Treating every revoked token as theft would therefore raise
+  // an alarm on the most ordinary sequence there is — sign out, then a stale tab retries its
+  // refresh — and a signal that fires during normal use is one nobody will act on when it matters.
   if (row.revokedAt) {
-    const revokedCount = await revokeTokenChain(row.replacedByTokenHash);
-    await recordAudit({
-      actionType: 'REFRESH_TOKEN_REUSE_DETECTED',
-      entityType: 'RefreshToken',
-      entityId: row.id,
-      newValue: { userId: row.userId, revokedDescendants: revokedCount },
-    });
+    if (row.replacedByTokenHash) {
+      const revokedCount = await revokeTokenChain(row.replacedByTokenHash);
+      await recordAudit({
+        actionType: 'REFRESH_TOKEN_REUSE_DETECTED',
+        entityType: 'RefreshToken',
+        entityId: row.id,
+        newValue: { userId: row.userId, revokedDescendants: revokedCount },
+      });
+    }
     throw new UnauthenticatedError('Invalid refresh token');
   }
   if (row.expiresAt < new Date()) throw new UnauthenticatedError('Invalid refresh token');

@@ -76,10 +76,19 @@ export function resetAuthRateLimits(): void {
  * ~430k password guesses per day per IP against an 8-character minimum. This is the actual
  * guard.
  *
- * Keyed on IP **plus** the submitted email, which cuts both ways: one attacker cannot spend a
- * shared office IP's whole budget and lock out their colleagues, and one account cannot be ground
- * down from a rotating address pool. `skipSuccessfulRequests` means only failures count, so a
- * legitimate user signing in repeatedly is never throttled by their own activity.
+ * Keyed on IP **plus** the submitted email. What that buys is per-account budgets within an
+ * address: an attacker hammering one colleague's account cannot spend the whole office NAT's
+ * allowance and lock everyone else out of logging in. `skipSuccessfulRequests` means only failures
+ * count, so a legitimate user signing in repeatedly is never throttled by their own activity.
+ *
+ * What it does **not** buy: this is not an account-wide budget. A caller with a pool of addresses
+ * still gets a fresh 10 per address for the same email, so distributed credential stuffing is only
+ * slowed, not stopped. Closing that needs a second limiter keyed on the email alone, which is
+ * deliberately not here — an email-only budget is a targeted lockout: anyone who knows your address
+ * could burn it from anywhere and keep you from signing in for the window. Trading a guaranteed
+ * lockout vector for a partial mitigation is the wrong way round at this app's scale. If it is ever
+ * wanted, the shape to reach for is a high account-wide ceiling that only trips on volume no real
+ * person produces, and it needs its own decision — not a silent addition here.
  */
 const loginLimiter = rateLimit({
   windowMs: 15 * 60_000,
