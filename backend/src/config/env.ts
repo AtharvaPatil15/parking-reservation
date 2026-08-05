@@ -22,6 +22,15 @@ const schema = z
     REFRESH_TOKEN_TTL: z.coerce.number().default(604800), // seconds (7d)
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
     LOG_LEVEL: z.string().default('info'),
+    // Whether to believe X-Forwarded-For. Behind a load balancer this must be on or every request
+    // shares one rate-limit key (the proxy's IP). Off by default and deliberately opt-in: trusting
+    // the header with no proxy in front lets any caller forge their own IP and walk straight past
+    // the per-IP limiters below. `z.coerce.boolean()` is wrong here — it maps the string 'false' to
+    // true — so the value is parsed explicitly.
+    TRUST_PROXY: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
   })
   // In production, refuse to boot with a missing/known/weak JWT secret — otherwise tokens are forgeable.
   .superRefine((cfg, ctx) => {

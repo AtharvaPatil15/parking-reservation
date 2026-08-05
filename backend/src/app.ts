@@ -2,7 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import pinoHttp from 'pino-http';
 import { env } from './config/env';
 import { logger } from './lib/logger';
@@ -23,6 +23,10 @@ import { gateRouter, vehiclesRouter } from './modules/gate/gate.routes';
 
 export const app = express();
 
+// Must precede the limiters: it decides whether `req.ip` is the socket address or the last hop in
+// X-Forwarded-For, and therefore what the per-IP rate-limit keys are actually keyed on.
+if (env.TRUST_PROXY) app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
@@ -41,7 +45,7 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime() });
 });
 
-// Rate limiting → standard 429 envelope (contract §3.2). Tightened per-route in later tasks.
+// Rate limiting → standard 429 envelope (contract §3.2).
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 300,
@@ -50,8 +54,67 @@ const limiter = rateLimit({
   handler: (_req, res) => sendError(res, 429, 'RATE_LIMITED', 'Too many requests'),
 });
 
+const tooManyAttempts = (_req: express.Request, res: express.Response) =>
+  sendError(res, 429, 'RATE_LIMITED', 'Too many attempts; try again later');
+
+// Explicit stores so the counters can be cleared. The integration suite runs every file in one
+// process (`singleFork`), so without this the auth counters accumulate across the whole run and a
+// late test file starts seeing 429s from registrations made by an earlier one.
+const loginStore = new MemoryStore();
+const registerStore = new MemoryStore();
+
+/** Clear the auth attempt counters. For tests — production has no reason to call this. */
+export function resetAuthRateLimits(): void {
+  loginStore.resetAll();
+  registerStore.resetAll();
+}
+
+/**
+ * Credential limiter for POST /auth/login.
+ *
+ * The global 300/min above is a traffic ceiling, not brute-force protection — it still permits
+ * ~430k password guesses per day per IP against an 8-character minimum. This is the actual
+ * guard.
+ *
+ * Keyed on IP **plus** the submitted email, which cuts both ways: one attacker cannot spend a
+ * shared office IP's whole budget and lock out their colleagues, and one account cannot be ground
+ * down from a rotating address pool. `skipSuccessfulRequests` means only failures count, so a
+ * legitimate user signing in repeatedly is never throttled by their own activity.
+ */
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  max: 10,
+  store: loginStore,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    return `${req.ip}:${email}`;
+  },
+  handler: tooManyAttempts,
+});
+
+/**
+ * Registration limiter. Different threat from login: /register answers 409 for an address that is
+ * already taken, so an unmetered endpoint is an account-enumeration oracle as well as a spam
+ * vector. Keyed on IP alone — there is no prior account to key against.
+ */
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 50,
+  store: registerStore,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: tooManyAttempts,
+});
+
 const api = express.Router();
 api.use(limiter);
+// Ahead of the auth router so the tighter limits win. `express.json()` has already run at app
+// level, so `req.body.email` is populated for the login key.
+api.use('/auth/login', loginLimiter);
+api.use('/auth/register', registerLimiter);
 api.use('/auth', authRoutes);
 api.use('/config', configRoutes);
 api.use('/companies', companiesRoutes); // CRUD + /active + /:id/users + /:id/admins

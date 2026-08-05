@@ -21,6 +21,49 @@ const BUILDING_COMPANY_CODE = 'REDBRICKS';
 
 const hashToken = (raw: string): string => createHash('sha256').update(raw).digest('hex');
 
+/**
+ * A throwaway Argon2 hash to verify against when the email does not exist.
+ *
+ * Both branches of a failed login already return the same message, but not in the same time: a
+ * missing account used to answer in about a millisecond while a real one waited for a full Argon2
+ * verify. That difference is a reliable account-enumeration oracle. Verifying against this hash
+ * makes the two paths cost the same.
+ *
+ * Computed once, lazily, and cached — the hash itself is never compared against anything real, so
+ * its input only needs to be unguessable.
+ */
+let dummyHashPromise: Promise<string> | null = null;
+const dummyHash = (): Promise<string> => (dummyHashPromise ??= argon2.hash(randomBytes(32).toString('hex')));
+
+/**
+ * Revoke a reused refresh token's descendants.
+ *
+ * Presenting an already-revoked token is the textbook signal of theft: two parties hold the same
+ * token and one replayed what the other had already rotated. Rotation on its own does not help
+ * there — whoever redeemed it first holds a live descendant and can keep rotating it for the rest
+ * of the TTL, while the victim just gets logged out. So on reuse we walk `replacedByTokenHash`
+ * forward and revoke the whole chain, which forces both parties back through the password.
+ *
+ * The `seen` set bounds the walk: the column is written by this service and should form a simple
+ * chain, but a cycle must not spin here.
+ */
+async function revokeTokenChain(startHash: string | null): Promise<number> {
+  let hash = startHash;
+  let revoked = 0;
+  const seen = new Set<string>();
+  while (hash && !seen.has(hash)) {
+    seen.add(hash);
+    const node = await prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+    if (!node) break;
+    if (!node.revokedAt) {
+      await prisma.refreshToken.update({ where: { id: node.id }, data: { revokedAt: new Date() } });
+      revoked += 1;
+    }
+    hash = node.replacedByTokenHash;
+  }
+  return revoked;
+}
+
 export interface AuthUser {
   id: string;
   fullName: string;
@@ -54,8 +97,12 @@ export async function login(
     where: { email, deletedAt: null },
     include: { roles: { include: { role: true } }, company: true },
   });
-  // Generic message — don't reveal which of email/password was wrong.
-  if (!user) throw new UnauthenticatedError('Invalid credentials');
+  // Generic message — don't reveal which of email/password was wrong. The decoy verify keeps the
+  // *timing* generic too (see `dummyHash`); without it the message is uniform but the clock is not.
+  if (!user) {
+    await argon2.verify(await dummyHash(), password).catch(() => false);
+    throw new UnauthenticatedError('Invalid credentials');
+  }
 
   const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
   if (!ok) throw new UnauthenticatedError('Invalid credentials');
@@ -178,9 +225,21 @@ export async function register(input: RegisterInput) {
 export async function refresh(rawToken: string | undefined, ip?: string): Promise<Tokens & { user: AuthUser }> {
   if (!rawToken) throw new UnauthenticatedError('No refresh token');
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(rawToken) } });
-  if (!row || row.revokedAt || row.expiresAt < new Date()) {
+  if (!row) throw new UnauthenticatedError('Invalid refresh token');
+
+  // Replay of a token this service already rotated → assume it leaked and kill the chain it spawned
+  // (see `revokeTokenChain`), rather than failing this one call and leaving the descendant live.
+  if (row.revokedAt) {
+    const revokedCount = await revokeTokenChain(row.replacedByTokenHash);
+    await recordAudit({
+      actionType: 'REFRESH_TOKEN_REUSE_DETECTED',
+      entityType: 'RefreshToken',
+      entityId: row.id,
+      newValue: { userId: row.userId, revokedDescendants: revokedCount },
+    });
     throw new UnauthenticatedError('Invalid refresh token');
   }
+  if (row.expiresAt < new Date()) throw new UnauthenticatedError('Invalid refresh token');
   const user = await prisma.user.findFirst({
     where: { id: row.userId, deletedAt: null },
     include: { roles: { include: { role: true } }, company: true },
