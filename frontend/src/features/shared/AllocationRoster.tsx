@@ -15,7 +15,7 @@ const TYPE_OPTIONS: SelectOption[] = [
   { value: 'COMMON_POOL', label: 'Common pool' },
 ];
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 /**
  * Seat-centric allocation roster — which slot is held by whom, for what date, and whether it came
