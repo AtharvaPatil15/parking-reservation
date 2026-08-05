@@ -4,9 +4,11 @@ import {
   allocationBand,
   bookingWindowSummary,
   checkRequestable,
+  commonPoolRunAtFor,
   earliestRequestableDate,
   latestRequestableDate,
   nextAllocationRunAt,
+  previousAllocationRunAt,
   requestableDates,
   toIsoDate,
   upcomingAllocationBand,
@@ -257,6 +259,73 @@ describe('bookingWindowSummary', () => {
 
     const retuned = { distanceWeight: 0.3, carpoolWeight: 0.7, maxDistanceKm: 25, maxPeople: 5 };
     expect(bookingWindowSummary(MONDAY_MORNING, SUNDAY_CFG, retuned).scoring).toEqual(retuned);
+  });
+});
+
+describe('commonPoolRunAtFor', () => {
+  const SUNDAY_RUN = new Date('2026-08-09T14:30:00.000Z'); // Sun 09 Aug 20:00 IST
+
+  it('defaults to the primary instant, so both halves run in one tick', () => {
+    expect(commonPoolRunAtFor(SUNDAY_RUN, SUNDAY_CFG).toISOString()).toBe(SUNDAY_RUN.toISOString());
+  });
+
+  it('lands later on the same run day when a gap is configured', () => {
+    // 22:30 IST on the run day == 17:00 UTC.
+    const late = cfg({ commonPoolRunTime: '22:30' });
+    expect(commonPoolRunAtFor(SUNDAY_RUN, late).toISOString()).toBe('2026-08-09T17:00:00.000Z');
+  });
+
+  it('never precedes the primary run, whatever the config row says', () => {
+    // Validation rejects this on write; a hand-edited row must still not draw the pool before there is
+    // a waitlist to draw from.
+    const backwards = cfg({ runTime: '20:00', commonPoolRunTime: '06:00' });
+    expect(commonPoolRunAtFor(SUNDAY_RUN, backwards).toISOString()).toBe(SUNDAY_RUN.toISOString());
+  });
+
+  it('stays on the primary run day even at the very end of it', () => {
+    const midnightish = cfg({ commonPoolRunTime: '23:59' });
+    // 23:59 IST Sunday == 18:29 UTC Sunday — still the 9th in IST, which is what the scheduler's
+    // once-per-day guard and the band both key off.
+    expect(commonPoolRunAtFor(SUNDAY_RUN, midnightish).toISOString()).toBe('2026-08-09T18:29:00.000Z');
+  });
+});
+
+describe('previousAllocationRunAt', () => {
+  it('is the run currently in effect, a week back from the next one', () => {
+    // Mon 03 Aug: last run was Sun 02 Aug 20:00, next is Sun 09 Aug 20:00.
+    expect(previousAllocationRunAt(MONDAY_MORNING, SUNDAY_CFG).toISOString()).toBe('2026-08-02T14:30:00.000Z');
+  });
+
+  it('is the run just fired when called moments after it', () => {
+    const justAfter = new Date('2026-08-09T14:35:00.000Z'); // Sun 20:05 IST
+    expect(previousAllocationRunAt(justAfter, SUNDAY_CFG).toISOString()).toBe('2026-08-09T14:30:00.000Z');
+  });
+
+  it('is still the previous week moments before the run', () => {
+    const justBefore = new Date('2026-08-09T14:29:00.000Z'); // Sun 19:59 IST
+    expect(previousAllocationRunAt(justBefore, SUNDAY_CFG).toISOString()).toBe('2026-08-02T14:30:00.000Z');
+  });
+
+  it('hands the band contiguous with the upcoming one — no date in two bands, none in neither', () => {
+    for (const now of [MONDAY_MORNING, new Date('2026-08-09T14:35:00.000Z'), new Date('2026-08-12T09:00:00.000Z')]) {
+      const decided = allocationBand(previousAllocationRunAt(now, SUNDAY_CFG), SUNDAY_CFG);
+      expect(decided.toExclusive).toBe(upcomingAllocationBand(now, SUNDAY_CFG).from);
+    }
+  });
+
+  it('steps a fortnight for BIWEEKLY and a month for MONTHLY, not a fixed week', () => {
+    const biweekly = cfg({ runFrequency: 'BIWEEKLY' });
+    const bw = previousAllocationRunAt(new Date('2026-08-20T09:00:00.000Z'), biweekly);
+    expect(nextAllocationRunAt(bw, biweekly).getTime() - bw.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(bw.getTime()).toBeLessThanOrEqual(new Date('2026-08-20T09:00:00.000Z').getTime());
+
+    // MONTHLY is "first <runDay> of the month", which is not a fixed offset at all — the only safe
+    // definition of "previous" is the one `nextAllocationRunAt` itself produces.
+    const monthly = cfg({ runFrequency: 'MONTHLY' });
+    const now = new Date('2026-08-20T09:00:00.000Z');
+    const prev = previousAllocationRunAt(now, monthly);
+    expect(prev.getTime()).toBeLessThanOrEqual(now.getTime());
+    expect(nextAllocationRunAt(prev, monthly).getTime()).toBeGreaterThan(now.getTime());
   });
 });
 

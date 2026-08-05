@@ -1757,6 +1757,13 @@ export interface components {
             runFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
             /** @description HH:MM IST. */
             runTime: string;
+            /** @description 'HH:MM IST the common-pool half fires at, on the same run day. Never earlier than `runTime`; equal to it (the default) means both halves run back-to-back in one tick.' */
+            commonPoolRunTime: string;
+            /**
+             * Format: date-time
+             * @description When the next automatic common-pool run fires. Between the primary instant and the pool instant on a run day this is *today*, not `nextRunAt` — the pool still owes this run's band.
+             */
+            nextCommonPoolRunAt: string;
             /** @enum {integer} */
             windowWeeks: 2 | 4;
             /** @description Days a date is decided ahead of itself (D11). */
@@ -1864,19 +1871,39 @@ export interface components {
             totalAllocated: number;
             totalWaitlisted: number;
         };
+        WeeklyRunBandDate: {
+            /** Format: date */
+            bookingDate: string;
+            runStatus?: components["schemas"]["AllocationRunStatus"] | null;
+            pendingRequests: number;
+            /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
+            commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
+            /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
+            waitlistedRequests: number;
+            /** @description Slots held for this date from the primary run. */
+            allocated: number;
+            /** @description Slots held for this date from the common pool. */
+            poolAllocated: number;
+        };
         WeeklyRunPreview: {
             window: components["schemas"]["BookingWindow"];
             band: components["schemas"]["AllocationBand"];
-            dates: {
-                /** Format: date */
-                bookingDate: string;
-                runStatus?: components["schemas"]["AllocationRunStatus"] | null;
-                pendingRequests: number;
-                /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
-                commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
-                /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
-                waitlistedRequests: number;
-            }[];
+            dates: components["schemas"]["WeeklyRunBandDate"][];
+            /** @description The band the most recent scheduled run already decided, read from the database — so an automatic run is visible here, not only to whoever pressed the button. Contiguous with `band` by construction (`lastRun.band.toExclusive == band.from`). Every `runStatus` is null when no run has happened yet. */
+            lastRun: {
+                /**
+                 * Format: date-time
+                 * @description The scheduled primary instant this band belongs to.
+                 */
+                runAt: string;
+                /**
+                 * Format: date-time
+                 * @description The common-pool instant for the same run.
+                 */
+                commonPoolRunAt: string;
+                band: components["schemas"]["AllocationBand"];
+                dates: components["schemas"]["WeeklyRunBandDate"][];
+            };
         };
         VehicleSummary: {
             id: string;

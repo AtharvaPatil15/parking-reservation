@@ -536,6 +536,45 @@ npm test -- --no-file-parallelism
 
 ---
 
+### 4.15 · The automatic run — both halves, on their own clocks
+
+Added after Phase 8, when the scheduled run turned out to fire and allocate nothing. Two separate bugs,
+same shape: `tick()` called both `runWeeklyAllocation()` and `runWeeklyCommonPoolAllocation()` with no
+anchor, so each computed its band from the *fire* time. Since the scheduler only fires at or after its
+slot, and `nextAllocationRunAt` treats an instant exactly at the run as already under way, the anchor had
+rolled a week forward — the batch decided **next** week's dates, logged `COMPLETED`, and left the
+requests whose window had just closed at `SUBMITTED` with no future run that would ever own them.
+
+Both halves now take the primary slot as an explicit `runInstant`. The manual buttons pass none and are
+unchanged: a Super Admin clicks *before* the slot, which is the one case `upcomingAllocationBand` is for.
+
+**Configuring the pool's own time.** `/admin/config` → *Automatic allocation run* → **Common-pool run
+time**. Same run day, at or after the allocation time (rejected otherwise, on both sides). Left equal to
+the allocation time — the seeded default — both halves fire in one tick, exactly as before this setting
+existed. Push it later to give companies a window to release quota they know they will not use, which is
+precisely the inventory the pool redistributes.
+
+**Verify by clock, not by button:**
+
+1. Set the run day to today and the allocation time to a few minutes ahead; set the pool time ~2 minutes
+   after that. Queue a couple of requests for a date in the band, with the quota squeezed so somebody
+   must be waitlisted.
+2. At the allocation time: primary decides the band. The pool has **not** run.
+3. At the pool time: `/admin` shows the pool `Decided` for those dates and the waitlisted user placed.
+4. Reload `/admin` **after** both. The **Last run** card shows the band that was just decided, with
+   *Slots given* per date and `+n pool` where the pool placed anybody.
+
+> The last-run card is the part that used to be missing entirely. Before, results were rendered only from
+> the run button's own mutation response — so an automatic run was invisible to everyone, including the
+> person who scheduled it. It is read from the database now, so it does not matter who (or what) ran it.
+
+**Expect:** `booking.commonPoolRunTime` earlier than `booking.allocationRunTime` is refused inline on the
+config screen and with a `400` on `PATCH /config`. Automated cover:
+`tests/scheduler-band.integration.test.ts` (both halves, the gap, and the preview) plus the
+`common-pool trigger` suite in `tests/allocation.scheduler.test.ts`.
+
+---
+
 ## 5 · The money demo — run this end to end
 
 Ten minutes, one story: *the same three users, the same date, and the outcome flips from "who clicked
@@ -593,6 +632,11 @@ Where each Phase 8 behaviour is pinned:
 | Two-phase box building, in isolation | `backend/tests/gate.test.ts` *(split in two)* |
 | Window arithmetic, band partitioning, lead time | `backend/tests/bookings.window.test.ts` *(fixture pinned to lead 3)* |
 | The shipped 1-day lead + Sunday→Mon-Fri band (D21) | `backend/tests/bookings.window.test.ts` |
+| Pool instant + previous run, incl. biweekly/monthly | `backend/tests/bookings.window.test.ts` |
+| **Automatic run decides the band it fired for** | `backend/tests/scheduler-band.integration.test.ts` |
+| Pool waits for its own configured time | `backend/tests/scheduler-band.integration.test.ts` + `allocation.scheduler.test.ts` |
+| Pool time must not precede the allocation run | `backend/tests/scheduler-band.integration.test.ts` + `frontend/.../configValidation.test.ts` |
+| Automatic results visible on the weekly screen | `backend/tests/scheduler-band.integration.test.ts` + `frontend/.../WeeklyRun.test.tsx` |
 | Release cascade still ranks by score | `backend/tests/release-booking.integration.test.ts` *(unchanged)* |
 | Grid states + phase + accessibility | `frontend/src/components/SlotGrid.test.tsx` — *Devashish* |
 | Queued-not-held copy, live score panel | `frontend/src/features/user/BookingForm.test.tsx` — *Devashish* |

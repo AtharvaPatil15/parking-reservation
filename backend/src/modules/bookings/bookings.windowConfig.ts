@@ -16,14 +16,24 @@ const RUN_DAYS: RunDay[] = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDA
  * Malformed or missing rows fall back to the seeded defaults rather than throwing — a bad config row
  * must not take the booking form down.
  */
+const HH_MM = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+const toMinutes = (hhmm: string): number => {
+  const [hh, mm] = hhmm.split(':');
+  return Number(hh) * 60 + Number(mm);
+};
+
 export async function loadWindowConfig(): Promise<WindowConfig> {
-  const [weeks, runDay, runFrequency, runTime, leadDays] = await Promise.all([
+  const [weeks, runDay, runFrequency, runTime, poolRunTime, leadDays] = await Promise.all([
     getNumber('booking.windowWeeks'),
     getString('booking.allocationRunDay'),
     getString('booking.allocationRunFrequency'),
     getString('booking.allocationRunTime'),
+    getString('booking.commonPoolRunTime'),
     getNumber('booking.approvalLeadDays'),
   ]);
+
+  const resolvedRunTime = runTime && HH_MM.test(runTime) ? runTime : DEFAULT_WINDOW_CONFIG.runTime;
 
   return {
     windowWeeks: weeks === 2 || weeks === 4 ? weeks : DEFAULT_WINDOW_CONFIG.windowWeeks,
@@ -32,7 +42,14 @@ export async function loadWindowConfig(): Promise<WindowConfig> {
       runFrequency === 'WEEKLY' || runFrequency === 'BIWEEKLY' || runFrequency === 'MONTHLY'
         ? (runFrequency as RunFrequency)
         : DEFAULT_WINDOW_CONFIG.runFrequency,
-    runTime: runTime && /^([01]?\d|2[0-3]):([0-5]\d)$/.test(runTime) ? runTime : DEFAULT_WINDOW_CONFIG.runTime,
+    runTime: resolvedRunTime,
+    // Falls back to the primary run time, not to the seeded default: with a custom `runTime` the seeded
+    // '20:00' could land *before* primary, and "pool runs with primary" is the safe reading of a missing
+    // or malformed row. The ordering rule is enforced on write; this is the read-side backstop.
+    commonPoolRunTime:
+      poolRunTime && HH_MM.test(poolRunTime) && toMinutes(poolRunTime) >= toMinutes(resolvedRunTime)
+        ? poolRunTime
+        : resolvedRunTime,
     approvalLeadDays:
       leadDays != null && Number.isInteger(leadDays) && leadDays >= 1 && leadDays <= 6
         ? leadDays

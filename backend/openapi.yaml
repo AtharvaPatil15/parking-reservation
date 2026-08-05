@@ -3174,8 +3174,8 @@ components:
         needs to say "book between X and Y; results published on Z".
       required:
         [nextRunAt, nextRunCountdownSeconds, requestCloseAt, requestCloseCountdownSeconds, resultsRunAt,
-         runDay, runFrequency, runTime, windowWeeks, approvalLeadDays, earliestDate, latestDate,
-         requestableDates, nextRuns, scoring]
+         runDay, runFrequency, runTime, commonPoolRunTime, nextCommonPoolRunAt, windowWeeks,
+         approvalLeadDays, earliestDate, latestDate, requestableDates, nextRuns, scoring]
       properties:
         nextRunAt: { type: string, format: date-time, description: When the next automatic batch runs. }
         nextRunCountdownSeconds: { type: integer, description: Seconds until `nextRunAt`; 0 once passed. }
@@ -3185,6 +3185,17 @@ components:
         runDay: { type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY] }
         runFrequency: { type: string, enum: [WEEKLY, BIWEEKLY, MONTHLY] }
         runTime: { type: string, description: 'HH:MM IST.' }
+        commonPoolRunTime:
+          type: string
+          description: >
+            'HH:MM IST the common-pool half fires at, on the same run day. Never earlier than `runTime`;
+            equal to it (the default) means both halves run back-to-back in one tick.'
+        nextCommonPoolRunAt:
+          type: string
+          format: date-time
+          description: >
+            When the next automatic common-pool run fires. Between the primary instant and the pool
+            instant on a run day this is *today*, not `nextRunAt` — the pool still owes this run's band.
         windowWeeks: { type: integer, enum: [2, 4] }
         approvalLeadDays: { type: integer, description: Days a date is decided ahead of itself (D11). }
         earliestDate: { type: string, format: date }
@@ -3343,34 +3354,53 @@ components:
         totalAllocated: { type: integer }
         totalWaitlisted: { type: integer }
 
+    WeeklyRunBandDate:
+      type: object
+      required: [bookingDate, pendingRequests, waitlistedRequests, allocated, poolAllocated]
+      properties:
+        bookingDate: { type: string, format: date }
+        runStatus:
+          allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
+          nullable: true
+        pendingRequests: { type: integer }
+        commonPoolStatus:
+          allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
+          nullable: true
+          description: >
+            Status of this date's COMMON_POOL run, or null if it has not run. Independent of
+            `runStatus` — the two runs are separate steps.
+        waitlistedRequests:
+          type: integer
+          description: >
+            PRIMARY requests left WAITLISTED for this date — the population the common-pool run
+            would enroll. 0 means running the pool for this date would achieve nothing.
+        allocated: { type: integer, description: Slots held for this date from the primary run. }
+        poolAllocated: { type: integer, description: Slots held for this date from the common pool. }
+
     WeeklyRunPreview:
       type: object
-      required: [window, band, dates]
+      required: [window, band, dates, lastRun]
       properties:
         window: { $ref: '#/components/schemas/BookingWindow' }
         band: { $ref: '#/components/schemas/AllocationBand' }
         dates:
           type: array
-          items:
-            type: object
-            required: [bookingDate, pendingRequests, waitlistedRequests]
-            properties:
-              bookingDate: { type: string, format: date }
-              runStatus:
-                allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
-                nullable: true
-              pendingRequests: { type: integer }
-              commonPoolStatus:
-                allOf: [ { $ref: '#/components/schemas/AllocationRunStatus' } ]
-                nullable: true
-                description: >
-                  Status of this date's COMMON_POOL run, or null if it has not run. Independent of
-                  `runStatus` — the two runs are separate steps.
-              waitlistedRequests:
-                type: integer
-                description: >
-                  PRIMARY requests left WAITLISTED for this date — the population the common-pool run
-                  would enroll. 0 means running the pool for this date would achieve nothing.
+          items: { $ref: '#/components/schemas/WeeklyRunBandDate' }
+        lastRun:
+          type: object
+          description: >
+            The band the most recent scheduled run already decided, read from the database — so an
+            automatic run is visible here, not only to whoever pressed the button. Contiguous with
+            `band` by construction (`lastRun.band.toExclusive == band.from`). Every `runStatus` is null
+            when no run has happened yet.
+          required: [runAt, commonPoolRunAt, band, dates]
+          properties:
+            runAt: { type: string, format: date-time, description: The scheduled primary instant this band belongs to. }
+            commonPoolRunAt: { type: string, format: date-time, description: The common-pool instant for the same run. }
+            band: { $ref: '#/components/schemas/AllocationBand' }
+            dates:
+              type: array
+              items: { $ref: '#/components/schemas/WeeklyRunBandDate' }
 
     # --- Gate: vehicle registry + check-in/out (Phase 7 §5) ---
     VehicleSummary:

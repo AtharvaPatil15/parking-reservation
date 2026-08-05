@@ -29,7 +29,14 @@ const BOOLEAN_OPTIONS = [
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RUN_KEYS = ['booking.allocationRunFrequency', 'booking.allocationRunDay', 'booking.allocationRunTime'];
+const RUN_KEYS = [
+  'booking.allocationRunFrequency',
+  'booking.allocationRunDay',
+  'booking.allocationRunTime',
+  // The common pool is the second half of the same batch, so it is configured beside it rather than
+  // hidden in "Other" — where, being a TIME key, it would not have rendered at all.
+  'booking.commonPoolRunTime',
+];
 
 function inputType(valueType: string): string {
   if (valueType === 'TIME') return 'time';
@@ -260,8 +267,11 @@ export function ConfigTimings() {
       </div>
 
       {runEntries.length > 0 && (
-        <Card title="Automatic allocation run" description="Choose the interval, day, and IST time for automatic allocation.">
-          <div className="grid gap-4 sm:grid-cols-3">{runEntries.map(renderField)}</div>
+        <Card
+          title="Automatic allocation run"
+          description="Choose the interval, day, and IST times for automatic allocation. The common pool runs on the same day, at or after the allocation time — leave a gap to give companies a window to release quota they won't use."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{runEntries.map(renderField)}</div>
           {previewRuns.length > 0 && (
             <div className="mt-5">
               <h3 className="text-sm font-semibold text-text">Next 5 runs</h3>

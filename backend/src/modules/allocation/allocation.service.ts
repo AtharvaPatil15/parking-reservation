@@ -6,6 +6,8 @@ import { isValidCalendarDate, parseCalendarDate } from '../bookings/bookings.tim
 import {
   allocationBand,
   bookingWindowSummary,
+  commonPoolRunAtFor,
+  previousAllocationRunAt,
   upcomingAllocationBand,
   type AllocationBand,
 } from '../bookings/bookings.window';
@@ -716,13 +718,19 @@ export async function runWeeklyAllocation(
  * primary-waitlisted user as a *separate* `COMMON_POOL` booking and leaves the original `PRIMARY` row
  * `WAITLISTED` for good. So `allocated`/`waitlisted` must both be read off the COMMON_POOL rows;
  * counting PRIMARY waitlist here would report the pool as having achieved nothing.
+ *
+ * `runInstant` is the **primary** run's instant, not the pool's. The pool must land on the band primary
+ * just decided, and the pool fires later on the same day — anchoring on its own instant would be
+ * self-defeating once `commonPoolRunTime` pushes it past the point where `nextAllocationRunAt` has rolled
+ * a week forward. See `runWeeklyAllocation` for why the un-anchored form is wrong for a scheduled call.
  */
 export async function runWeeklyCommonPoolAllocation(
   triggeredById?: string,
   now: Date = new Date(),
+  runInstant?: Date,
 ): Promise<WeeklyRunResult> {
   const cfg = await loadWindowConfig();
-  const band = upcomingAllocationBand(now, cfg);
+  const band = runInstant ? allocationBand(runInstant, cfg) : upcomingAllocationBand(now, cfg);
 
   const dates: WeeklyRunDateResult[] = [];
   for (const bookingDate of band.dates) {
@@ -776,48 +784,97 @@ export async function runWeeklyCommonPoolAllocation(
   };
 }
 
-/** Preview the band the next (or current) weekly batch owns — lets the SA see it before running. */
-export async function getWeeklyRunPreview(now: Date = new Date()) {
-  const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
-  const band = upcomingAllocationBand(now, cfg);
+/**
+ * Per-date state of one band: what each run type did (or has yet to do) and the counts an operator needs
+ * to judge whether running it would achieve anything.
+ *
+ * Extracted so the upcoming band and the already-decided band are described by the *same* query, and so
+ * the two tables on the weekly screen cannot drift into meaning subtly different things.
+ */
+async function bandSnapshot(band: AllocationBand) {
   const inBand = { gte: parseCalendarDate(band.from), lt: parseCalendarDate(band.toExclusive) };
-  const runs = await prisma.allocationRun.findMany({
-    where: { runType: { in: ['PRIMARY', 'COMMON_POOL'] }, bookingDate: inBand },
-    select: { runType: true, bookingDate: true, status: true },
-  });
+  const [runs, pending, waiting, allocated] = await Promise.all([
+    prisma.allocationRun.findMany({
+      where: { runType: { in: ['PRIMARY', 'COMMON_POOL'] }, bookingDate: inBand },
+      select: { runType: true, bookingDate: true, status: true },
+    }),
+    prisma.bookingRequest.groupBy({
+      by: ['bookingDate'],
+      where: { bookingType: 'PRIMARY', status: 'SUBMITTED', bookingDate: inBand },
+      _count: { _all: true },
+    }),
+    // The pool's population: users primary left WAITLISTED. This is what the common-pool run has to
+    // work with, so it is the count that tells the operator whether running it would achieve anything.
+    prisma.bookingRequest.groupBy({
+      by: ['bookingDate'],
+      where: { bookingType: 'PRIMARY', status: 'WAITLISTED', bookingDate: inBand },
+      _count: { _all: true },
+    }),
+    // Split by type: "8 primary + 2 from the pool" is the outcome, and a single total would hide the
+    // pool having done anything at all.
+    prisma.parkingAllocation.groupBy({
+      by: ['bookingDate', 'allocationType'],
+      where: { bookingDate: inBand },
+      _count: { _all: true },
+    }),
+  ]);
+
   const statusByDate = new Map(
     runs.filter((r) => r.runType === 'PRIMARY').map((r) => [isoDate(r.bookingDate), r.status]),
   );
   const cpStatusByDate = new Map(
     runs.filter((r) => r.runType === 'COMMON_POOL').map((r) => [isoDate(r.bookingDate), r.status]),
   );
-
-  const pending = await prisma.bookingRequest.groupBy({
-    by: ['bookingDate'],
-    where: { bookingType: 'PRIMARY', status: 'SUBMITTED', bookingDate: inBand },
-    _count: { _all: true },
-  });
   const pendingByDate = new Map(pending.map((p) => [isoDate(p.bookingDate), p._count._all]));
-
-  // The pool's population: users primary left WAITLISTED. This is what the common-pool run has to
-  // work with, so it is the count that tells the operator whether running it would achieve anything.
-  const waiting = await prisma.bookingRequest.groupBy({
-    by: ['bookingDate'],
-    where: { bookingType: 'PRIMARY', status: 'WAITLISTED', bookingDate: inBand },
-    _count: { _all: true },
-  });
   const waitingByDate = new Map(waiting.map((w) => [isoDate(w.bookingDate), w._count._all]));
+  const countFor = (type: 'PRIMARY' | 'COMMON_POOL') =>
+    new Map(
+      allocated.filter((a) => a.allocationType === type).map((a) => [isoDate(a.bookingDate), a._count._all]),
+    );
+  const primaryAllocByDate = countFor('PRIMARY');
+  const poolAllocByDate = countFor('COMMON_POOL');
+
+  return band.dates.map((d) => ({
+    bookingDate: d,
+    runStatus: statusByDate.get(d) ?? null,
+    pendingRequests: pendingByDate.get(d) ?? 0,
+    commonPoolStatus: cpStatusByDate.get(d) ?? null,
+    waitlistedRequests: waitingByDate.get(d) ?? 0,
+    allocated: primaryAllocByDate.get(d) ?? 0,
+    poolAllocated: poolAllocByDate.get(d) ?? 0,
+  }));
+}
+
+/**
+ * Preview the band the next (or current) weekly batch owns — lets the SA see it before running — plus
+ * `lastRun`, the band the most recent scheduled run already decided.
+ *
+ * `lastRun` exists because the upcoming band alone made the automatic run invisible: the moment the run
+ * instant passes, `upcomingAllocationBand` rolls to the *following* week, so a Super Admin opening this
+ * screen after a Sunday-night batch saw an empty next-week band and no trace of what had just been
+ * decided — the results were only ever rendered from the button's own mutation response, i.e. only for
+ * whoever clicked. Read from the database instead, so an automatic run shows up exactly like a manual one.
+ *
+ * The two bands are contiguous by construction (`lastRun.band.toExclusive === band.from`), so together
+ * they account for every date currently in play without overlapping.
+ */
+export async function getWeeklyRunPreview(now: Date = new Date()) {
+  const [cfg, scoring] = await Promise.all([loadWindowConfig(), loadScoringConfig()]);
+  const band = upcomingAllocationBand(now, cfg);
+  const lastRunAt = previousAllocationRunAt(now, cfg);
+  const lastBand = allocationBand(lastRunAt, cfg);
+  const [dates, lastDates] = await Promise.all([bandSnapshot(band), bandSnapshot(lastBand)]);
 
   return {
     window: bookingWindowSummary(now, cfg, scoring),
     band,
-    dates: band.dates.map((d) => ({
-      bookingDate: d,
-      runStatus: statusByDate.get(d) ?? null,
-      pendingRequests: pendingByDate.get(d) ?? 0,
-      commonPoolStatus: cpStatusByDate.get(d) ?? null,
-      waitlistedRequests: waitingByDate.get(d) ?? 0,
-    })),
+    dates,
+    lastRun: {
+      runAt: lastRunAt.toISOString(),
+      commonPoolRunAt: commonPoolRunAtFor(lastRunAt, cfg).toISOString(),
+      band: lastBand,
+      dates: lastDates,
+    },
   };
 }
 

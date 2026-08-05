@@ -42,6 +42,12 @@ const DEFAULT_CONFIG_ROWS = [
     valueType: 'TIME' as const,
     description: 'Automatic allocation run time (IST)',
   },
+  {
+    key: 'booking.commonPoolRunTime',
+    value: '20:00',
+    valueType: 'TIME' as const,
+    description: 'Automatic common-pool run time (IST)',
+  },
 ];
 
 function toMinutes(hhmm: string): number | null {
@@ -161,6 +167,17 @@ export async function updateConfig(input: Record<string, string>, actorUserId?: 
           'Times must satisfy primaryCutoff < primaryResultsBy <= commonPoolClose < commonPoolResultsBy',
       });
     }
+  }
+
+  // The common pool feeds on the waitlist primary produces, so it can never run first. Checked on the
+  // merged view, because either half of the pair can be the one being edited.
+  const primaryRunMins = toMinutes(merged('booking.allocationRunTime'));
+  const poolRunMins = toMinutes(merged('booking.commonPoolRunTime'));
+  if (primaryRunMins !== null && poolRunMins !== null && poolRunMins < primaryRunMins) {
+    details.push({
+      field: 'booking.commonPoolRunTime',
+      message: 'Must be at or after the allocation run time — the pool shares out what primary waitlists',
+    });
   }
 
   if (details.length) throw new ValidationError('Configuration validation failed', details);

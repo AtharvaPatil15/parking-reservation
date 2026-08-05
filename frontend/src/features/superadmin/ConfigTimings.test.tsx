@@ -30,6 +30,23 @@ describe('ConfigTimings', () => {
     expect(screen.getByText(/next 5 runs/i)).toBeInTheDocument();
   });
 
+  /**
+   * The common pool is the second half of the same batch, so its time is configured beside the run —
+   * and as a TIME key it would otherwise have rendered nowhere at all (the "Other" card excludes them).
+   */
+  it('exposes the common-pool run time alongside the allocation run', async () => {
+    renderConfig();
+    expect(await screen.findByLabelText(/common-pool run time/i)).toBeInTheDocument();
+  });
+
+  it('flags a common-pool time earlier than the allocation run', async () => {
+    renderConfig();
+    const pool = await screen.findByLabelText(/common-pool run time/i);
+    fireEvent.change(pool, { target: { value: '06:00' } }); // allocation runs at 20:00
+    expect(await screen.findByText(/at or after the allocation run time/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+  });
+
   it('does not expose the raw config keys (function names) to the user', async () => {
     renderConfig();
     await screen.findByLabelText(/automatic allocation run interval/i);

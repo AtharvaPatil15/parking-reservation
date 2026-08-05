@@ -25,15 +25,31 @@ function renderWeekly() {
  * A band preview with both run statuses per date, so the two steps can be driven independently.
  * `waitlisted` is what the common pool would have to work with.
  */
-function preview(
-  rows: Array<{
-    date: string;
-    runStatus?: 'COMPLETED' | 'FAILED' | null;
-    commonPoolStatus?: 'COMPLETED' | null;
-    pending?: number;
-    waitlisted?: number;
-  }>,
-) {
+interface Row {
+  date: string;
+  runStatus?: 'COMPLETED' | 'FAILED' | null;
+  commonPoolStatus?: 'COMPLETED' | null;
+  pending?: number;
+  waitlisted?: number;
+  allocated?: number;
+  poolAllocated?: number;
+}
+
+const bandDate = (r: Row) => ({
+  bookingDate: r.date,
+  runStatus: r.runStatus ?? null,
+  pendingRequests: r.pending ?? 0,
+  commonPoolStatus: r.commonPoolStatus ?? null,
+  waitlistedRequests: r.waitlisted ?? 0,
+  allocated: r.allocated ?? 0,
+  poolAllocated: r.poolAllocated ?? 0,
+});
+
+/**
+ * `lastRun` defaults to a band with nothing decided, so the last-run card stays hidden and the tests
+ * below keep asserting against a single table. Pass rows to exercise the card itself.
+ */
+function preview(rows: Row[], lastRunRows: Row[] = [{ date: '2098-12-29' }], overrides: Record<string, unknown> = {}) {
   return {
     success: true,
     data: {
@@ -42,21 +58,28 @@ function preview(
         nextRunCountdownSeconds: 90_000,
         runDay: 'SUNDAY',
         runTime: '20:00',
+        commonPoolRunTime: '20:00',
+        nextCommonPoolRunAt: '2099-01-03T14:30:00.000Z',
         windowWeeks: 2,
         approvalLeadDays: 1,
         earliestDate: '2099-01-05',
         latestDate: '2099-01-09',
         requestableDates: rows.map((r) => r.date),
         scoring: { distanceWeight: 0.6, carpoolWeight: 0.4, maxDistanceKm: 40, maxPeople: 4 },
+        ...overrides,
       },
       band: { from: rows[0].date, toExclusive: '2099-01-12', dates: rows.map((r) => r.date) },
-      dates: rows.map((r) => ({
-        bookingDate: r.date,
-        runStatus: r.runStatus ?? null,
-        pendingRequests: r.pending ?? 0,
-        commonPoolStatus: r.commonPoolStatus ?? null,
-        waitlistedRequests: r.waitlisted ?? 0,
-      })),
+      dates: rows.map(bandDate),
+      lastRun: {
+        runAt: '2098-12-27T14:30:00.000Z',
+        commonPoolRunAt: '2098-12-27T14:30:00.000Z',
+        band: {
+          from: lastRunRows[0].date,
+          toExclusive: rows[0].date,
+          dates: lastRunRows.map((r) => r.date),
+        },
+        dates: lastRunRows.map(bandDate),
+      },
     },
   };
 }
@@ -178,6 +201,72 @@ describe('WeeklyRun — common pool over the band', () => {
     await userEvent.click(await screen.findByRole('button', { name: /run common pool/i }));
     // Not phrased as a success — nothing moved, and saying "placed 0" as a win would mislead.
     await waitFor(() => expect(screen.getByText(/no spare slots to redistribute/i)).toBeInTheDocument());
+  });
+
+  /**
+   * The gap this closes: the results of an *automatic* run were only ever rendered from the button's own
+   * mutation response, so a Sunday-night batch left the screen showing an empty next-week band and no
+   * sign anything had happened. `lastRun` comes from the server, so it does not matter who ran it.
+   */
+  describe('last completed run', () => {
+    it('shows the decided band without anyone having pressed a button', async () => {
+      usePreview(
+        preview(
+          [{ date: '2099-01-05' }],
+          [
+            { date: '2098-12-29', runStatus: 'COMPLETED', commonPoolStatus: 'COMPLETED', allocated: 11, poolAllocated: 1 },
+            { date: '2098-12-30', runStatus: 'COMPLETED', commonPoolStatus: 'COMPLETED', allocated: 12, waitlisted: 3 },
+          ],
+        ),
+      );
+      renderWeekly();
+
+      const card = (await screen.findByText(/^last run:/i)).closest('section')!;
+      expect(within(card).getAllByText('Decided')).toHaveLength(4); // 2 dates × 2 run types
+      // Pool placements are called out separately — rolled into the total, a working pool would be
+      // indistinguishable from one that placed nobody.
+      expect(within(card).getByText(/\+1 pool/i)).toBeInTheDocument();
+      expect(screen.getByText(/24 slot\(s\) given · 3 still waitlisted/i)).toBeInTheDocument();
+    });
+
+    it('stays hidden before any run has happened, rather than showing a table of "Not run"', async () => {
+      usePreview(preview([{ date: '2099-01-05' }], [{ date: '2098-12-29' }]));
+      renderWeekly();
+
+      await screen.findByText(/weekly allocation/i);
+      expect(screen.queryByText(/^last run:/i)).not.toBeInTheDocument();
+    });
+
+    it('warns when the band was decided but never fully pooled', async () => {
+      usePreview(
+        preview(
+          [{ date: '2099-01-05' }],
+          [{ date: '2098-12-29', runStatus: 'COMPLETED', commonPoolStatus: null, waitlisted: 4, allocated: 12 }],
+        ),
+      );
+      renderWeekly();
+
+      expect(await screen.findByText(/common pool has not run for every date/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('the pool’s own schedule', () => {
+    it('says the pool runs with the batch when the two times match', async () => {
+      usePreview(preview([{ date: '2099-01-05', runStatus: 'COMPLETED', waitlisted: 1 }]));
+      renderWeekly();
+      expect(await screen.findByText(/common pool runs immediately after/i)).toBeInTheDocument();
+    });
+
+    it('spells out the pool’s own time when a gap is configured', async () => {
+      usePreview(
+        preview([{ date: '2099-01-05', runStatus: 'COMPLETED', waitlisted: 1 }], undefined, {
+          commonPoolRunTime: '22:00',
+          nextCommonPoolRunAt: '2099-01-03T16:30:00.000Z',
+        }),
+      );
+      renderWeekly();
+      expect(await screen.findByText(/common pool follows at 22:00 IST/i)).toBeInTheDocument();
+    });
   });
 
   it('surfaces a failed pool run without claiming it worked', async () => {

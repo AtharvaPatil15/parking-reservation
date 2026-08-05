@@ -39,6 +39,16 @@ export interface WindowConfig {
   runFrequency: RunFrequency;
   /** `HH:MM` IST the batch fires at on `runDay` (D10). */
   runTime: string;
+  /**
+   * `HH:MM` IST the **common-pool** half of the batch fires at, on the same `runDay`.
+   *
+   * Separate from `runTime` so the Super Admin can leave a gap between "you are waitlisted" and the
+   * pool being drawn — the window in which a company can release quota it knows it will not use, which
+   * is exactly the inventory the pool redistributes. Equal to `runTime` (the default) means the two
+   * halves run back-to-back in one tick, which is the behaviour that predates this setting. Never
+   * earlier than `runTime`: the pool's input is the waitlist primary produces.
+   */
+  commonPoolRunTime: string;
   /** Minimum days between a date's decision and the date itself (D11). */
   approvalLeadDays: number;
 }
@@ -56,6 +66,9 @@ export const DEFAULT_WINDOW_CONFIG: WindowConfig = {
   runDay: 'SUNDAY',
   runFrequency: 'WEEKLY',
   runTime: '20:00',
+  // Same instant as the primary run by default, so out of the box the two halves still run back-to-back
+  // in a single tick and nothing about the existing schedule changes.
+  commonPoolRunTime: '20:00',
   approvalLeadDays: 1,
 };
 
@@ -235,6 +248,40 @@ export function allocationBand(runInstant: Date, cfg: WindowConfig): AllocationB
   };
 }
 
+/**
+ * When the common-pool half of the batch anchored on `primaryRunInstant` fires: the same IST calendar
+ * day, at `commonPoolRunTime`.
+ *
+ * Same day rather than "primary + N hours" so a late pool time can never spill past midnight into a
+ * different calendar day — the scheduler's once-per-day guard and the band both key off the run day, and
+ * a pool run that believed it belonged to the next day would silently never fire.
+ *
+ * Clamped to `primaryRunInstant`: config validation rejects an earlier pool time, but a hand-edited row
+ * or a stale cache must not be able to draw the pool before there is a waitlist to draw it from.
+ */
+export function commonPoolRunAtFor(primaryRunInstant: Date, cfg: WindowConfig): Date {
+  const at = istInstantOnDate(runCalendarDate(primaryRunInstant), cfg.commonPoolRunTime);
+  return at.getTime() < primaryRunInstant.getTime() ? primaryRunInstant : at;
+}
+
+/**
+ * The most recent scheduled run at or before `now` — the run whose decisions are currently live.
+ *
+ * `nextAllocationRunAt` alone cannot answer this: subtracting a week is only right for WEEKLY, and
+ * month-boundary arithmetic for MONTHLY ("first Sunday of the month") does not reduce to a fixed offset.
+ * So step back far enough to be certain at least one run instant falls in `(probe, now]`, then walk
+ * forward with the same function that defines the schedule — no second, drifting implementation.
+ */
+export function previousAllocationRunAt(now: Date, cfg: WindowConfig): Date {
+  const lookbackDays = cfg.runFrequency === 'MONTHLY' ? 70 : cfg.runFrequency === 'BIWEEKLY' ? 15 : 8;
+  let prev = nextAllocationRunAt(new Date(now.getTime() - lookbackDays * MS_DAY), cfg);
+  for (;;) {
+    const next = nextAllocationRunAt(prev, cfg);
+    if (next.getTime() > now.getTime()) return prev;
+    prev = next;
+  }
+}
+
 export function nextAllocationRuns(now: Date, cfg: WindowConfig, count = 5): string[] {
   const runs: string[] = [];
   let cursor = now;
@@ -288,6 +335,8 @@ export interface BookingWindowSummary {
   runDay: RunDay;
   runFrequency: RunFrequency;
   runTime: string;
+  commonPoolRunTime: string;
+  nextCommonPoolRunAt: string;
   windowWeeks: number;
   approvalLeadDays: number;
   earliestDate: string;
@@ -306,6 +355,10 @@ export function bookingWindowSummary(
   const nextRun = nextAllocationRunAt(now, cfg);
   const windowRun = requestWindowRunAt(now, cfg);
   const requestClose = requestCloseAtForRun(windowRun);
+  // The pool trails primary on the same day, so between the two instants the *next* pool run belongs to
+  // the run that has already fired — not to `nextRun`, which is a week out.
+  const thisPool = commonPoolRunAtFor(previousAllocationRunAt(now, cfg), cfg);
+  const nextPool = thisPool.getTime() > now.getTime() ? thisPool : commonPoolRunAtFor(nextRun, cfg);
   return {
     nextRunAt: nextRun.toISOString(),
     nextRunCountdownSeconds: Math.max(0, Math.floor((nextRun.getTime() - now.getTime()) / 1000)),
@@ -315,6 +368,8 @@ export function bookingWindowSummary(
     runDay: cfg.runDay,
     runFrequency: cfg.runFrequency,
     runTime: cfg.runTime,
+    commonPoolRunTime: cfg.commonPoolRunTime,
+    nextCommonPoolRunAt: nextPool.toISOString(),
     windowWeeks: cfg.windowWeeks,
     approvalLeadDays: cfg.approvalLeadDays,
     earliestDate: toIsoDate(earliestRequestableDate(now, cfg)),

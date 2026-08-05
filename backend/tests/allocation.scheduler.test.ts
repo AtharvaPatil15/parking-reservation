@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_WINDOW_CONFIG,
   allocationBand,
+  commonPoolRunAtFor,
   earliestRequestableDate,
   nextAllocationRunAt,
   toIsoDate,
@@ -121,6 +122,51 @@ describe('scheduler run-due rule', () => {
     // Half-open bands: the next run picks up precisely where this one stopped, so a skipped week is
     // observable as a gap here.
     expect(second.from).toBe(first.toExclusive);
+  });
+
+  /**
+   * The common-pool half fires on its own instant on the same run day, guarded separately from primary.
+   * Mirrors the second half of `tick`, which is what makes a configured gap between the two halves work
+   * at all: with one shared once-per-day guard the primary tick would mark the day done and the pool
+   * would never fire.
+   */
+  describe('common-pool trigger', () => {
+    const poolFires = (now: Date, c: WindowConfig): boolean => {
+      const due = dueRunInstant(now, c);
+      if (!due) return false;
+      if (toIsoDate(currentIstCalendarDate(due)) !== toIsoDate(currentIstCalendarDate(now))) return false;
+      return now.getTime() >= commonPoolRunAtFor(due, c).getTime();
+    };
+
+    it('fires with primary when the two times are equal (the default)', () => {
+      const now = new Date('2026-08-09T14:30:00.000Z'); // Sun 20:00 IST, both halves due
+      expect(firesNow(now, cfg)).toBe(true);
+      expect(poolFires(now, cfg)).toBe(true);
+    });
+
+    it('waits for its own time when a gap is configured', () => {
+      const gapped = { ...cfg, commonPoolRunTime: '22:00' };
+      // 20:00 IST: primary is due, the pool is not.
+      expect(firesNow(new Date('2026-08-09T14:30:00.000Z'), gapped)).toBe(true);
+      expect(poolFires(new Date('2026-08-09T14:30:00.000Z'), gapped)).toBe(false);
+      // 21:59 IST — still not.
+      expect(poolFires(new Date('2026-08-09T16:29:00.000Z'), gapped)).toBe(false);
+      // 22:00 IST — now.
+      expect(poolFires(new Date('2026-08-09T16:30:00.000Z'), gapped)).toBe(true);
+    });
+
+    it('still decides primary’s band, not the band of its own later instant', () => {
+      const gapped = { ...cfg, commonPoolRunTime: '22:00' };
+      const due = dueRunInstant(new Date('2026-08-09T16:30:00.000Z'), gapped);
+      // The pool shares out what primary waitlisted, so the two must agree on the dates in scope.
+      expect(allocationBand(due!, gapped).dates).toEqual(allocationBand(due!, cfg).dates);
+    });
+
+    it('does not fire once the IST day has rolled over, even if its time has passed', () => {
+      const gapped = { ...cfg, commonPoolRunTime: '22:00' };
+      // Mon 00:00 IST: past 22:00 in absolute terms, but this week's slot is no longer today.
+      expect(poolFires(new Date('2026-08-09T18:30:00.000Z'), gapped)).toBe(false);
+    });
   });
 
   it('never decides a date with less than the configured lead time (the old nightly bug)', () => {
