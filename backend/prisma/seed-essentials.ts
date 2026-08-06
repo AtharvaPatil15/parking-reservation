@@ -15,16 +15,21 @@
  *   Office location          There is NO endpoint to create one. `POST /parking-areas` looks up the first
  *                            office location and fails with "No office location is configured" without it,
  *                            so a deployment that skips this can never have parking areas at all.
- *   Parking area + slots     Physical bays. Allocation assigns these; quota only says how many a company
- *                            may win. With a quota but no slots, `runPrimaryAllocation` throws
- *                            "Not enough usable parking slots".
+ *   Parking area             The building's one basement, so the super admin has somewhere to add bays.
+ *                            Structure, not inventory — `POST /slots` needs a `parkingAreaId` to attach to.
  *   System configuration     Allocation weights, the run schedule, the booking window. Read from the DB
  *                            (D8), not env — absent, allocation has no weights and no run time.
  *   Working days             Mon–Fri (D7). Absent, the booking window has no working days to offer.
  *   Notification templates   Looked up by code when a notification is raised.
  *
- * What it deliberately does NOT create: tenant companies, ordinary users, vehicles, quotas, bookings, or
- * holidays. Those are the building operator's job, through the UI, with real data.
+ * What it deliberately does NOT create: **parking slots**, tenant companies, ordinary users, vehicles,
+ * quotas, bookings, or holidays. Those are the building operator's job, through the UI, with real data.
+ *
+ * Slots are excluded on purpose. Bay numbering, EV bays and accessible bays are physical facts about a
+ * specific car park, and inventing 20 of them here would seed a fiction that then has to be found and
+ * deleted. The operator adds the real ones at Super Admin → Slots, against the parking area below.
+ * Consequence to know about: until at least one slot exists, `runPrimaryAllocation` throws "Not enough
+ * usable parking slots" — a quota alone does not give a company anything to win.
  *
  * Idempotent — safe to re-run. It reuses the same row ids as `seed.ts` for the office, parking area and
  * working days, so running both converges on one building instead of creating two.
@@ -42,10 +47,6 @@
  *   BUILDING_TIMEZONE        default Asia/Kolkata
  *   PARKING_AREA_NAME        default "Basement 1"
  *   PARKING_AREA_FLOOR       default B1
- *   SLOT_COUNT               default 20
- *   SLOT_PREFIX              default "<floor>-"   e.g. B1-01 … B1-20
- *   SLOT_EV_COUNT            default 2   (bays with EV charging)
- *   SLOT_ACCESSIBLE_COUNT    default 2   (accessible bays)
  *
  * Pass `--reset-password` to overwrite an existing super admin's password. Without it, an existing
  * account is left alone — so a routine re-run cannot clobber a password that was rotated after handover.
@@ -59,13 +60,6 @@ const prisma = new PrismaClient();
 const KNOWN_DEV_PASSWORD = 'ChangeMe#12345';
 
 const env = (key: string, fallback: string): string => process.env[key]?.trim() || fallback;
-const envInt = (key: string, fallback: number): number => {
-  const raw = process.env[key]?.trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) throw new Error(`${key} must be a non-negative integer, got "${raw}"`);
-  return n;
-};
 
 const CONFIG: Array<{ key: string; value: string; valueType: Prisma.SystemConfigurationCreateInput['valueType']; description: string }> = [
   { key: 'allocation.distanceWeight', value: '0.60', valueType: 'NUMBER', description: 'Weight of distance score' },
@@ -138,15 +132,6 @@ async function main(): Promise<void> {
   // weaker than the rule every other account is held to.
   if (password.length < 10) {
     console.error('Refusing: SUPERADMIN_PASSWORD must be at least 10 characters (password.minLength).');
-    process.exitCode = 1;
-    return;
-  }
-
-  const slotCount = envInt('SLOT_COUNT', 20);
-  const evCount = envInt('SLOT_EV_COUNT', 2);
-  const accessibleCount = envInt('SLOT_ACCESSIBLE_COUNT', 2);
-  if (evCount + accessibleCount > slotCount) {
-    console.error(`Refusing: SLOT_EV_COUNT + SLOT_ACCESSIBLE_COUNT (${evCount + accessibleCount}) exceeds SLOT_COUNT (${slotCount}).`);
     process.exitCode = 1;
     return;
   }
@@ -242,42 +227,22 @@ async function main(): Promise<void> {
   });
   console.log(`  office location        ${office.name}`);
 
-  // --- 5. Parking area + slots ---------------------------------------------
-  const floor = env('PARKING_AREA_FLOOR', 'B1');
+  // --- 5. Parking area (structure only — no bays) ---------------------------
+  // The area exists so `POST /slots` has a `parkingAreaId` to attach to. The bays themselves are NOT
+  // seeded: their numbering and which of them are EV or accessible are physical facts about a real car
+  // park, and guessing them here would plant data the operator then has to hunt down and delete.
   const area = await prisma.parkingArea.upsert({
     where: { id: 'seed-area-b1' },
     update: {},
     create: {
       id: 'seed-area-b1',
       name: env('PARKING_AREA_NAME', 'Basement 1'),
-      floor,
+      floor: env('PARKING_AREA_FLOOR', 'B1'),
       officeLocationId: office.id,
     },
   });
-  const prefix = env('SLOT_PREFIX', `${floor}-`);
-  const pad = String(slotCount).length < 2 ? 2 : String(slotCount).length;
-  // Accessible bays last, EV immediately before — so the numbering of ordinary bays never shifts when
-  // the counts change.
-  const firstAccessible = slotCount - accessibleCount + 1;
-  const firstEv = firstAccessible - evCount;
-  for (let i = 1; i <= slotCount; i++) {
-    const slotNumber = `${prefix}${String(i).padStart(pad, '0')}`;
-    const isAccessible = i >= firstAccessible;
-    const hasEv = !isAccessible && i >= firstEv;
-    await prisma.parkingSlot.upsert({
-      where: { parkingAreaId_slotNumber: { parkingAreaId: area.id, slotNumber } },
-      update: {},
-      create: {
-        slotNumber,
-        parkingAreaId: area.id,
-        slotType: isAccessible ? 'ACCESSIBLE' : hasEv ? 'EV_CHARGING' : 'STANDARD',
-        status: 'AVAILABLE',
-        hasEvCharging: hasEv,
-        isAccessible,
-      },
-    });
-  }
-  console.log(`  parking slots          ${slotCount} in ${area.name} (${prefix}01…${prefix}${String(slotCount).padStart(pad, '0')}) — ${evCount} EV, ${accessibleCount} accessible`);
+  const slotCount = await prisma.parkingSlot.count({ where: { parkingAreaId: area.id } });
+  console.log(`  parking area           ${area.name} (${slotCount} slot(s) — add them in the UI)`);
 
   // --- 6. System configuration ---------------------------------------------
   for (const c of CONFIG) {
@@ -329,10 +294,13 @@ async function main(): Promise<void> {
     console.log(`  partial indexes        all ${expected.length} present`);
   }
 
-  console.log('\nNot created — do these in the UI as the super admin:');
-  console.log('  1. Companies                (Super Admin → Companies)');
-  console.log('  2. A quota per company      effective TODAY or earlier, or it reads as zero');
-  console.log('  3. Company admins / users   they register, you approve');
+  console.log('\nNot created — do these in the UI as the super admin, in this order:');
+  console.log(`  1. Parking slots            Super Admin → Slots, into "${area.name}"`);
+  console.log('                              nothing can be allocated until at least one exists');
+  console.log('  2. Companies                Super Admin → Companies');
+  console.log('  3. A quota per company      effective TODAY or earlier, or it reads as zero');
+  console.log('                              and cannot exceed the slots created in step 1');
+  console.log('  4. Company admins / users   they register, you approve');
   console.log('\nSign in:');
   console.log(`  ${email}`);
 }

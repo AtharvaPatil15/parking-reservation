@@ -143,10 +143,14 @@ npm run seed:essentials                                                      # 3
 - **Step 3 is not optional.** Without it there are no roles (no login can hold a permission), no system
   configuration (allocation has no weights or run schedule), and no office location — and there is **no
   API to create an office location**, so `POST /parking-areas` fails forever with *"No office location is
-  configured"*. It also creates the parking area and 20 slots, without which
-  `runPrimaryAllocation` throws *"Not enough usable parking slots"*. Configure it with
-  `SLOT_COUNT`, `PARKING_AREA_NAME`, `BUILDING_NAME` and friends — see the header of
+  configured"*. It also creates the parking area, so there is somewhere to add bays to. Configure it with
+  `PARKING_AREA_NAME`, `BUILDING_NAME` and friends — see the header of
   [`seed-essentials.ts`](../backend/prisma/seed-essentials.ts).
+- **It creates no parking slots.** Bay numbering and which bays are EV or accessible are physical facts
+  about a specific car park, so they are entered by hand at Super Admin → Slots rather than invented here.
+  Until at least one slot exists, `runPrimaryAllocation` throws *"Not enough usable parking slots"* — a
+  quota on its own gives a company nothing to win. Add the slots before setting any quota, since a quota
+  cannot exceed the building's real inventory.
 - **`seed:essentials` re-checks step 2 for you** and prints a loud warning if the three partial indexes
   are absent. It is the only point in this flow that naturally sits after migrating, so it is the right
   place to catch it.
