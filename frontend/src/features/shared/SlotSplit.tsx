@@ -48,7 +48,11 @@ export function SlotSplit({
     { key: 'Blocked', n: blocked ?? 0, fill: 'bg-text/25', swatch: 'bg-text/25' },
     { key: 'Free', n: free ?? 0, fill: 'bg-text/[0.06]', swatch: 'bg-text/[0.06]' },
   ];
-  const share = (n: number) => (sum > 0 ? Math.round((n / sum) * 100) : 0);
+  // Widths use the exact share; only the printed label rounds. Rounding the width
+  // let a small non-zero category collapse to 0% and disappear from the bar, which
+  // misrepresented the counts it exists to show.
+  const shareExact = (n: number) => (sum > 0 ? (n / sum) * 100 : 0);
+  const share = (n: number) => Math.round(shareExact(n));
 
   return (
     <Blueprint className={cn('flex flex-col p-4', className)}>
@@ -63,7 +67,7 @@ export function SlotSplit({
           <span
             key={r.key}
             className={`${r.fill} block border-r border-canvas last:border-r-0`}
-            style={{ width: `${share(r.n)}%` }}
+            style={{ width: `${shareExact(r.n)}%` }}
           />
         ))}
       </div>

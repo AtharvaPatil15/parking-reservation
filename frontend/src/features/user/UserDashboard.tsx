@@ -61,7 +61,7 @@ export function UserDashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Your dashboard</h1>
+      <h1 className="text-4xl">Your dashboard</h1>
 
       {upcoming ? (
         <Card title="Upcoming booking">

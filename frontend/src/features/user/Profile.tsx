@@ -158,7 +158,7 @@ export function Profile() {
       <div className="space-y-3">
         <BackLink label="Back to home" />
         <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+        <h1 className="text-4xl">Profile</h1>
         <p className="text-text-muted">Manage your details and the cars security can identify at the gate.</p>
         </div>
       </div>

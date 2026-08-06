@@ -169,7 +169,7 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         {b.history && b.history.length > 1 && (
           <div className="mt-1 flex flex-wrap gap-1">
             {b.history.map((h) => (
-              <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
+              <span key={h.id} className="bg-surface-2 px-1.5 py-0.5 text-xs text-text-muted">
                 {displayTypeLabel(h)} {h.status}
               </span>
             ))}

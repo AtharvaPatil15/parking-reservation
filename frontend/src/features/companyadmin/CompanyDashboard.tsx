@@ -33,7 +33,7 @@ export function CompanyDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-3xs uppercase tracking-[0.16em] text-primary">Company utilization</p>
-          <h2 className="mt-1 text-4xl">Overview</h2>
+          <h1 className="mt-1 text-4xl">Overview</h1>
           <p className="mt-1 max-w-[62ch] text-text-muted">
             Parking utilization {date ? `on ${date}` : 'today'} for your company.
           </p>

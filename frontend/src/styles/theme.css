@@ -47,7 +47,10 @@
   --danger: 158 62 55; /* #9E3E37 */
   --danger-subtle: 244 228 226; /* #F4E4E2 */
 
-  /* The dark steel rail — its own plane, identical in both modes. */
+  /* The dark steel rail — its own plane, dark in BOTH themes rather than following
+     the ground. The values are not identical across modes: the dark block below
+     deepens --field and re-tunes the ink and accent steps, so the rail still
+     separates from a dark page and its focus ring stays visible. */
   --field: 29 45 61; /* #1D2D3D */
   --field-ink: 231 234 238; /* #E7EAEE */
   --field-ink-2: 174 177 181; /* #AEB1B5 */
