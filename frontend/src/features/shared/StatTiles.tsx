@@ -18,7 +18,7 @@ export function StatTiles({ stats }: { stats: Stat[] }) {
     // so cell count and wrapping can't leave a stray or missing edge.
     // Capped: past ~1400px the 4-up grid gives each cell 600px to hold a short
     // label and one figure, which reads as lost rather than generous.
-    <Blueprint className="grid max-w-[1400px] grid-cols-2 gap-px bg-border lg:grid-cols-4">
+    <Blueprint className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
       {stats.map((s, i) => (
         <div key={s.label} className="bg-canvas px-3.5 py-3">
           {/* Numbered like a spec sheet: the index reads as a plate reference. */}

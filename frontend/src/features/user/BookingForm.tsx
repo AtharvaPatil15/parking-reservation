@@ -185,7 +185,7 @@ export function BookingForm() {
       setFocusedDate(null);
     };
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="space-y-4">
         {failedCount === 0 ? (
           <SuccessState
             title={createdCount === 1 ? 'Request queued' : `${createdCount} requests queued`}
@@ -315,7 +315,7 @@ export function BookingForm() {
   return (
     // Left-aligned like every other screen (the shell no longer centres content),
     // but the form keeps a readable measure rather than stretching to a wide monitor.
-    <div className="max-w-4xl space-y-5">
+    <div className="space-y-5">
       <div className="space-y-3">
         <BackLink />
         <div className="flex flex-wrap items-start justify-between gap-3">

@@ -45,7 +45,7 @@ export function History() {
   return (
     // Capped: this table has four narrow columns, so full-bleed on a wide monitor
     // left a vast gap between "Status" and the right-aligned action.
-    <div className="max-w-5xl space-y-4">
+    <div className="space-y-4">
       <div className="space-y-2">
         <BackLink />
         <h1 className="text-4xl">Booking history</h1>

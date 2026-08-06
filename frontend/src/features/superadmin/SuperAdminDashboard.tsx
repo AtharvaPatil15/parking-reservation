@@ -53,7 +53,6 @@ export function SuperAdminDashboard() {
               seven columns (company, date and score included), which a half-width
               column would wrap into an unreadable mess. */}
           <SlotSplit
-            className="lg:max-w-[560px]"
             total={d.totalParkingSlots}
             booked={d.primaryBookings}
             pool={d.commonPoolBookings}
