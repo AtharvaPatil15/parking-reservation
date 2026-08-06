@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
@@ -25,15 +25,19 @@ describe('AdminApprovals', () => {
 
   it('approves a pending company-admin request', async () => {
     renderAdminApprovals();
-    await screen.findByText('Blair Ng');
-    await userEvent.click(screen.getByRole('button', { name: /approve/i }));
+    // Scoped to Blair's own row: the screen now carries a second approval queue (walk-in cars from the
+    // gate), so an unscoped /approve/i is ambiguous.
+    const row = (await screen.findByText('Blair Ng')).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: /approve/i }));
     expect(await screen.findByText(/company admin approved/i)).toBeInTheDocument();
   });
 
   it('records processed requests in the approval history', async () => {
     renderAdminApprovals();
-    await screen.findByText('Blair Ng');
-    await userEvent.click(screen.getByRole('button', { name: /approve/i }));
+    // Scoped to Blair's own row: the screen now carries a second approval queue (walk-in cars from the
+    // gate), so an unscoped /approve/i is ambiguous.
+    const row = (await screen.findByText('Blair Ng')).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: /approve/i }));
     // The decided request moves to the persisted "Approval history" (server-backed).
     expect((await screen.findAllByText('Approved')).length).toBeGreaterThan(0);
   });

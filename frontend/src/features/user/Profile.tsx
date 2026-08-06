@@ -1,6 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Button, Card, ErrorState, Input, LoadingState, Select, useToast } from '../../components';
-import { useCreateMyVehicle, useMe, useMyVehicles, useRemoveMyVehicle, useUpdateMe } from '../../api/hooks';
+import {
+  useCreateMyVehicle,
+  useMe,
+  useMyVehicles,
+  useRemoveMyVehicle,
+  useUpdateMe,
+  useUpdateMyVehicle,
+} from '../../api/hooks';
 import { ApiError, apiErrorText } from '../../api/http';
 import { BackLink } from '../shared/BackLink';
 import type { components } from '../../api/types';
@@ -22,6 +29,7 @@ export function Profile() {
   const vehicles = useMyVehicles();
   const updateMe = useUpdateMe();
   const createVehicle = useCreateMyVehicle();
+  const updateVehicle = useUpdateMyVehicle();
   const removeVehicle = useRemoveMyVehicle();
   const { toast } = useToast();
 
@@ -40,6 +48,14 @@ export function Profile() {
   });
   const [profileError, setProfileError] = useState<string | null>(null);
   const [carError, setCarError] = useState<string | null>(null);
+  /** The car currently being edited in place, if any — id plus its working copy. */
+  const [editing, setEditing] = useState<{
+    id: string;
+    vehicleNumber: string;
+    vehicleType: string;
+    makeModel: string;
+    colour: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!me.data) return;
@@ -93,6 +109,43 @@ export function Profile() {
     );
   }
 
+  /** Open the inline editor seeded from the saved row. `displayNumber` is the human form, so edit that. */
+  function startEditCar(v: VehicleSummary) {
+    setCarError(null);
+    setEditing({
+      id: v.id,
+      vehicleNumber: v.displayNumber || v.vehicleNumber,
+      vehicleType: v.vehicleType,
+      makeModel: v.makeModel ?? '',
+      colour: v.colour ?? '',
+    });
+  }
+
+  function onEditCarSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+    setCarError(null);
+    const { id, ...values } = editing;
+    updateVehicle.mutate(
+      {
+        id,
+        vehicleNumber: values.vehicleNumber.trim(),
+        vehicleType: values.vehicleType as VehicleSummary['vehicleType'],
+        // Empty means "clear it", which the API models as null rather than an empty string.
+        makeModel: values.makeModel.trim() || null,
+        colour: values.colour.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setEditing(null);
+          toast('Car updated.', { tone: 'success' });
+        },
+        onError: (err) =>
+          setCarError(err instanceof ApiError ? (apiErrorText(err) ?? err.message) : 'Could not update car.'),
+      },
+    );
+  }
+
   function onRemoveCar(id: string) {
     removeVehicle.mutate(id, {
       onSuccess: () => toast('Car removed.', { tone: 'success' }),
@@ -101,14 +154,13 @@ export function Profile() {
   }
 
   return (
-    <div className="max-w-5xl space-y-5">
-      <BackLink label="Back to home" />
-      <div>
-        <p className="font-mono text-3xs uppercase tracking-[0.16em] text-primary">Your account</p>
-        <h1 className="mt-1 text-4xl">Profile</h1>
-        <p className="mt-1 max-w-[62ch] text-text-muted">
-          Manage your details and the cars security can identify at the gate.
-        </p>
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <BackLink label="Back to home" />
+        <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+        <p className="text-text-muted">Manage your details and the cars security can identify at the gate.</p>
+        </div>
       </div>
 
       <Card title="Personal information">
@@ -165,18 +217,78 @@ export function Profile() {
           </form>
 
           {vehicles.data && vehicles.data.length > 0 ? (
-            <ul className="divide-y divide-border border border-border">
-              {vehicles.data.map((v) => (
-                <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div>
-                    <p className="font-medium text-text">{v.displayNumber}</p>
-                    <p className="text-sm text-text-muted">{vehicleLabel(v) || v.vehicleNumber}</p>
-                  </div>
-                  <Button variant="secondary" size="sm" loading={removeVehicle.isPending} onClick={() => onRemoveCar(v.id)}>
-                    Remove
-                  </Button>
-                </li>
-              ))}
+            <ul className="divide-y divide-border rounded-control border border-border">
+              {vehicles.data.map((v) =>
+                editing?.id === v.id ? (
+                  <li key={v.id} className="px-4 py-3">
+                    <form
+                      className="grid gap-4 lg:grid-cols-[1.1fr_0.8fr_0.8fr_0.7fr_auto]"
+                      onSubmit={onEditCarSubmit}
+                    >
+                      <Input
+                        label="Car number"
+                        value={editing.vehicleNumber}
+                        onChange={(e) => setEditing((c) => (c ? { ...c, vehicleNumber: e.target.value } : c))}
+                      />
+                      <Select
+                        label="Type"
+                        options={VEHICLE_TYPE_OPTIONS}
+                        value={editing.vehicleType}
+                        onChange={(e) => setEditing((c) => (c ? { ...c, vehicleType: e.target.value } : c))}
+                      />
+                      <Input
+                        label="Make/model"
+                        value={editing.makeModel}
+                        onChange={(e) => setEditing((c) => (c ? { ...c, makeModel: e.target.value } : c))}
+                      />
+                      <Input
+                        label="Colour"
+                        value={editing.colour}
+                        onChange={(e) => setEditing((c) => (c ? { ...c, colour: e.target.value } : c))}
+                      />
+                      <div className="flex items-end gap-2">
+                        <Button
+                          type="submit"
+                          size="sm"
+                          loading={updateVehicle.isPending}
+                          disabled={!editing.vehicleNumber.trim()}
+                        >
+                          Save car
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  </li>
+                ) : (
+                  <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    <div>
+                      <p className="font-medium text-text">{v.displayNumber}</p>
+                      <p className="text-sm text-text-muted">{vehicleLabel(v) || v.vehicleNumber}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label={`Edit ${v.displayNumber}`}
+                        onClick={() => startEditCar(v)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label={`Remove ${v.displayNumber}`}
+                        loading={removeVehicle.isPending}
+                        onClick={() => onRemoveCar(v.id)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </li>
+                ),
+              )}
             </ul>
           ) : (
             <p className="text-sm text-text-muted">No cars saved yet.</p>

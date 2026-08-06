@@ -44,7 +44,10 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
     return () => {
       document.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus?.();
+      // Only restore focus if the opener is still in the document. A row's Details button is
+      // unmounted by paging/filtering/refetch, and focusing a detached node silently drops
+      // focus to <body>, losing the keyboard user's place.
+      if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus?.();
     };
   }, [open, onClose]);
 
@@ -64,7 +67,11 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
         aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative w-full rounded-card border border-border bg-surface shadow-dialog outline-none',
+          // Lay the panel out as a column so a long body scrolls internally, and cap it to the
+          // parent's height (the parent is inset-0, i.e. the viewport, minus its own p-4) so the
+          // header and footer stay reachable on a short/mobile screen. max-h-full needs no dvh
+          // support, so there is nothing to fall back from.
+          'relative flex max-h-full w-full flex-col rounded-card border border-border bg-surface shadow-pop outline-none',
           sizeClasses[size],
         )}
       >
@@ -73,15 +80,19 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
             an opaque panel floating over the scrim they read as stray artifacts
             rather than as part of the frame. */}
         {title && (
-          <div className="border-b border-border px-4 py-3">
-            <h2 id={titleId} className="text-xl text-text">
+          <div className="shrink-0 border-b border-border px-4 py-4 sm:px-6">
+            <h2 id={titleId} className="break-words text-xl text-text">
               {title}
             </h2>
           </div>
         )}
-        <div className="px-4 py-4">{children}</div>
+        {/* min-h-0 lets this shrink below its content, which is what makes overflow-y-auto engage
+            inside a flex column and keeps the header and footer reachable. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-border px-4 py-3">{footer}</div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border px-4 py-4 sm:px-6">
+            {footer}
+          </div>
         )}
       </div>
     </div>,

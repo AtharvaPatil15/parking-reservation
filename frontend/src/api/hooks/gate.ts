@@ -2,14 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
 import { unwrap, unwrapPage, type PageMeta } from '../http';
 import { queryKeys } from '../queryKeys';
-import { DEFAULT_PAGE_SIZE } from '../pagination';
-import type { components } from '../types';
+import type { components, paths } from '../types';
 
 type VehicleSummary = components['schemas']['VehicleSummary'];
 type GateLookup = components['schemas']['GateLookup'];
 type GateEvent = components['schemas']['GateEvent'];
 type GateCheckInRequest = components['schemas']['GateCheckInRequest'];
 type GateCheckOutRequest = components['schemas']['GateCheckOutRequest'];
+type GateCapacity = components['schemas']['GateCapacity'];
+type VehicleRegistration = components['schemas']['VehicleRegistration'];
+type UserDetail = components['schemas']['UserDetail'];
+type CreateRegistrationBody =
+  paths['/vehicles/registrations']['post']['requestBody']['content']['application/json'];
 
 /** Invalidate everything a check-in/out changes: the gate log and both admin unbooked feeds. */
 function invalidateGate(qc: ReturnType<typeof useQueryClient>) {
@@ -73,7 +77,7 @@ export interface GateEventsFilter {
 
 /** GET /gate/events — today's gate log (building-wide). */
 export function useGateEvents(filter: GateEventsFilter = {}) {
-  const { date, status, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
+  const { date, status, page = 1, pageSize = 20 } = filter;
   return useQuery<{ items: GateEvent[]; meta: PageMeta }>({
     queryKey: queryKeys.gateEvents(date ?? '', status ?? '', page),
     queryFn: () =>
@@ -87,6 +91,84 @@ export function useGateEvents(filter: GateEventsFilter = {}) {
   });
 }
 
+/** GET /gate/capacity — per-company slots / booked / free / inside for the gate's landing page. */
+export function useGateCapacity(date?: string) {
+  return useQuery<GateCapacity>({
+    queryKey: queryKeys.gateCapacity(date ?? ''),
+    queryFn: () =>
+      unwrap<GateCapacity>(api.GET('/gate/capacity', { params: { query: date ? { date } : {} } })),
+    // A guard reads this to decide whether to admit a car, so a stale count is worse than a refetch.
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export interface RegistrationsFilter {
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  companyId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/**
+ * GET /vehicles/registrations — walk-in requests, scoped server-side by role.
+ *
+ * The guard polls it: their car is held at the barrier until the request comes back APPROVED, and
+ * nothing pushes that to them (the notification service is unbuilt).
+ */
+export function useVehicleRegistrations(filter: RegistrationsFilter = {}) {
+  const { status, companyId, page = 1, pageSize = 10 } = filter;
+  return useQuery<{ items: VehicleRegistration[]; meta: PageMeta }>({
+    queryKey: queryKeys.vehicleRegistrations(status ?? '', companyId ?? '', page),
+    queryFn: () =>
+      unwrapPage<VehicleRegistration>(
+        api.GET('/vehicles/registrations', {
+          params: {
+            query: { page, pageSize, ...(status ? { status } : {}), ...(companyId ? { companyId } : {}) },
+          },
+        }),
+      ),
+    refetchInterval: 60_000,
+  });
+}
+
+/** POST /vehicles/registrations — security registers a walk-in car. */
+export function useCreateVehicleRegistration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateRegistrationBody) =>
+      unwrap<VehicleRegistration>(api.POST('/vehicles/registrations', { body })),
+    onSuccess: () => invalidateGate(qc),
+  });
+}
+
+/** POST /vehicles/registrations/{id}/decision — the admin's approve/reject. */
+export function useDecideVehicleRegistration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: 'APPROVE' | 'REJECT'; note?: string }) =>
+      unwrap<VehicleRegistration>(
+        api.POST('/vehicles/registrations/{id}/decision', {
+          params: { path: { id } },
+          body: { decision, ...(note ? { note } : {}) },
+        }),
+      ),
+    // Approving creates a Vehicle, which changes what a plate lookup returns — drop the gate cache too.
+    onSuccess: () => invalidateGate(qc),
+  });
+}
+
+/** GET /users/{id} — the full applicant for the approval screens' details dialog. */
+export function useUserDetail(userId: string | null) {
+  return useQuery<UserDetail>({
+    queryKey: queryKeys.userDetail(userId ?? ''),
+    queryFn: () =>
+      unwrap<UserDetail>(api.GET('/users/{id}', { params: { path: { id: userId! } } })),
+    // Only fetched once the dialog is actually open.
+    enabled: Boolean(userId),
+  });
+}
+
 export interface UnbookedFilter {
   date?: string;
   companyId?: string;
@@ -96,7 +178,7 @@ export interface UnbookedFilter {
 
 /** GET /gate/unbooked — entries let through without a booking (D16). CA own company / SA all. */
 export function useUnbookedEntries(filter: UnbookedFilter = {}) {
-  const { date, companyId, page = 1, pageSize = DEFAULT_PAGE_SIZE } = filter;
+  const { date, companyId, page = 1, pageSize = 20 } = filter;
   return useQuery<{ items: GateEvent[]; meta: PageMeta }>({
     queryKey: queryKeys.unbookedEntries(date ?? '', companyId ?? '', page),
     queryFn: () =>

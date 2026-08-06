@@ -7,7 +7,7 @@ import {
 import { ApiError } from '../../api/http';
 import type { components } from '../../api/types';
 
-type PreviewDate = components['schemas']['WeeklyRunPreview']['dates'][number];
+type PreviewDate = components['schemas']['WeeklyRunBandDate'];
 
 const dayLabel = (iso: string): string =>
   new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -27,6 +27,49 @@ function RunBadge({ status }: { status: PreviewDate['runStatus'] }) {
   if (status === 'FAILED') return <Badge tone="danger">Failed</Badge>;
   if (status) return <Badge tone="warning">{status}</Badge>;
   return <Badge tone="neutral">Not run</Badge>;
+}
+
+const num = (n: number) => <span className="tabular-nums">{n}</span>;
+
+/**
+ * One band, one table. `withOutcome` adds the "who actually got a slot" column, which is only
+ * meaningful for a band that has been decided — on the upcoming band it would be a column of zeroes.
+ */
+function bandColumns(withOutcome: boolean): Column<PreviewDate>[] {
+  const columns: Column<PreviewDate>[] = [
+    { key: 'bookingDate', header: 'Date', render: (d) => dayLabel(d.bookingDate) },
+    {
+      key: 'pendingRequests',
+      header: 'Awaiting allocation',
+      align: 'right',
+      render: (d) => num(d.pendingRequests),
+    },
+    { key: 'runStatus', header: 'Primary run', render: (d) => <RunBadge status={d.runStatus} /> },
+    // Waitlisted-after-primary is the pool's input, so it belongs next to the pool's own status.
+    {
+      key: 'waitlistedRequests',
+      header: 'Waitlisted',
+      align: 'right',
+      render: (d) => num(d.waitlistedRequests),
+    },
+    { key: 'commonPoolStatus', header: 'Common pool', render: (d) => <RunBadge status={d.commonPoolStatus} /> },
+  ];
+  if (withOutcome) {
+    columns.push({
+      key: 'allocated',
+      header: 'Slots given',
+      align: 'right',
+      // Pool placements called out separately: rolled into one total, a working pool would be
+      // indistinguishable from one that placed nobody.
+      render: (d) => (
+        <span className="tabular-nums">
+          {d.allocated}
+          {d.poolAllocated > 0 && <span className="text-text-muted"> +{d.poolAllocated} pool</span>}
+        </span>
+      ),
+    });
+  }
+  return columns;
 }
 
 /**
@@ -57,7 +100,7 @@ export function WeeklyRun() {
     );
   }
 
-  const { window: win, band, dates } = preview.data;
+  const { window: win, band, dates, lastRun } = preview.data;
   const pendingTotal = dates.reduce((sum, d) => sum + d.pendingRequests, 0);
   const allDecided = dates.length > 0 && dates.every((d) => d.runStatus === 'COMPLETED');
   const result = run.data;
@@ -68,32 +111,12 @@ export function WeeklyRun() {
   const poolAllDone = dates.length > 0 && dates.every((d) => d.commonPoolStatus === 'COMPLETED');
   const poolResult = commonPool.data;
 
-  const columns: Column<PreviewDate>[] = [
-    { key: 'bookingDate', header: 'Date', render: (d) => dayLabel(d.bookingDate) },
-    {
-      key: 'pendingRequests',
-      header: 'Awaiting allocation',
-      align: 'right',
-      render: (d) => <span className="tabular-nums">{d.pendingRequests}</span>,
-    },
-    {
-      key: 'runStatus',
-      header: 'Primary run',
-      render: (d) => <RunBadge status={d.runStatus} />,
-    },
-    // Waitlisted-after-primary is the pool's input, so it belongs next to the pool's own status.
-    {
-      key: 'waitlistedRequests',
-      header: 'Waitlisted',
-      align: 'right',
-      render: (d) => <span className="tabular-nums">{d.waitlistedRequests}</span>,
-    },
-    {
-      key: 'commonPoolStatus',
-      header: 'Common pool',
-      render: (d) => <RunBadge status={d.commonPoolStatus} />,
-    },
-  ];
+  // Nothing to show before the first run ever completes — an all-"Not run" table would read as a
+  // failure rather than as "this has not happened yet".
+  const lastRunDates = lastRun?.dates ?? [];
+  const showLastRun = lastRunDates.some((d) => d.runStatus !== null || d.commonPoolStatus !== null);
+
+  const columns = bandColumns(false);
 
   function onRun() {
     run.mutate(undefined, {
@@ -130,10 +153,39 @@ export function WeeklyRun() {
         <p className="text-text-muted">
           Runs every {win.runDay.toLowerCase()} at {win.runTime} IST. Next: {runLabel(win.nextRunAt)}.
         </p>
+        {/* The pool is a second scheduled instant, not a step someone has to remember to press. Only
+            worth spelling out when it is actually later — at the same time it is part of the run above. */}
+        <p className="text-text-muted">
+          {win.commonPoolRunTime && win.commonPoolRunTime !== win.runTime
+            ? `Common pool follows at ${win.commonPoolRunTime} IST${win.nextCommonPoolRunAt ? ` — next: ${runLabel(win.nextCommonPoolRunAt)}` : ''}.`
+            : 'Common pool runs immediately after, in the same batch.'}
+        </p>
       </div>
 
+      {showLastRun && lastRun && (
+        <Card
+          title={`Last run: ${dayLabel(lastRun.band.from)} – ${dayLabel(lastRun.band.dates.at(-1) ?? lastRun.band.from)}`}
+          description={`Decided by the ${runLabel(lastRun.runAt)} run. These dates are live now — this is what users are seeing.`}
+        >
+          <div className="space-y-3">
+            <Table
+              columns={bandColumns(true)}
+              rows={lastRunDates}
+              rowKey={(d) => d.bookingDate}
+              empty="No dates in the last band."
+            />
+            <p className="text-sm text-text-muted">
+              {lastRunDates.reduce((sum, d) => sum + d.allocated + d.poolAllocated, 0)} slot(s) given ·{' '}
+              {lastRunDates.reduce((sum, d) => sum + d.waitlistedRequests, 0)} still waitlisted
+              {lastRunDates.some((d) => d.commonPoolStatus === null) &&
+                ' · the common pool has not run for every date in this band'}
+            </p>
+          </div>
+        </Card>
+      )}
+
       <Card
-        title={`Band: ${dayLabel(band.from)} – ${dayLabel(band.dates.at(-1) ?? band.from)}`}
+        title={`Next band: ${dayLabel(band.from)} – ${dayLabel(band.dates.at(-1) ?? band.from)}`}
         description={`These are the dates the next run decides. Every one is settled at least ${win.approvalLeadDays} days before itself, so nobody learns too late to make other arrangements.`}
       >
         <div className="space-y-4">

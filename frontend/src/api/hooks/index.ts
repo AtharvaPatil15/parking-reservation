@@ -28,14 +28,20 @@ export {
   useGateCheckOut,
   useGateEvents,
   useUnbookedEntries,
+  useGateCapacity,
+  useVehicleRegistrations,
+  useCreateVehicleRegistration,
+  useDecideVehicleRegistration,
+  useUserDetail,
 } from './gate';
-export type { GateEventsFilter, UnbookedFilter } from './gate';
+export type { GateEventsFilter, UnbookedFilter, RegistrationsFilter } from './gate';
 export { useConfig, useUpdateConfig } from './config';
 export {
   useMe,
   useUpdateMe,
   useMyVehicles,
   useCreateMyVehicle,
+  useUpdateMyVehicle,
   useRemoveMyVehicle,
   useMyBookings,
   useUserDashboard,

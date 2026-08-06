@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table,
+  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Pager, Select, Table,
   type Column, type SelectOption,
 } from '../../components';
 import { useAllocations, useActiveCompanies } from '../../api/hooks';
@@ -15,7 +15,7 @@ const TYPE_OPTIONS: SelectOption[] = [
   { value: 'COMMON_POOL', label: 'Common pool' },
 ];
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 /**
  * Seat-centric allocation roster — which slot is held by whom, for what date, and whether it came
@@ -67,26 +67,32 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
     { key: 'score', header: 'Score', align: 'right', className: 'tabular-nums', render: (a) => (a.allocationScore != null ? a.allocationScore.toFixed(1) : '—') },
   ];
 
-  const meta = roster.data?.meta;
-  const total = meta?.total ?? 0;
-  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const total = roster.data?.meta.total ?? 0;
 
   return (
     <Card title="Allocated seats" padded={false}>
-      <div className="flex flex-wrap items-end gap-3 px-6 pt-5">
-        <div className="w-44">
+      {/* Date carries a hint, so its neighbours reserve the same line (hintReserve) — otherwise
+          items-end lifts their inputs out of line with it. */}
+      <div className="flex flex-wrap items-end gap-3 px-4 pt-5 sm:px-6">
+        <div className="w-full sm:w-44">
           <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} hint="Blank = all dates" />
         </div>
-        <div className="w-40">
-          <Select label="Type" options={TYPE_OPTIONS} value={type} onChange={(e) => setType(e.target.value)} />
+        <div className="w-full sm:w-40">
+          <Select label="Type" options={TYPE_OPTIONS} value={type} onChange={(e) => setType(e.target.value)} hintReserve />
         </div>
         {showCompanyFilter && (
-          <div className="w-52">
-            <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
+          <div className="w-full sm:w-52">
+            <Select label="Company" options={companyOptions} value={companyId} onChange={(e) => setCompanyId(e.target.value)} hintReserve />
           </div>
         )}
         {(date || type || companyId) && (
-          <Button variant="secondary" size="sm" onClick={() => { setDate(''); setType(''); setCompanyId(''); }}>
+          // Sits on the control row; the reserved hint line below the inputs is what it clears.
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mb-[1.625rem]"
+            onClick={() => { setDate(''); setType(''); setCompanyId(''); }}
+          >
             Clear
           </Button>
         )}
@@ -104,16 +110,7 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
       ) : (
         <>
           <Table columns={columns} rows={roster.data.items} rowKey={(a) => a.id} className="mt-4" />
-          <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
-            <span>{total} seat{total === 1 ? '' : 's'}</span>
-            {lastPage > 1 && (
-              <div className="flex items-center gap-3">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-                <span className="tabular-nums">Page {page} / {lastPage}</span>
-                <Button variant="secondary" size="sm" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>Next</Button>
-              </div>
-            )}
-          </div>
+          <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
         </>
       )}
     </Card>

@@ -78,20 +78,6 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
             )}
           </span>
         </div>
-        {/* The account block links to the profile, as the top bar's chip did before
-            the rail replaced it. /profile is open to every role, so it always shows. */}
-        <NavLink
-          to="/profile"
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'flex h-[30px] items-center justify-center border border-field-ln2 font-heading text-sm tracking-[0.02em] transition-colors',
-              isActive ? 'bg-white/[0.10] text-white' : 'text-field-ink hover:bg-white/[0.06]',
-            )
-          }
-        >
-          Profile
-        </NavLink>
         <button
           type="button"
           onClick={logout}

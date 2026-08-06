@@ -7,6 +7,12 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
   /** Error message; when set, the field is marked invalid and styled accordingly. */
   error?: string;
+  /**
+   * Keep the hint/error line's height even when there is no message. Set this on the *unhinted*
+   * fields of a `flex items-end` row so a hinted neighbour doesn't sit taller and knock every
+   * input out of line. Off by default: in a normal stacked form the extra gap is unwanted.
+   */
+  hintReserve?: boolean;
 }
 
 /**
@@ -14,7 +20,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
  * aria-invalid and aria-describedby so it's accessible by default.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, hint, error, id, className, ...rest },
+  { label, hint, error, hintReserve = false, id, className, ...rest },
   ref,
 ) {
   const autoId = useId();
@@ -51,6 +57,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       ) : hint ? (
         <p id={`${inputId}-hint`} className="text-xs text-text-muted">
           {hint}
+        </p>
+      ) : hintReserve ? (
+        <p aria-hidden="true" className="text-sm">
+          &nbsp;
         </p>
       ) : null}
     </div>

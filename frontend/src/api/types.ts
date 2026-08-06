@@ -205,7 +205,11 @@ export interface paths {
         delete: operations["removeMyVehicle"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Edit one of the current user's saved cars
+         * @description Role: any authenticated user, own cars only. Partial update — only the supplied fields change. The car number itself may be changed and goes through the same claimability check as `POST /me/vehicles`, so the 409 behaviour is identical however a plate is set. If the new number already has a registry row this user may claim (typically one they removed earlier), the edit merges into that row and deactivates this one, because `vehicleNumber` is globally unique and gate visit history references vehicles by id.
+         */
+        patch: operations["updateMyVehicle"];
         trace?: never;
     };
     "/me/bookings": {
@@ -275,6 +279,8 @@ export interface paths {
         /**
          * Submit a parking request for the next bookable weekday
          * @description Role: USER. Creates a PRIMARY booking for a bookable weekday (Mon–Fri, D7). `travelDistanceKm` is snapshotted from the user's profile at submission (F6); `carpoolPeople` includes the driver as person 1 (D3) and the server enforces the current `carpool.maxPeople` cap (default 4, D8). Only same-company employee carpool members are scored (F4). Errors: 422 WINDOW_CLOSED if past `booking.primaryCutoff` or a non-bookable date; 409 CONFLICT on a duplicate same-type request for the date.
+         *
+         *     Side effect: a `vehicleNumber` that is not yet one of the user's saved cars is added to their profile / the building vehicle registry, exactly as `POST /me/vehicles` would. Without it the gate console cannot find the car by typeahead and shows no driver or slot for it. Best-effort — if the plate already belongs to another user the booking still succeeds and no error is raised.
          */
         post: operations["createBooking"];
         delete?: never;
@@ -295,6 +301,8 @@ export interface paths {
         /**
          * Submit parking requests for several dates at once
          * @description Role: USER, COMPANY_ADMIN or SUPER_ADMIN. Books one PRIMARY request per date in `bookingDates`, applying the same trip details (vehicle, carpool, special requirement) to every date.
+         *
+         *     As with the single-date endpoint, an unsaved `vehicleNumber` is mirrored into the user's profile so security can find the car — once for the whole batch, and only if at least one date queued.
          *
          *     **Partial success is intentional and is why this returns 200, never 201.** Each date is evaluated independently, in its own transaction, in ascending date order — so when quota is tight the earliest dates win, deterministically. One date being full, already requested or outside the window does NOT discard the others; that would defeat the point of the no-rejection window (D12). Inspect `results[]` for the per-date outcome: `CREATED` carries the booking, `FAILED` carries the same `code`/`message` the single-date endpoint would have returned (CONFLICT, WINDOW_CLOSED, VALIDATION_ERROR).
          *
@@ -755,7 +763,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * One user in full, with their registered cars
+         * @description Role SUPER_ADMIN (any user) or COMPANY_ADMIN (own company only — a cross-tenant id returns `404`, not `403`, so existence is not leaked). Backs the details dialog on both approval screens: the queue rows carry name/email/status, which is not enough to approve on.
+         */
+        get: operations["getUserDetail"];
         put?: never;
         post?: never;
         /**
@@ -1097,6 +1109,8 @@ export interface paths {
         /**
          * Resolve owner + today's booking from a car number
          * @description Roles SECURITY, SUPER_ADMIN. The car number is normalized (uppercased, separators stripped), so any spacing works. Never 404s for an unrecognised plate — `known: false` is a normal, recordable case (D16). Also reports whether the car is already inside (`openVisit`).
+         *
+         *     `known` and `hasBooking` are INDEPENDENT. A plate absent from the registry can still carry today's booking, matched on the number typed onto the booking itself — in which case `booking` holds the driver, company and allocated slot even though `vehicle` is null. Clients must render `booking` on its own merits; hiding it behind `known` makes a booked arrival look like a stranger.
          */
         get: operations["lookupVehicle"];
         put?: never;
@@ -1181,6 +1195,73 @@ export interface paths {
         get: operations["listUnbookedEntries"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/gate/capacity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-company slots, bookings and free spaces for a date
+         * @description Roles SECURITY or SUPER_ADMIN. The gate's "is there room?" panel, building-wide (D15) — the same scope the guard already has over the gate log. Defaults to today's IST business date.
+         */
+        get: operations["getGateCapacity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List walk-in registration requests
+         * @description Scoped by role: COMPANY_ADMIN sees their own company's; SUPER_ADMIN sees every company's and may narrow with `companyId`; SECURITY sees **the requests they raised**, whatever the company — they need to know when one has been approved, because the car is waiting at the barrier for it. PENDING first, then newest.
+         */
+        get: operations["listVehicleRegistrations"];
+        put?: never;
+        /**
+         * Ask for a walk-in car to be added to the registry
+         * @description Role SECURITY. A new employee turned up at the barrier with a car nobody had registered. Creates a PENDING request for the named company; the car is **not** admitted until an admin approves it (`POST /gate/check-in` returns `409` while the request is outstanding).
+         *     Only the four things a guard can establish at a barrier are required — plate, owner name, company, and optionally a contact. Notably not address / pin code / home distance: those belong to a user account, which this does not create.
+         */
+        post: operations["createVehicleRegistration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/vehicles/registrations/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or reject a walk-in registration
+         * @description Roles COMPANY_ADMIN (own company only — another tenant's request is `403`) or SUPER_ADMIN. Approving upserts the `Vehicle` and links it to an ACTIVE same-email user of that company when one exists; the decision and the registry row are one transaction, so an approved request can never exist without the car it promised. Rejecting records the decision and leaves the registry untouched. Only a PENDING request can be decided.
+         */
+        post: operations["decideVehicleRegistration"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1343,6 +1424,17 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        UserDetail: components["schemas"]["UserProfile"] & {
+            /** @description Active registry rows matched by user id or by owner email. */
+            vehicles: {
+                id: string;
+                vehicleNumber: string;
+                displayNumber: string;
+                vehicleType: components["schemas"]["VehicleType"];
+                makeModel?: string | null;
+                colour?: string | null;
+            }[];
+        };
         /** @description Partial update; all fields optional. */
         UpdateProfileRequest: {
             fullName?: string;
@@ -1355,6 +1447,17 @@ export interface components {
             /** @description Any spacing/case; normalized server-side for security lookup. */
             vehicleNumber: string;
             /** @description Optional display form shown to security. */
+            displayNumber?: string;
+            vehicleType?: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            notes?: string | null;
+        };
+        /** @description Partial edit of a saved car — same fields as create, all optional. At least one is required. Omitting a field leaves it unchanged; sending null on a nullable field clears it. Changing `vehicleNumber` also resets `displayNumber` to the new number unless one is given explicitly. */
+        UpdateMyVehicleRequest: {
+            /** @description Any spacing/case; normalized server-side. Re-checked for conflicts. */
+            vehicleNumber?: string;
+            /** @description Display form shown to security. */
             displayNumber?: string;
             vehicleType?: components["schemas"]["VehicleType"];
             makeModel?: string | null;
@@ -1654,6 +1757,13 @@ export interface components {
             runFrequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
             /** @description HH:MM IST. */
             runTime: string;
+            /** @description 'HH:MM IST the common-pool half fires at, on the same run day. Never earlier than `runTime`; equal to it (the default) means both halves run back-to-back in one tick.' */
+            commonPoolRunTime: string;
+            /**
+             * Format: date-time
+             * @description When the next automatic common-pool run fires. Between the primary instant and the pool instant on a run day this is *today*, not `nextRunAt` — the pool still owes this run's band.
+             */
+            nextCommonPoolRunAt: string;
             /** @enum {integer} */
             windowWeeks: 2 | 4;
             /** @description Days a date is decided ahead of itself (D11). */
@@ -1761,19 +1871,39 @@ export interface components {
             totalAllocated: number;
             totalWaitlisted: number;
         };
+        WeeklyRunBandDate: {
+            /** Format: date */
+            bookingDate: string;
+            runStatus?: components["schemas"]["AllocationRunStatus"] | null;
+            pendingRequests: number;
+            /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
+            commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
+            /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
+            waitlistedRequests: number;
+            /** @description Slots held for this date from the primary run. */
+            allocated: number;
+            /** @description Slots held for this date from the common pool. */
+            poolAllocated: number;
+        };
         WeeklyRunPreview: {
             window: components["schemas"]["BookingWindow"];
             band: components["schemas"]["AllocationBand"];
-            dates: {
-                /** Format: date */
-                bookingDate: string;
-                runStatus?: components["schemas"]["AllocationRunStatus"] | null;
-                pendingRequests: number;
-                /** @description Status of this date's COMMON_POOL run, or null if it has not run. Independent of `runStatus` — the two runs are separate steps. */
-                commonPoolStatus?: components["schemas"]["AllocationRunStatus"] | null;
-                /** @description PRIMARY requests left WAITLISTED for this date — the population the common-pool run would enroll. 0 means running the pool for this date would achieve nothing. */
-                waitlistedRequests: number;
-            }[];
+            dates: components["schemas"]["WeeklyRunBandDate"][];
+            /** @description The band the most recent scheduled run already decided, read from the database — so an automatic run is visible here, not only to whoever pressed the button. Contiguous with `band` by construction (`lastRun.band.toExclusive == band.from`). Every `runStatus` is null when no run has happened yet. */
+            lastRun: {
+                /**
+                 * Format: date-time
+                 * @description The scheduled primary instant this band belongs to.
+                 */
+                runAt: string;
+                /**
+                 * Format: date-time
+                 * @description The common-pool instant for the same run.
+                 */
+                commonPoolRunAt: string;
+                band: components["schemas"]["AllocationBand"];
+                dates: components["schemas"]["WeeklyRunBandDate"][];
+            };
         };
         VehicleSummary: {
             id: string;
@@ -1801,11 +1931,18 @@ export interface components {
              */
             bookingDate: string;
             hasBooking: boolean;
+            /** @description Today's live booking for this car, matched on the registered owner or — when the plate is not in the registry — on the number typed onto the booking itself. The identity fields carry the booker, which for an unknown plate is the ONLY thing that can tell the guard who is at the barrier, so a client must not gate them on `known`. */
             booking?: {
                 id: string;
                 status: components["schemas"]["BookingStatus"];
                 bookingType: components["schemas"]["BookingType"];
                 allocatedSlotNumber?: string | null;
+                /** @description Who made the booking. */
+                employeeName?: string | null;
+                contactNumber?: string | null;
+                companyId?: string | null;
+                companyName?: string | null;
+                userId?: string | null;
             } | null;
             /** @description Set when the car is already inside and has not checked out. */
             openVisit?: {
@@ -1813,6 +1950,81 @@ export interface components {
                 /** Format: date-time */
                 checkInAt: string;
             } | null;
+            /** @description An outstanding walk-in registration for this plate. While set, `POST /gate/check-in` refuses the car with a `409` — the one case where the gate does not admit (a narrow exception to D16: the plate is only in this state because a guard registered it as a new employee). Names the company whose admin has to approve, so the guard knows who to call. */
+            pendingRegistration?: {
+                id: string;
+                ownerName: string;
+                companyId: string;
+                companyName: string;
+                /** Format: date-time */
+                requestedAt: string;
+            } | null;
+        };
+        /** @enum {string} */
+        VehicleRegistrationStatus: "PENDING" | "APPROVED" | "REJECTED";
+        /** @description A car security asked to have added to the registry — a new employee who turned up before anyone registered their vehicle. A request, not a `Vehicle`: approval by the named company's admin (or the Super Admin) is what creates the registry row and lets the car through the barrier. */
+        VehicleRegistration: {
+            id: string;
+            /** @description Normalized plate. */
+            vehicleNumber: string;
+            /** @description Plate as the guard wrote it down. */
+            displayNumber: string;
+            ownerName: string;
+            ownerEmail?: string | null;
+            contactNumber?: string | null;
+            companyId: string;
+            companyName: string;
+            vehicleType: components["schemas"]["VehicleType"];
+            makeModel?: string | null;
+            colour?: string | null;
+            notes?: string | null;
+            status: components["schemas"]["VehicleRegistrationStatus"];
+            /** @description Security user who raised it. */
+            requestedById?: string | null;
+            decidedById?: string | null;
+            /** Format: date-time */
+            decidedAt?: string | null;
+            decisionNote?: string | null;
+            /** @description The registry row this became */
+            vehicleId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        GateCapacityRow: {
+            companyId: string;
+            companyName: string;
+            /** @description Slots the company holds for the date (effective-dated quota). */
+            slots: number;
+            /** @description Quota withdrawn for the date — without it the row does not add up. */
+            blocked: number;
+            /** @description Every booking request for the date */
+            requests: number;
+            /** @description Requests that won a slot (primary + common pool). */
+            allocated: number;
+            /** @description `slots - blocked - allocated`, floored at 0. Quota-relative on purpose, NOT `slots - inside`: an allocated slot whose owner has not arrived is taken, not free. */
+            free: number;
+            /** @description Cars of this company currently checked in. */
+            inside: number;
+        };
+        /** @description Per-company capacity for a date — the gate's "is there room?" panel. Building-wide by design (D15): the guard serves every tenant, and now has to judge whether a company has anything left before phoning an admin about a walk-in. */
+        GateCapacity: {
+            /** Format: date */
+            bookingDate: string;
+            rows: components["schemas"]["GateCapacityRow"][];
+            building: {
+                /** @description In-service slots in the building — not the sum of quotas */
+                totalSlots: number;
+                /** @description Sum of every company's quota for the date. */
+                allottedSlots: number;
+                blocked: number;
+                requests: number;
+                allocated: number;
+                free: number;
+                /** @description Includes unregistered cars */
+                inside: number;
+                /** @description Cars inside that belong to no company (unregistered plates). */
+                insideUnattributed: number;
+            };
         };
         /** @enum {string} */
         GateEventStatus: "CHECKED_IN" | "CHECKED_OUT";
@@ -2551,6 +2763,39 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateMyVehicle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMyVehicleRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated car */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getMyBookings: {
@@ -3636,6 +3881,34 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getUserDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user, with their active registry rows. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["UserDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     removeUser: {
         parameters: {
             query?: never;
@@ -4419,6 +4692,154 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getGateCapacity: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capacity per company, plus a building-wide total. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["GateCapacity"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listVehicleRegistrations: {
+        parameters: {
+            query?: {
+                /** @description 1-based page number. */
+                page?: components["parameters"]["PageParam"];
+                /** @description Items per page (max 100). */
+                pageSize?: components["parameters"]["PageSizeParam"];
+                status?: components["schemas"]["VehicleRegistrationStatus"];
+                /** @description SUPER_ADMIN only — narrow to one company. */
+                companyId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged registration requests. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"][];
+                        meta: components["schemas"]["Pagination"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createVehicleRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    vehicleNumber: string;
+                    /** @description Defaults to the plate as typed */
+                    displayNumber?: string;
+                    ownerName: string;
+                    /**
+                     * Format: email
+                     * @description Optional, but it is how approval links the car to an existing account — matched against an ACTIVE user of the same company.
+                     */
+                    ownerEmail?: string;
+                    contactNumber?: string;
+                    /** @description Required — with no company there is nobody to approve it. */
+                    companyId: string;
+                    vehicleType?: components["schemas"]["VehicleType"];
+                    makeModel?: string;
+                    colour?: string;
+                    notes?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The pending request. */
+            201: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Already in the registry (check it in as normal), or already waiting for approval. */
+            409: components["responses"]["Conflict"];
+        };
+    };
+    decideVehicleRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "APPROVE" | "REJECT";
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The decided request. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["VehicleRegistration"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getReport: {

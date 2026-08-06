@@ -29,7 +29,14 @@ const BOOLEAN_OPTIONS = [
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RUN_KEYS = ['booking.allocationRunFrequency', 'booking.allocationRunDay', 'booking.allocationRunTime'];
+const RUN_KEYS = [
+  'booking.allocationRunFrequency',
+  'booking.allocationRunDay',
+  'booking.allocationRunTime',
+  // The common pool is the second half of the same batch, so it is configured beside it rather than
+  // hidden in "Other" — where, being a TIME key, it would not have rendered at all.
+  'booking.commonPoolRunTime',
+];
 
 function inputType(valueType: string): string {
   if (valueType === 'TIME') return 'time';
@@ -136,17 +143,31 @@ export function ConfigTimings() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  /**
+   * Whether the draft has ever been seeded from a real server payload.
+   *
+   * This has to be tracked, because "the draft disagrees with `entries`" is NOT the same question as
+   * "the user has edited something". Before `config.data` arrives, `entries` is just
+   * `DEFAULT_RUN_ENTRIES`, so the draft would get seeded with the placeholder WEEKLY/SUNDAY; when the
+   * real config then landed with a different run day, the dirty check below read that placeholder as an
+   * unsaved edit and refused to re-seed — leaving every other field bound to `''` and the whole form
+   * blank despite a perfectly good API response.
+   */
+  const seeded = useRef(false);
 
-  // Seed the editable draft from the server on first load, and re-seed on later
-  // (re)loads ONLY when the user has no unsaved edits — so a background refetch
-  // (e.g. window refocus) can't silently wipe in-progress changes.
+  // Seed the editable draft from the server once it has actually loaded, and re-seed on later
+  // (re)loads ONLY when the user has unsaved edits — so a background refetch (e.g. window refocus)
+  // can't silently wipe in-progress changes.
   useEffect(() => {
+    if (!config.data) return; // nothing authoritative yet — never seed from the placeholders
     const current = draftRef.current;
-    const dirty = entries.some((e) => current[e.key] !== undefined && current[e.key] !== e.value);
+    const dirty =
+      seeded.current && entries.some((e) => current[e.key] !== undefined && current[e.key] !== e.value);
     if (dirty) return;
+    seeded.current = true;
     setDraft(Object.fromEntries(entries.map((e) => [e.key, e.value])));
     setErrors({});
-  }, [entries]);
+  }, [entries, config.data]);
 
   function computeErrors(next: Record<string, string>): Record<string, string> {
     const errs: Record<string, string> = {};
@@ -246,8 +267,11 @@ export function ConfigTimings() {
       </div>
 
       {runEntries.length > 0 && (
-        <Card title="Automatic allocation run" description="Choose the interval, day, and IST time for automatic allocation.">
-          <div className="grid gap-4 sm:grid-cols-3">{runEntries.map(renderField)}</div>
+        <Card
+          title="Automatic allocation run"
+          description="Choose the interval, day, and IST times for automatic allocation. The common pool runs on the same day, at or after the allocation time — leave a gap to give companies a window to release quota they won't use."
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{runEntries.map(renderField)}</div>
           {previewRuns.length > 0 && (
             <div className="mt-5">
               <h3 className="text-sm font-semibold text-text">Next 5 runs</h3>

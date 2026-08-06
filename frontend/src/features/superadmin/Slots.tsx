@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Select, Table, useToast,
+  Badge, Button, Card, EmptyState, ErrorState, Input, LoadingState, Pager, Select, Table, useToast,
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
 import { useCreateSlot, useSlots, useParkingAreas, useCreateParkingArea, useUpdateSlot, useDeleteSlot } from '../../api/hooks';
@@ -180,16 +180,7 @@ export function Slots() {
         ) : (
           <>
             <Table columns={columns} rows={slots.data.items} rowKey={(s) => s.id} />
-            <div className="flex items-center justify-between px-6 py-3 text-sm text-text-muted">
-              <span>{total} slot{total === 1 ? '' : 's'}</span>
-              {lastPage > 1 && (
-                <div className="flex items-center gap-3">
-                  <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-                  <span className="tabular-nums">Page {page} / {lastPage}</span>
-                  <Button variant="secondary" size="sm" disabled={page >= lastPage} onClick={() => setPage((p) => p + 1)}>Next</Button>
-                </div>
-              )}
-            </div>
+            <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
           </>
         )}
       </Card>

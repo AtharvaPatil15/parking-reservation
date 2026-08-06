@@ -4,6 +4,8 @@ import {
   type Column,
 } from '../../components';
 import { usePendingAdmins, useAdminRequestHistory, useApproveAdminRequest, useRemovePrivilegedUser } from '../../api/hooks';
+import { UserDetailsModal } from '../shared/UserDetailsModal';
+import { VehicleRegistrations } from '../shared/VehicleRegistrations';
 import type { components } from '../../api/types';
 
 type UserProfile = components['schemas']['UserProfile'];
@@ -24,6 +26,11 @@ export function AdminApprovals() {
   const { toast } = useToast();
   // Track the row currently mutating so only its buttons show a spinner.
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Look in both tables: the dialog opens from the pending queue and from the history.
+  const detailUser =
+    requests.data?.items.find((u) => u.id === detailId) ??
+    history.data?.items.find((u) => u.id === detailId);
 
   function decide(userId: string, decision: 'APPROVE' | 'REJECT') {
     setPendingId(userId);
@@ -48,10 +55,25 @@ export function AdminApprovals() {
     });
   }
 
+  /** Name as a button — the way into the details dialog. Shared by both tables below. */
+  const nameColumn: Column<UserProfile> = {
+    key: 'name',
+    header: 'Name',
+    render: (u) => (
+      <button
+        type="button"
+        onClick={() => setDetailId(u.id)}
+        className="text-left font-medium text-text underline-offset-2 hover:underline"
+      >
+        {u.fullName}
+      </button>
+    ),
+  };
+
   const columns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', stackedBare: true, render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    nameColumn,
     { key: 'email', header: 'Email', render: (u) => u.email },
-    { key: 'company', header: 'Company', stackedBare: true, render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
+    { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',
       header: 'Requested as',
@@ -64,19 +86,23 @@ export function AdminApprovals() {
       ),
     },
     {
-      key: 'actions', header: '', align: 'right', stackedBare: true,
+      key: 'actions', header: '', align: 'right',
       render: (u) => (
         <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setDetailId(u.id)}>
+            Details
+          </Button>
           <Button
             size="sm"
             variant="danger"
+            className="w-8 px-0"
             loading={pendingId === u.id && removeUser.isPending}
             disabled={pendingId !== null}
             aria-label={`Remove ${u.fullName}`}
             title={`Remove ${u.fullName}`}
             onClick={() => remove(u.id, u.fullName)}
           >
-            Remove
+            X
           </Button>
           <Button size="sm" variant="secondary" loading={pendingId === u.id && approval.isPending} disabled={pendingId !== null} onClick={() => decide(u.id, 'REJECT')}>
             Reject
@@ -91,9 +117,9 @@ export function AdminApprovals() {
 
   // Approval history: a processed request is APPROVED when its user is ACTIVE, else REJECTED.
   const historyColumns: Column<UserProfile>[] = [
-    { key: 'name', header: 'Name', stackedBare: true, render: (u) => <span className="font-medium text-text">{u.fullName}</span> },
+    nameColumn,
     { key: 'email', header: 'Email', render: (u) => u.email },
-    { key: 'company', header: 'Company', stackedBare: true, render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
+    { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',
       header: 'Requested as',
@@ -114,18 +140,19 @@ export function AdminApprovals() {
       ),
     },
     {
-      key: 'actions', header: '', align: 'right', stackedBare: true,
+      key: 'actions', header: '', align: 'right',
       render: (u) => (
         <Button
           size="sm"
           variant="danger"
+          className="w-8 px-0"
           loading={pendingId === u.id && removeUser.isPending}
           disabled={pendingId !== null}
           aria-label={`Remove ${u.fullName}`}
           title={`Remove ${u.fullName}`}
           onClick={() => remove(u.id, u.fullName)}
         >
-          Remove
+          X
         </Button>
       ),
     },
@@ -136,11 +163,15 @@ export function AdminApprovals() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-4xl">Privileged registrations</h1>
+        <h2 className="text-xl font-semibold tracking-tight">Privileged registrations</h2>
         <p className="text-text-muted">
           People who registered as a company admin or as building security. Only you can action these.
         </p>
       </div>
+
+      {/* First: somebody is standing at the barrier waiting on it. `showCompany` because the Super Admin
+          sees every tenant's requests and the row is ambiguous without it. */}
+      <VehicleRegistrations showCompany />
 
       <Card title="Pending requests" padded={false}>
         {requests.isLoading ? (
@@ -173,6 +204,38 @@ export function AdminApprovals() {
           </>
         )}
       </Card>
+
+      <UserDetailsModal
+        userId={detailId}
+        onClose={() => setDetailId(null)}
+        actions={
+          detailUser?.status === 'PENDING' ? (
+            <>
+              <Button
+                variant="secondary"
+                loading={pendingId === detailUser.id && approval.isPending}
+                disabled={pendingId !== null}
+                onClick={() => {
+                  decide(detailUser.id, 'REJECT');
+                  setDetailId(null);
+                }}
+              >
+                Reject
+              </Button>
+              <Button
+                loading={pendingId === detailUser.id && approval.isPending}
+                disabled={pendingId !== null}
+                onClick={() => {
+                  decide(detailUser.id, 'APPROVE');
+                  setDetailId(null);
+                }}
+              >
+                Approve
+              </Button>
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }

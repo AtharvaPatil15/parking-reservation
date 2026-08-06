@@ -10,8 +10,8 @@ import {
   LoadingState,
   ErrorState,
   SuccessState,
-  SlotGrid,
-  SlotGridLegend,
+  SlotCount,
+  buttonClasses,
 } from '../../components';
 import { useAvailability, useCreateBookings, useMe, useMyVehicles } from '../../api/hooks';
 import { ApiError, apiErrorText } from '../../api/http';
@@ -59,7 +59,7 @@ function dayStatusLine(day: DayAvailability): string {
 
 /**
  * Book slots (Phase 8, D18/D22). The user picks one or more dates inside the rolling window and sees
- * each date's slot grid before committing. A request never consumes capacity — it is a queue entry,
+ * how full each date is before committing. A request never consumes capacity — it is a queue entry,
  * scored and ranked at the weekly run, not a reservation. There is therefore no "date is full" refusal:
  * a date is only unpickable when it is outside the window, already decided, or already requested.
  *
@@ -112,9 +112,9 @@ export function BookingForm() {
   const selectedDates = new Set(bookingDates);
 
   /**
-   * Which date's full-size grid is on show. Separate from the selection: with several dates picked
-   * there is no single "the" date, so the big grid follows whichever row was touched last. Clicking a
-   * row both toggles it and brings its grid up, so one click still answers "how full is that day?".
+   * Which date's detail panel is on show. Separate from the selection: with several dates picked
+   * there is no single "the" date, so the panel follows whichever row was touched last. Clicking a
+   * row both toggles it and brings its counts up, so one click still answers "how full is that day?".
    */
   const [focusedDate, setFocusedDate] = useState<string | null>(null);
 
@@ -135,7 +135,7 @@ export function BookingForm() {
     }
   }, [touched, bookingDates.length, firstOpen, setValue]);
 
-  /** Toggle a date in/out of the selection, and show its grid either way. */
+  /** Toggle a date in/out of the selection, and show its detail panel either way. */
   function toggleDate(date: string): void {
     setTouched(true);
     setFocusedDate(date);
@@ -247,9 +247,17 @@ export function BookingForm() {
           </ul>
         </Card>
 
-        <Button variant="secondary" onClick={bookAgain}>
-          Book more dates
-        </Button>
+        {/* Stacked and full-width on a phone so both actions are comfortable tap targets. The
+            dashboard action is a styled Link, not a Button inside a Link — that would nest
+            <button> inside <a>, which is invalid and confuses screen readers. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Link to="/app" className={buttonClasses('primary', 'md', 'w-full sm:w-auto')}>
+            Go to dashboard
+          </Link>
+          <Button variant="secondary" className="w-full sm:w-auto" onClick={bookAgain}>
+            Book more dates
+          </Button>
+        </div>
       </div>
     );
   }
@@ -271,7 +279,7 @@ export function BookingForm() {
       : null;
 
   // Every selected date must still be bookable. The rows only allow requestable dates to be picked, so
-  // this catches a grid that went stale under the user rather than an invalid click.
+  // this catches a window that went stale under the user rather than an invalid click.
   const unbookableSelected = bookingDates.filter((d) => !openDates.includes(d));
   const submitBlocked = bookingDates.length === 0 || unbookableSelected.length > 0;
   const savedCars = vehicles.data ?? [];
@@ -290,7 +298,7 @@ export function BookingForm() {
       },
       {
         onSuccess: (data) => {
-          // Any date that failed means the grid on screen was stale — pull the truth back so the
+          // Any date that failed means the counts on screen were stale — pull the truth back so the
           // "book more dates" pass starts from real numbers.
           if (data.failedCount > 0) availability.refetch();
         },
@@ -347,19 +355,13 @@ export function BookingForm() {
           (D18/D22): nothing here blocks a submission because a day "looks busy". */}
       <Card>
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="space-y-0.5">
-              <h2 className="text-sm font-medium text-text">Choose your dates</h2>
-              <p className="text-xs text-text-muted">
-                Pick one or more — the details below apply to every date you select. Requests are ranked
-                by score (distance + carpool size) at the weekly run, not first-come-first-served —
-                submitting early does not improve your chances.
-              </p>
-            </div>
-            {/* Keyed to the date whose grid is actually on show, not to the list. Taking DECIDED from
-                "any row is decided" put "Booked"/"Your booking" in the legend for a window whose visible
-                grid is OPEN — teaching the land-grab D22 removes. */}
-            <SlotGridLegend phase={focused?.phase ?? 'OPEN'} />
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-medium text-text">Choose your dates</h2>
+            <p className="text-xs text-text-muted">
+              Pick one or more — the details below apply to every date you select. Requests are ranked
+              by score (distance + carpool size) at the weekly run, not first-come-first-served —
+              submitting early does not improve your chances.
+            </p>
           </div>
 
           {openDates.length > 0 && (
@@ -428,12 +430,21 @@ export function BookingForm() {
                         </span>
                         <span className="flex flex-col">
                           <span className="text-sm font-medium text-text">{dayLabel(day.date)}</span>
+                          {/* The row grid used to carry the caller's own slot number in its MINE box.
+                              With counts in its place it has to be said in words, and it belongs here
+                              rather than in the detail panel below: an allocated date is never
+                              requestable (`reason = ALREADY_BOOKED`), so it can never be focused. It
+                              sits above the server's own message rather than replacing it — the message
+                              explains why the row is disabled, which the slot number does not. */}
+                          {day.mySlotNumber && (
+                            <span className="text-xs text-primary">You got slot {day.mySlotNumber}</span>
+                          )}
                           <span className="text-xs text-text-muted">
                             {day.requestable ? dayStatusLine(day) : (day.message ?? 'Not available')}
                           </span>
                         </span>
                       </span>
-                      <SlotGrid boxes={day.boxes} phase={day.phase} size="sm" />
+                      <SlotCount boxes={day.boxes} size="sm" />
                     </button>
                   </li>
                 );
@@ -462,7 +473,7 @@ export function BookingForm() {
                 </p>
                 <p className="text-sm text-text-muted">{dayStatusLine(focused)}</p>
               </div>
-              <SlotGrid boxes={focused.boxes} phase={focused.phase} />
+              <SlotCount boxes={focused.boxes} />
               {!focused.requestable && focused.message && (
                 <p role="status" className="text-sm text-warning">
                   {focused.message}
@@ -511,7 +522,7 @@ export function BookingForm() {
                 list={savedCars.length > 0 ? 'profile-cars' : undefined}
                 {...register('vehicleNumber')}
                 error={errors.vehicleNumber?.message}
-                hint={savedCars.length > 0 ? 'Choose a saved car or type another number.' : 'Optional - helps security match you at the gate.'}
+                hint={savedCars.length > 0 ? 'Choose a saved car or type another number.  (EX-MH14AB1234)' : 'Optional - helps security match you at the gate.'}
               />
               {savedCars.length > 0 && (
                 <datalist id="profile-cars">

@@ -11,6 +11,7 @@ type Booking = components['schemas']['Booking'];
 type VehicleSummary = components['schemas']['VehicleSummary'];
 type UpdateProfileRequest = components['schemas']['UpdateProfileRequest'];
 type CreateMyVehicleRequest = components['schemas']['CreateMyVehicleRequest'];
+type UpdateMyVehicleRequest = components['schemas']['UpdateMyVehicleRequest'];
 
 /** GET /me — the signed-in user's profile (incl. distanceKm). */
 export function useMe() {
@@ -44,6 +45,20 @@ export function useCreateMyVehicle() {
     mutationFn: (body: CreateMyVehicleRequest) => unwrap<VehicleSummary>(api.POST('/me/vehicles', { body })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.myVehicles });
+      qc.invalidateQueries({ queryKey: ['vehicles'] });
+    },
+  });
+}
+
+/** PATCH /me/vehicles/:id - edit a saved car, including its number. Partial: only sent fields change. */
+export function useUpdateMyVehicle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: UpdateMyVehicleRequest & { id: string }) =>
+      unwrap<VehicleSummary>(api.PATCH('/me/vehicles/{id}', { params: { path: { id } }, body })),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.myVehicles });
+      // The registry the gate reads from moved too, so drop its cache as create/remove do.
       qc.invalidateQueries({ queryKey: ['vehicles'] });
     },
   });
