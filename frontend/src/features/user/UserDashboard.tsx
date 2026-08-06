@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Badge, Card, EmptyState, ErrorState, LoadingState, SlotGrid, buttonClasses } from '../../components';
+import { Badge, Card, EmptyState, ErrorState, LoadingState, SlotCount, buttonClasses } from '../../components';
 import { useAvailability, useUserDashboard } from '../../api/hooks';
 import { useCountdown } from '../../lib/useCountdown';
 import { formatCountdown, formatLongCountdown, todayIstIso } from '../../lib/dates';
@@ -105,8 +105,9 @@ export function UserDashboard() {
         </Card>
       )}
 
-      {/* Your week (P8-13): one row per date in the open window. Rows before their run day render the
-          OPEN phase (a count, never a fullness gate — D18); decided rows show the real allocation. */}
+      {/* Your week (P8-13): one row per date in the open window, each reporting how many of the
+          company's slots are filled and empty. Rows before their run day read 0 filled — a request is a
+          queue entry, never a reservation (D18) — and decided rows report the real allocation. */}
       {availability.isLoading ? (
         <Card title="Your week">
           <p className="text-sm text-text-muted">Loading this week's requests…</p>
@@ -137,7 +138,7 @@ export function UserDashboard() {
                       </span>
                     )}
                   </div>
-                  <SlotGrid boxes={day.boxes} phase={day.phase} size="sm" />
+                  <SlotCount boxes={day.boxes} size="sm" />
                 </li>
               );
             })}

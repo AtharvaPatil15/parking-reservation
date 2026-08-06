@@ -140,7 +140,7 @@ const failed = (date: string, code: string, message: string) => ({
 const dateRow = (label: RegExp) => screen.getByRole('checkbox', { name: label });
 
 describe('BookingForm', () => {
-  it('renders the window summary, the profile distance and the slot grid', async () => {
+  it('renders the window summary, the profile distance and the slot counts', async () => {
     useAvailability(availability({ days: [{ date: '2099-01-05', requestCount: 5, blocked: 2 }] }));
     renderForm();
 
@@ -152,7 +152,37 @@ describe('BookingForm', () => {
     expect(screen.getByText(/booking is open for the next 2 weeks/i)).toBeInTheDocument();
     // Phase 8 (D18): demand is a count, never a fullness readout.
     expect((await screen.findAllByText(/12 slots · 5 requests so far/i)).length).toBeGreaterThan(0);
-    expect(screen.getAllByLabelText('12 parking slots').length).toBeGreaterThan(0);
+    // Counts, not one box per slot: 12 slots with 2 blocked and nothing allocated yet.
+    expect(screen.getAllByText('0 of 12 slots filled, 10 empty, 2 blocked').length).toBeGreaterThan(0);
+  });
+
+  // The counts replaced a grid whose MINE box named the caller's slot. An allocated date is never
+  // requestable, so its row is disabled and can never be focused — the slot number has to be on the
+  // row itself, or it is unreachable.
+  it('names the caller\'s own slot on the row of a date they were allocated', async () => {
+    useAvailability(
+      availability({
+        days: [
+          {
+            date: '2099-01-05',
+            phase: 'DECIDED',
+            mine: true,
+            myStatus: 'ALLOCATED',
+            mySlotNumber: 'A-07',
+            allocatedCount: 4,
+            requestable: false,
+            reason: 'ALREADY_BOOKED',
+            message: 'You already have a request for this date.',
+          },
+          { date: '2099-01-06' },
+        ],
+      }),
+    );
+    renderForm();
+
+    expect(await screen.findByText('You got slot A-07')).toBeInTheDocument();
+    // Alongside the server's message, which is what explains the disabled row.
+    expect(screen.getByText(/you already have a request for this date/i)).toBeInTheDocument();
   });
 
   it('preselects the first bookable date, skipping one the caller already requested', async () => {
