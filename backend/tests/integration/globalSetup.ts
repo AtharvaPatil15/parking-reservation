@@ -30,6 +30,11 @@ export default async function globalSetup(): Promise<void> {
   const env = {
     ...process.env,
     DATABASE_URL: TEST_DATABASE_URL,
+    // MUST be redirected alongside DATABASE_URL. `schema.prisma` declares `directUrl`, and the Prisma
+    // CLI prefers it for `db push` / `migrate` — so leaving it inherited from `.env` would push this
+    // schema into the DEV database instead of the throwaway test one, silently reverting
+    // `partial-unique.sql` there (it re-adds the full unique index on User.email).
+    DIRECT_URL: TEST_DATABASE_URL,
     NODE_OPTIONS: '--use-system-ca',
     npm_config_registry: 'https://registry.npmjs.org/',
   };

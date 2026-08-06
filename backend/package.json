@@ -21,7 +21,10 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "import:vehicles": "tsx scripts/import-vehicles.ts",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "db:wipe": "tsx prisma/wipe.ts",
+    "seed:essentials": "tsx prisma/seed-essentials.ts",
+    "seed:today": "tsx prisma/seed-today.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -18,6 +18,14 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Migrations must not go through a connection pooler — `prisma migrate` takes an advisory lock, which
+  // a transaction-mode pooler cannot hold across statements. `url` is the pooled endpoint the app uses;
+  // this is the direct one, used only by the Prisma CLI.
+  //
+  // Required, NOT optional: Prisma fails schema validation if the variable is absent, so `DIRECT_URL`
+  // must be set everywhere — locally it is simply the same value as `DATABASE_URL`, because plain
+  // Postgres has no pooler in front of it.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
