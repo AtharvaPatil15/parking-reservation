@@ -25,7 +25,7 @@ const columns: Column<Booking>[] = [
   { key: 'type', header: 'Type', render: (b) => enumLabel(b.bookingType) },
   { key: 'status', header: 'Status', render: (b) => <Badge tone={statusTone(b.status)}>{b.status}</Badge> },
   { key: 'view', header: '', align: 'right', render: (b) => (
-      <Link to={`/booking/${b.id}`} className="text-primary hover:underline">
+      <Link to={`/booking/${b.id}`} className="text-accent hover:underline">
         View
       </Link>
     ) },

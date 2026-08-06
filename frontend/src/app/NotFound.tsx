@@ -8,7 +8,7 @@ export function NotFound() {
       <main className="mx-auto flex max-w-md flex-col items-start gap-4 px-6 py-16">
         <h1 className="text-4xl">Page not found</h1>
         <p className="text-text-muted">That page doesn’t exist.</p>
-        <Link to="/" className="text-primary hover:underline">
+        <Link to="/" className="text-accent hover:underline">
           Go home
         </Link>
       </main>

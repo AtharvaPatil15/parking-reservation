@@ -31,7 +31,7 @@ export function SuperAdminDashboard() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-3xs uppercase tracking-[0.16em] text-primary">Utilization</p>
+          <p className="font-mono text-3xs uppercase tracking-[0.16em] text-text-muted">Utilization</p>
           <h1 className="mt-1 text-4xl">Overview</h1>
           <p className="mt-1 max-w-[62ch] text-text-muted">
             Parking utilization {date ? `on ${date}` : 'today'} across all companies.

@@ -18,13 +18,16 @@ export interface CardProps {
 /**
  * A framed blueprint object with an optional header (title/description/actions).
  *
- * Transparent by design — in this system a card is a line drawing, not a filled
- * surface, so it takes the frame and the registration marks instead of a fill.
+ * Carries the white `--surface` fill against the near-white `--canvas` page.
+ * That half-step is what makes a panel read as an object rather than as a
+ * rectangle ruled onto the page — and it is load-bearing for contrast: amber
+ * body text clears 4.5:1 on white but not on the page ground, so accent text
+ * and links are only ever safe inside a card. Keep the fill.
  */
 export function Card({ title, description, actions, meta, children, className, padded = true }: CardProps) {
   const hasHeader = title || description || actions || meta;
   return (
-    <Blueprint as="section" className={cn('bg-transparent', className)}>
+    <Blueprint as="section" className={cn('bg-surface', className)}>
       {/* Responsive inset (tighter on a phone) with the reskin's condensed
           heading — the base layer supplies the face and weight. */}
       {hasHeader && (

@@ -4,86 +4,145 @@
  * (see tailwind.config.ts). Light is the default; [data-theme="dark"] overrides.
  * Tune the brand here and the whole app follows.
  *
- * Palette is the "Industry" design system: a light technical ground with a single
- * steel accent, square corners and hairline borders. Values come from the
- * redesign's own semantic layer, including its derived dark mode — Industry
- * itself defines no dark ramp.
+ * Direction: navy is the CHROME, amber is the ACTION, everything else is paper
+ * and ink. Roughly 60% neutral surfaces / 30% navy rail / 10% amber. If amber
+ * shows up more than about once per screen region it has stopped being an accent.
+ *
+ * Why amber: the rail's navy sits at hue 210, so its complement (~hue 30) is the
+ * furthest usable point from the brand. That leaves green and red entirely free
+ * to mean "available" and "blocked" without competing with the chrome. The
+ * previous steel accent was ~10deg off the rail navy, so the primary button read
+ * as more chrome rather than as a call to action.
+ *
+ * Names are the app's own (--canvas / --surface / --primary / --field / ...) and
+ * are load-bearing across ~40 components; the *values* carry the direction. The
+ * mapping to the direction doc's names:
+ *   --canvas   = surface-page     --surface-2 = surface-sunken
+ *   --surface  = surface-card     --field*    = navy-*
+ *   --primary  = accent (fill)    --accent    = accent (text)
+ *   --success  = status-open      --danger    = status-blocked
  */
 :root,
 :root[data-theme='light'] {
-  /* The app's own ground is the near-white --sf. (The redesign's darker #dcdde0
-     is the design-doc desk the mockup frame sits on, not the app background —
-     panels are transparent and read as white against this.) */
-  --canvas: 242 242 243; /* #F2F2F3 — app ground */
-  --surface: 242 242 243; /* #F2F2F3 */
-  --surface-2: 233 233 234; /* #E9E9EA — the crumb strip, a step down from the ground */
-  --border: 208 208 209; /* #D0D0D1 — hairline */
-  --text: 29 31 32; /* #1D1F20 */
-  --text-muted: 92 93 96; /* #5C5D60 */
+  /* Neutral — 60%. Cards are WHITE against a near-white page: that half-step is
+     what makes a panel read as an object, and it is what puts amber text on
+     white (4.60:1) rather than on the page (4.42:1, which fails body copy). */
+  --canvas: 247 248 250; /* #F7F8FA — page ground */
+  --surface: 255 255 255; /* #FFFFFF — cards */
+  --surface-2: 238 241 245; /* #EEF1F5 — sunken: inputs, crumb strip, hover */
+  --border: 226 230 235; /* #E2E6EB — hairline, decorative rules only */
+  /* Control edges (inputs, secondary buttons) must clear 3:1 as UI boundaries.
+     The direction doc's #C9D1DA measures 1.54:1 on white — invisible by that
+     standard — so this is the lightest step that actually reaches 3:1. */
+  --border-strong: 132 144 157; /* #84909D — 3.19:1 on card, 3.00:1 on the page */
+  --text: 42 53 66; /* #2A3542 */
+  --text-muted: 92 107 122; /* #5C6B7A — "secondary" in the direction doc */
+  /* The doc's third ink step. Deliberately NOT used for anything the user must
+     read — it is the closest call in the set (2.90:1 on the page). Decoration
+     only: the `+` registration marks. */
+  --text-faint: 138 150 163; /* #8A96A3 */
 
-  --primary: 65 97 128; /* #416180 — steel accent, the one solid object */
-  --primary-hover: 44 69 93; /* #2C455D */
-  /* Ink that sits ON the primary fill. Its own token because --surface is the
-     wrong answer in dark mode: there the fill is a pale blue, so --surface ink
-     (#15181B) made the primary button read as ghosted/disabled. */
-  --primary-ink: 242 242 243; /* #F2F2F3 */
-  --primary-subtle: 238 246 255; /* #EEF6FF */
+  /* Amber — 10%. The one warm colour, and it always means "you can act here".
+     --primary is the fill (buttons, checked boxes, the selected row's bar);
+     --accent is the same hue carrying text and links.
 
-  /* Ramp step 700, not the 500 base. The design system's readme is explicit that
-     its accent-to-ground pair is tuned to ~3:1 — fine for chrome and large text,
-     but not for body copy — and prescribes a deep step for paragraph-size accent
-     text. #5980A6 measured 3.71:1 on this ground and 3.36:1 on --accent-subtle,
-     both under 4.5:1, and this token carries body-size text (the allocated slot
-     number, and Badge's accent tone). #416180 clears it. */
-  --accent: 65 97 128; /* #416180 — accent step 700 */
-  --accent-subtle: 219 233 248; /* #DBE9F8 */
+     DEPTH IS NOT NEGOTIABLE. The direction doc specifies #B4761A and states it
+     is 4.6:1 on white; measured, it is 3.79:1 — it fails body text, and it fails
+     white-ink-on-fill by the same margin, so no surface choice rescues it. These
+     steps hold the doc's hue (~32, the navy's complement) and take the lightness
+     down until the pairs actually pass. Do not lighten them back towards the
+     doc's values; the hue is the brand, the depth is the accessibility. */
+  --primary: 143 86 20; /* #8F5614 — white ink on it: 5.93:1 */
+  --primary-hover: 122 72 17; /* #7A4811 */
+  --primary-active: 99 59 14; /* #633B0E */
+  /* Ink that sits ON the amber fill. Its own token because --surface is the
+     wrong answer in dark mode, where the fill is a pale amber. */
+  --primary-ink: 255 255 255; /* #FFFFFF */
+  --primary-subtle: 253 246 232; /* #FDF6E8 — the doc's accent-tint */
 
-  /* Status roles keep their meaning (see features/user/statusTone.ts); only the
-     tone is retuned to sit on the steel ground. */
-  --success: 47 105 79; /* #2F694F */
-  --success-subtle: 226 238 231; /* #E2EEE7 */
-  --warning: 143 100 34; /* #8F6422 */
+  /* Text/link amber. Clears 4.5:1 on the card (6.01), the page (5.65) AND its own
+     tint (5.59) — that last one matters because a selected row puts accent text
+     on accent-subtle. */
+  --accent: 143 86 20; /* #8F5614 */
+  --accent-subtle: 253 246 232; /* #FDF6E8 */
+  --accent-border: 232 200 138; /* #E8C88A — the selected row's edge (decorative) */
+  /* Focus ring: must clear 3:1 against both the page and the card. The doc's
+     #C88A2E measures 2.77:1 on the page, so this is a step deeper. */
+  --accent-focus: 168 101 24; /* #A86518 — 4.35:1 on page, 4.63:1 on card */
+
+  /* Status — semantic only, never decorative. Tints appear on a row or badge,
+     never as a fill on a large area. */
+  --success: 47 122 85; /* #2F7A55 — status-open */
+  --success-subtle: 234 245 239; /* #EAF5EF */
+  /* One step deeper than the doc's #8F6422, which measured 4.39:1 on its own
+     tint — and warning text on warning tint is exactly how the badge renders. */
+  --warning: 135 93 31; /* #875D1F — 4.87:1 on its tint */
   --warning-subtle: 243 234 219; /* #F3EADB */
-  --danger: 158 62 55; /* #9E3E37 */
-  --danger-subtle: 244 228 226; /* #F4E4E2 */
+  --danger: 179 38 30; /* #B3261E — status-blocked */
+  --danger-subtle: 252 238 237; /* #FCEEED */
+  /* "N filled" — a count that is neither good news nor bad. Deeper than the
+     doc's #8A94A0 (3.08:1): this is a figure the user reads, not decoration.
+     Deep enough to clear 4.5:1 on the SELECTED row's amber tint too, not just on
+     the card — a browser pass caught it at 4.30:1 there. */
+  --neutral: 98 108 120; /* #626C78 — 5.06:1 on card, 4.71:1 on the amber tint */
 
-  /* The dark steel rail — its own plane, dark in BOTH themes rather than following
-     the ground. The values are not identical across modes: the dark block below
-     deepens --field and re-tunes the ink and accent steps, so the rail still
-     separates from a dark page and its focus ring stays visible. */
-  --field: 29 45 61; /* #1D2D3D */
-  --field-ink: 231 234 238; /* #E7EAEE */
-  --field-ink-2: 174 177 181; /* #AEB1B5 */
-  --field-ink-3: 145 148 152; /* #919498 */
-  --field-accent: 148 188 227; /* #94BCE3 */
+  /* Navy — 30%. The nav rail is its own plane, dark in BOTH themes rather than
+     following the ground. Values are not identical across modes: the dark block
+     below drops the rail below the page so it still separates. */
+  --field: 29 45 61; /* #1D2D3D — navy-base */
+  --field-raised: 38 56 73; /* #263849 — the active row's fill */
+  --field-ink: 232 237 242; /* #E8EDF2 */
+  /* A hair lighter than the doc's #8FA0B2, which reads 4.49:1 against the raised
+     row — the nav labels are the app's primary navigation, so they clear 4.5. */
+  --field-ink-2: 152 168 185; /* #98A8B9 — 4.95:1 on the raised row */
+  --field-ink-3: 152 168 185; /* #98A8B9 */
+  /* Amber's single appearance in the rail: the active item's 3px left bar. It is
+     what ties the chrome to the action colour. Lightened from #B4761A, which is
+     only 2.1:1 on the navy. */
+  --field-accent: 224 162 68; /* #E0A244 */
 }
 
 :root[data-theme='dark'] {
-  --canvas: 21 24 27; /* #15181B — app ground (the redesign's dark --sf) */
-  --surface: 21 24 27; /* #15181B */
-  --surface-2: 28 32 36; /* #1C2024 — the crumb strip, a step up from the ground */
-  --border: 75 75 77; /* #4B4B4D */
-  --text: 232 234 236; /* #E8EAEC */
-  --text-muted: 147 148 151; /* #939497 */
+  /* The navy becomes the card and the rail drops below the page. */
+  --canvas: 20 28 36; /* #141C24 */
+  --surface: 29 45 61; /* #1D2D3D */
+  --surface-2: 38 56 73; /* #263849 */
+  --border: 47 66 87; /* #2F4257 */
+  /* Lifted from #4A6078 (2.16:1 on the card) so control edges clear 3:1 here too. */
+  --border-strong: 108 130 155; /* #6C829B — 3.05:1 on the card */
+  --text: 232 237 242; /* #E8EDF2 */
+  --text-muted: 168 182 196; /* #A8B6C4 */
+  --text-faint: 132 148 165; /* #8494A5 */
 
-  --primary: 123 163 204; /* #7BA3CC */
-  --primary-hover: 143 179 216; /* #8FB3D8 */
-  --primary-ink: 14 18 21; /* #0E1215 — dark ink on the pale dark-mode fill */
-  --primary-subtle: 27 40 54; /* #1B2836 */
+  /* #B4761A fails on dark grounds; #E0A244 is the AA-dark step. */
+  --primary: 224 162 68; /* #E0A244 */
+  --primary-hover: 235 180 98; /* #EBB462 */
+  --primary-active: 208 144 52; /* #D09034 */
+  --primary-ink: 20 28 36; /* #141C24 — dark ink on the pale amber fill */
+  --primary-subtle: 47 38 22; /* #2F2616 — opaque form of rgba(224,162,68,.12) */
 
-  --accent: 148 188 227; /* #94BCE3 — accent step 400, which the guide names for dark grounds */
-  --accent-subtle: 35 51 70; /* #233346 */
+  --accent: 224 162 68; /* #E0A244 */
+  --accent-subtle: 47 38 22; /* #2F2616 */
+  --accent-border: 122 92 44; /* #7A5C2C */
+  --accent-focus: 235 180 98; /* #EBB462 */
 
-  --success: 106 176 137; /* #6AB089 */
-  --success-subtle: 22 41 32; /* #162920 */
+  --success: 79 176 126; /* #4FB07E */
+  --success-subtle: 22 45 34; /* #162D22 */
   --warning: 214 165 92; /* #D6A55C */
-  --warning-subtle: 43 34 19; /* #2B2213 */
-  --danger: 214 116 108; /* #D6746C */
-  --danger-subtle: 45 24 22; /* #2D1816 */
+  --warning-subtle: 47 38 22; /* #2F2616 */
+  /* A shade lighter than the doc's #E5766D, which reads 4.43:1 where a blocked
+     count lands on a SELECTED row's amber tint — caught in a browser pass, not by
+     checking against the card alone. */
+  --danger: 235 133 124; /* #EB857C — 4.90:1 on the amber tint */
+  --danger-subtle: 51 27 25; /* #331B19 */
+  /* Lighter than light mode's step, not darker: this sits on the navy card, where
+     #6B7683 reads 3.04:1. Same role, opposite direction. */
+  --neutral: 154 166 180; /* #9AA6B4 — 4.62:1 on the dark card */
 
-  --field: 14 18 21; /* #0E1215 */
-  --field-ink: 232 234 236; /* #E8EAEC */
-  --field-ink-2: 161 164 168; /* #A1A4A8 */
-  --field-ink-3: 129 132 136; /* #818488 */
-  --field-accent: 123 163 204; /* #7BA3CC */
+  --field: 20 28 36; /* #141C24 — the rail drops to the page's dark value */
+  --field-raised: 29 45 61; /* #1D2D3D */
+  --field-ink: 232 237 242; /* #E8EDF2 */
+  --field-ink-2: 143 160 178; /* #8FA0B2 */
+  --field-ink-3: 132 148 165; /* #8494A5 */
+  --field-accent: 224 162 68; /* #E0A244 */
 }

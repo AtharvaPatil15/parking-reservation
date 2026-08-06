@@ -49,10 +49,19 @@
     letter-spacing: -0.01em;
   }
 
-  /* Consistent, visible focus ring for keyboard users across the app.
-     Industry mandates a 2px accent outline rather than a browser default. */
+  /* Consistent, visible focus ring for keyboard users across the app: a 2px
+     accent outline rather than a browser default. Always --accent-focus, which is
+     a lighter step than the amber fill so the ring stays visible even when it
+     lands on a primary button. Never removed — only ever replaced (Input and
+     Select swap it for a border + halo so the field itself lights up). */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-canvas;
+    @apply outline-none ring-2 ring-accent-focus ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Inside a card the offset band must be the card's white, not the page ground,
+     or a 1px pale-grey line appears between the control and its ring. */
+  .bg-surface :focus-visible {
+    --tw-ring-offset-color: rgb(var(--surface));
   }
 
   /* The nav rail is its own dark plane, so the ring's offset must be the rail's
@@ -66,6 +75,17 @@
 
   ::selection {
     background: rgb(var(--primary) / 0.3);
+  }
+
+  /* A control that sits beside a labelled Input on the SAME baseline as the field.
+     `items-end` on the row is the obvious move but aligns to the bottom of the
+     hint line, so a button floated a line below the input it belonged to; and
+     `items-center` drifts as soon as one field has a hint and another doesn't.
+     This pushes the control down by exactly the label's box — 15px of line plus
+     the wrapper's 4px gap — so the row holds whether hints are present or not.
+     Keep it in step with Input/Select's label (text-2xs) and their `gap-1`. */
+  .field-aligned {
+    margin-top: 19px;
   }
 
   /* A horizontally-scrolling region (wide data tables on a narrow screen) fades

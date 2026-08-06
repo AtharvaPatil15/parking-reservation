@@ -16,14 +16,22 @@ export default {
           DEFAULT: withVar('--surface'),
           2: withVar('--surface-2'),
         },
-        border: withVar('--border'),
+        border: {
+          DEFAULT: withVar('--border'),
+          /* The heavier edge: inputs and secondary buttons, which must clear 3:1
+             as UI boundaries rather than reading as a hairline rule. */
+          strong: withVar('--border-strong'),
+        },
         text: {
           DEFAULT: withVar('--text'),
           muted: withVar('--text-muted'),
+          /* Never for anything the user must read — see theme.css. */
+          faint: withVar('--text-faint'),
         },
         primary: {
           DEFAULT: withVar('--primary'),
           hover: withVar('--primary-hover'),
+          active: withVar('--primary-active'),
           subtle: withVar('--primary-subtle'),
           /* Ink that sits on the primary fill — see theme.css. */
           ink: withVar('--primary-ink'),
@@ -31,7 +39,13 @@ export default {
         accent: {
           DEFAULT: withVar('--accent'),
           subtle: withVar('--accent-subtle'),
+          /* The selected row's edge, and the focus ring. */
+          border: withVar('--accent-border'),
+          focus: withVar('--accent-focus'),
         },
+        /* "N filled" — a count that is neither good news nor bad, so it takes
+           neither the success nor the danger role. */
+        neutral: withVar('--neutral'),
         success: {
           DEFAULT: withVar('--success'),
           subtle: withVar('--success-subtle'),
@@ -49,6 +63,8 @@ export default {
            alpha-on-ink rather than token channels. */
         field: {
           DEFAULT: withVar('--field'),
+          /* The active nav row's fill — a step up off the rail plane. */
+          raised: withVar('--field-raised'),
           ink: withVar('--field-ink'),
           'ink-2': withVar('--field-ink-2'),
           'ink-3': withVar('--field-ink-3'),

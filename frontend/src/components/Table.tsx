@@ -71,7 +71,18 @@ export function Table<T>({ columns, rows, rowKey, rowClassName, empty, className
                       <span className="shrink-0 font-mono text-3xs uppercase tracking-[0.11em] text-text-muted">
                         {col.header}
                       </span>
-                      <span className={cn('min-w-0 text-right text-sm', col.className)}>{cell}</span>
+                      {/* `flex justify-end` as well as `text-right`: text-align only moves inline
+                          content, so a cell whose render returns a flex/block child (e.g. a wrapped
+                          list of chips) packed to the LEFT of a right-aligned column and read as a
+                          broken fragment. This aligns both kinds of content the same way. */}
+                      <span
+                        className={cn(
+                          'flex min-w-0 flex-col items-end gap-1 text-right text-sm',
+                          col.className,
+                        )}
+                      >
+                        {cell}
+                      </span>
                     </div>
                   );
                 })}

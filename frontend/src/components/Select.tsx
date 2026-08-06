@@ -47,9 +47,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         aria-invalid={error ? true : undefined}
         aria-describedby={describedById}
         className={cn(
+          // Matches Input exactly — see the note there on border-strong and the amber focus halo.
           'h-[34px] w-full rounded-control border bg-surface-2 px-2.5 text-sm text-text transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-45',
-          error ? 'border-danger' : 'border-border hover:border-text-muted',
+          'focus:outline-none focus:ring-[3px] focus:ring-accent-focus/25',
+          'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-muted disabled:opacity-100',
+          error
+            ? 'border-danger focus:border-danger focus:ring-danger/20'
+            : 'border-border-strong hover:border-text-muted focus:border-primary',
           className,
         )}
         value={value}

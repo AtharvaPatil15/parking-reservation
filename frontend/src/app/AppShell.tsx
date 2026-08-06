@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Drawer } from '../components';
+import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
 import type { Role } from '../lib/roles';
 import { AppSidebar } from './AppSidebar';
 import { ThemeToggle } from './chrome';
 import { NavDrawerProvider, useNavDrawerItems } from './navDrawer';
+import { useRailCollapsed } from './useRailCollapsed';
 
 /**
  * Authenticated chrome: the steel rail + a crumb strip over the content region.
@@ -27,15 +29,22 @@ export function AppShell() {
 
 function ShellFrame({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, toggleCollapsed] = useRailCollapsed();
 
   return (
     <div className="flex min-h-screen bg-canvas text-text">
       {/* The rail is its own full-height plane: the wrapper stretches with the
           page (so short pages don't leave a light gap under it) while the inner
-          panel stays pinned in view. */}
-      <aside className="hidden w-[248px] shrink-0 bg-field lg:block">
+          panel stays pinned in view. Collapsed it narrows to an icon rail, giving
+          the content region ~190px back on a laptop. */}
+      <aside
+        className={cn(
+          'hidden shrink-0 bg-field transition-[width] duration-200 lg:block',
+          collapsed ? 'w-[60px]' : 'w-[248px]',
+        )}
+      >
         <div className="sticky top-0 h-screen">
-          <AppSidebar />
+          <AppSidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
         </div>
       </aside>
 
@@ -100,9 +109,36 @@ function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
               <MenuIcon />
             </button>
           )}
-          <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap">
-            {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
-            {section && <span className="text-text-muted/70"> / {section}</span>}
+          {/* An <h1>, not a <span>: this is the thing that names the area you are in.
+              The rail used to carry that heading on its role plate; with the plate gone
+              the strip owns it, which is also where it belonged — it sits directly above
+              the content it labels. Pages render their own <h1> too, so this is
+              deliberately the quieter of the two visually.
+
+              The section sits OUTSIDE the heading. Nested inside, it became part of the
+              accessible name ("Super admin / Dashboard"), which is wrong on two counts:
+              the area is named "Super admin", and the section is a sub-location that
+              changes as you navigate within that area. */}
+          <span className="flex min-w-0 items-baseline whitespace-nowrap">
+            <h1 className="truncate font-mono text-2xs font-normal uppercase tracking-[0.12em] text-text-muted">
+              {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
+            </h1>
+            {/* The slash is its own element with margins on both sides. Inline in the
+                text it rendered as "SUPER ADMIN/ SLOTS": a `truncate` span collapses
+                leading whitespace, so the gap landed on the wrong side of it. */}
+            {section && (
+              <span
+                aria-hidden="true"
+                className="mx-1.5 font-mono text-2xs text-text-muted/60"
+              >
+                /
+              </span>
+            )}
+            {section && (
+              <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted/70">
+                {section}
+              </span>
+            )}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">

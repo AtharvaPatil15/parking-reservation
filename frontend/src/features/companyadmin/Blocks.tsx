@@ -107,7 +107,9 @@ export function Blocks() {
             <label className="flex min-h-11 items-center gap-2 pt-6 text-sm text-text">
               <input
                 type="checkbox"
-                className="h-4 w-4 border-border text-primary"
+                // accent-color drives the native checked fill, so the tick takes amber (user
+                // intent) rather than the UA blue — the one blue that was still leaking through.
+                className="h-4 w-4 border-border-strong accent-primary"
                 checked={permanent}
                 onChange={(e) => setPermanent(e.target.checked)}
               />

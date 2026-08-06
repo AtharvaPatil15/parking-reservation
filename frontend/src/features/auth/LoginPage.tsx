@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '../../components';
-import { PublicHeader } from '../../app/chrome';
+import { ThemeToggle } from '../../app/chrome';
 import { useAuth } from '../../lib/auth';
 import { roleHome } from '../../lib/roles';
 import { useLogin } from '../../api/hooks';
@@ -55,9 +55,14 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-text lg:flex-row">
-      {/* The dark plane: what the system does, stated once. Static copy — this is
-          the public page, so there is no session to read live figures from. */}
-      <aside className="flex shrink-0 flex-col justify-between gap-8 bg-field px-8 py-8 text-field-ink lg:w-[380px] lg:px-11 lg:py-11">
+      {/* The dark plane carries the brand, and only the brand. It used to also hold a
+          marketing headline ("Book a bay for the week ahead") and a strapline about
+          scoring — copy that told a signing-in employee nothing they needed and that
+          nobody but a first-time visitor would ever read.
+
+          The theme toggle moved in here too. With the copy gone, `PublicHeader` was an
+          empty 52px bar holding one control, which read as an unfinished toolbar. */}
+      <aside className="flex shrink-0 items-center justify-between gap-4 bg-field px-8 py-8 text-field-ink lg:w-[380px] lg:flex-col lg:items-start lg:px-11 lg:py-11">
         <div className="flex items-center gap-2.5">
           <span className="grid h-[30px] w-[30px] shrink-0 place-items-center border border-field-ln2 font-heading text-lg leading-none text-field-accent">
             P
@@ -67,23 +72,13 @@ export function LoginPage() {
             <span className="text-[11px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
           </span>
         </div>
-        <div className="space-y-3">
-          <p className="font-heading text-3xl leading-[1.04]">
-            Book a bay
-            <br />
-            for the week ahead
-          </p>
-          <p className="max-w-[34ch] text-sm text-field-ink-2">
-            Requests are scored on distance and carpool size, then allocated after the cutoff.
-          </p>
+        {/* lg: pinned to the foot of the plane, out of the brand's way. */}
+        <div className="lg:mt-auto">
+          <ThemeToggle onField />
         </div>
-        <span className="font-mono text-2xs uppercase tracking-[0.16em] text-field-ink-3">
-          Work email · admin approval
-        </span>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <PublicHeader />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">
           <div className="space-y-1">
             <h1 className="text-2xl">Sign in</h1>
@@ -122,7 +117,7 @@ export function LoginPage() {
           </Card>
           <p className="text-sm text-text-muted">
             New here?{' '}
-            <Link to="/register" className="text-primary hover:underline">
+            <Link to="/register" className="text-accent hover:underline">
               Create an account
             </Link>
           </p>

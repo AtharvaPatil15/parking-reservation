@@ -1,15 +1,23 @@
+import { cn } from '../lib/cn';
 import { useTheme } from '../lib/theme';
 
 /** The brand mark: a square plate carrying the initial, per the rail's header. */
 export function Logo() {
   return (
-    <span className="grid h-[30px] w-[30px] place-items-center border border-border font-heading text-lg leading-none text-primary">
+    /* Navy, not amber: the mark is brand chrome, and amber is reserved for things
+       you can act on. An amber logo also put a second amber object on the login
+       page beside its one real primary button. */
+    <span className="grid h-[30px] w-[30px] place-items-center border border-border-strong font-heading text-lg leading-none text-text">
       P
     </span>
   );
 }
 
-export function ThemeToggle() {
+/**
+ * `onField` restyles it for the dark nav plane (`bg-field`), where the default
+ * border and muted ink are tuned for the light surface and nearly vanish.
+ */
+export function ThemeToggle({ onField = false }: { onField?: boolean }) {
   const { theme, toggle } = useTheme();
   const isDark = theme === 'dark';
   return (
@@ -18,14 +26,23 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
       title={`Switch to ${isDark ? 'light' : 'dark'} theme`}
-      className="grid h-8 w-8 place-items-center rounded-control border border-border text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+      className={cn(
+        'grid h-8 w-8 place-items-center rounded-control border transition-colors',
+        onField
+          ? 'border-field-ln2 text-field-ink-2 hover:bg-white/[0.06] hover:text-field-ink'
+          : 'border-border text-text-muted hover:bg-surface-2 hover:text-text',
+      )}
     >
       {isDark ? <SunIcon /> : <MoonIcon />}
     </button>
   );
 }
 
-/** Minimal header for public pages (login / register / 404). */
+/**
+ * Minimal header for public pages. Used by /register and /404; the login page
+ * renders its own brand on its dark aside instead, since a header here as well
+ * put the same mark and wordmark twice on one screen.
+ */
 export function PublicHeader() {
   return (
     <header className="border-b border-border bg-surface-2">

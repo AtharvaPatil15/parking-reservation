@@ -138,11 +138,18 @@ export function Slots() {
       </div>
 
       <Card title="Add parking area">
-        <div className="flex flex-wrap items-end gap-3">
+        {/* items-start + .field-aligned on the button — see the note in styles/index.css.
+            `items-end` put the button a line below the field, level with the hint text. */}
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-56">
             <Input label="Area name" value={newAreaName} onChange={(e) => setNewAreaName(e.target.value)} hint="e.g. Basement 4" />
           </div>
-          <Button onClick={onCreateArea} loading={createArea.isPending} disabled={!newAreaName.trim()}>
+          <Button
+            className="field-aligned"
+            onClick={onCreateArea}
+            loading={createArea.isPending}
+            disabled={!newAreaName.trim()}
+          >
             Add area
           </Button>
         </div>
@@ -150,7 +157,7 @@ export function Slots() {
       </Card>
 
       <Card title="Add slot">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-40">
             <Input label="Slot number" value={slotNumber} onChange={(e) => setSlotNumber(e.target.value)} />
           </div>
@@ -163,7 +170,12 @@ export function Slots() {
               onChange={(e) => setAreaId(e.target.value)}
             />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={!slotNumber.trim() || !parkingAreaId}>
+          <Button
+            className="field-aligned"
+            onClick={onCreate}
+            loading={create.isPending}
+            disabled={!slotNumber.trim() || !parkingAreaId}
+          >
             Add slot
           </Button>
         </div>

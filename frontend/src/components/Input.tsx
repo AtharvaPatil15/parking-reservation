@@ -43,9 +43,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         aria-invalid={error ? true : undefined}
         aria-describedby={describedById}
         className={cn(
+          // The field is a sunken plane inside a white card, so its edge is border-STRONG: as a UI
+          // boundary it must clear 3:1, which the hairline does not. Focus takes the amber border
+          // plus a soft amber halo rather than the global ring, so the field itself lights up.
           'h-[34px] w-full rounded-control border bg-surface-2 px-2.5 text-sm text-text caret-primary placeholder:text-text-muted transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-45',
-          error ? 'border-danger' : 'border-border hover:border-text-muted',
+          'focus:outline-none focus:ring-[3px] focus:ring-accent-focus/25',
+          'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-muted disabled:opacity-100',
+          error
+            ? 'border-danger focus:border-danger focus:ring-danger/20'
+            : 'border-border-strong hover:border-text-muted focus:border-primary',
           className,
         )}
         {...rest}

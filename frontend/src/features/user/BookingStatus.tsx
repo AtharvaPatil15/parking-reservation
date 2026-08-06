@@ -44,7 +44,7 @@ export function BookingStatus() {
       <ErrorState
         title="Couldn't load booking"
         action={
-          <Link to="/my-bookings" className="text-primary hover:underline">
+          <Link to="/my-bookings" className="text-accent hover:underline">
             Back to my bookings
           </Link>
         }

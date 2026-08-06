@@ -23,7 +23,10 @@ export function StatTiles({ stats }: { stats: Stat[] }) {
         <div key={s.label} className="bg-canvas px-3.5 py-3">
           {/* Numbered like a spec sheet: the index reads as a plate reference. */}
           <p className="font-mono text-3xs uppercase tracking-[0.14em] text-text-muted">
-            <span className="text-primary">{String(i + 1).padStart(2, '0')}</span> · {s.label}
+            {/* Set apart by ink weight, not hue: it was amber, which claimed "actionable" for what
+                is really a plate reference, and put a third amber object on a screen that already
+                has a primary button. */}
+            <span className="font-medium text-text">{String(i + 1).padStart(2, '0')}</span> · {s.label}
           </p>
           <p className="mt-1 font-heading text-3xl tabular-nums text-text">{s.value}</p>
           {s.hint && <p className="mt-0.5 text-xs text-text-muted">{s.hint}</p>}
