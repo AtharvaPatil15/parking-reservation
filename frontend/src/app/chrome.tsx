@@ -34,7 +34,7 @@ export function PublicHeader() {
           <Logo />
           <span className="flex flex-col leading-[1.05]">
             <span className="font-heading text-lg uppercase tracking-[0.06em] text-text">Parking</span>
-            <span className="text-[10px] uppercase tracking-[0.22em] text-text-muted">Reservation</span>
+            <span className="text-[11px] uppercase tracking-[0.22em] text-text-muted">Reservation</span>
           </span>
         </div>
         <ThemeToggle />

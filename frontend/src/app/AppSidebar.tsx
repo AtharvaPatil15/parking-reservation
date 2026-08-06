@@ -42,7 +42,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
         </span>
         <span className="flex flex-col leading-[1.05]">
           <span className="font-heading text-lg uppercase tracking-[0.06em]">Parking</span>
-          <span className="text-[10px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
+          <span className="text-[11px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
         </span>
       </div>
 
@@ -74,7 +74,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           <span className="flex min-w-0 flex-col leading-[1.25]">
             <span className="truncate text-sm">{user?.fullName ?? 'Account'}</span>
             {user?.companyName && (
-              <span className="truncate text-[10.5px] text-field-ink-2">{user.companyName}</span>
+              <span className="truncate text-[11.5px] text-field-ink-2">{user.companyName}</span>
             )}
           </span>
         </div>

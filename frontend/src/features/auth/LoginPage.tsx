@@ -64,7 +64,7 @@ export function LoginPage() {
           </span>
           <span className="flex flex-col leading-[1.05]">
             <span className="font-heading text-lg uppercase tracking-[0.06em]">Parking</span>
-            <span className="text-[10px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
+            <span className="text-[11px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
           </span>
         </div>
         <div className="space-y-3">

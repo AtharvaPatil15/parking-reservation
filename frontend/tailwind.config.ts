@@ -65,19 +65,21 @@ export default {
         mono: ['ui-monospace', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
-        /* Matched to the redesign's own specs: 13.5px body (.sub/.inp), 13px table
-           cells (.dc2), 9.5px monospace column labels (.hc/.kick/.cm), 16px card
-           titles (.ct), 31px plate figures (.big), 33px page headings (.h1). */
-        '3xs': ['0.59375rem', { lineHeight: '1', letterSpacing: '0.14em' }], // 9.5px
-        '2xs': ['0.625rem', { lineHeight: '0.875rem', letterSpacing: '0.1em' }], // 10px
-        xs: ['0.71875rem', { lineHeight: '1rem' }], // 11.5px
-        sm: ['0.8125rem', { lineHeight: '1.15rem' }], // 13px
-        base: ['0.84375rem', { lineHeight: '1.5' }], // 13.5px
-        lg: ['1rem', { lineHeight: '1.2' }], // 16px
-        xl: ['1.25rem', { lineHeight: '1.2' }], // 20px
-        '2xl': ['1.5rem', { lineHeight: '1.1' }], // 24px
-        '3xl': ['1.9375rem', { lineHeight: '1' }], // 31px — .big
-        '4xl': ['2.0625rem', { lineHeight: '1.04' }], // 33px — .h1
+        /* The redesign's own scale, stepped up 1px throughout for legibility — its
+           13.5px body and 9.5px column labels read small on a real monitor. Sizes
+           in the trailing comments are the shipped values; the redesign's originals
+           are 1px lower (13.5px body /.sub/.inp, 13px cells /.dc2, 9.5px labels
+           /.hc/.kick/.cm, 16px card titles /.ct, 31px figures /.big, 33px h1). */
+        '3xs': ['0.65625rem', { lineHeight: '1', letterSpacing: '0.14em' }], // 10.5px
+        '2xs': ['0.6875rem', { lineHeight: '0.9375rem', letterSpacing: '0.1em' }], // 11px
+        xs: ['0.78125rem', { lineHeight: '1.0625rem' }], // 12.5px
+        sm: ['0.875rem', { lineHeight: '1.2rem' }], // 14px
+        base: ['0.90625rem', { lineHeight: '1.5' }], // 14.5px
+        lg: ['1.0625rem', { lineHeight: '1.2' }], // 17px
+        xl: ['1.3125rem', { lineHeight: '1.2' }], // 21px
+        '2xl': ['1.5625rem', { lineHeight: '1.1' }], // 25px
+        '3xl': ['2rem', { lineHeight: '1' }], // 32px — .big
+        '4xl': ['2.125rem', { lineHeight: '1.04' }], // 34px — .h1
       },
       borderRadius: {
         /* Square corners are the system's defining move — one change reskins
