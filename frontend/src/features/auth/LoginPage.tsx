@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '../../components';
-import { PublicHeader } from '../../app/chrome';
+import { ThemeToggle } from '../../app/chrome';
 import { useAuth } from '../../lib/auth';
 import { roleHome } from '../../lib/roles';
 import { useLogin } from '../../api/hooks';
@@ -54,51 +54,75 @@ export function LoginPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-canvas text-text">
-      <PublicHeader />
-      <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-text-muted">Use your work email to access parking reservations.</p>
+    <div className="flex min-h-screen flex-col bg-canvas text-text lg:flex-row">
+      {/* The dark plane carries the brand, and only the brand. It used to also hold a
+          marketing headline ("Book a bay for the week ahead") and a strapline about
+          scoring — copy that told a signing-in employee nothing they needed and that
+          nobody but a first-time visitor would ever read.
+
+          The theme toggle moved in here too. With the copy gone, `PublicHeader` was an
+          empty 52px bar holding one control, which read as an unfinished toolbar. */}
+      <aside className="flex shrink-0 items-center justify-between gap-4 bg-field px-8 py-8 text-field-ink lg:w-[380px] lg:flex-col lg:items-start lg:px-11 lg:py-11">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center border border-field-ln2 font-heading text-lg leading-none text-field-accent">
+            P
+          </span>
+          <span className="flex flex-col leading-[1.05]">
+            <span className="font-heading text-lg uppercase tracking-[0.06em]">Parking</span>
+            <span className="text-[11px] uppercase tracking-[0.22em] text-field-ink-3">Reservation</span>
+          </span>
         </div>
-        <Card>
-          <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-            {formError && (
-              <p
-                role="alert"
-                className="rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger"
-              >
-                {formError}
-              </p>
-            )}
-            <Input
-              label="Email"
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={errors.email}
-            />
-            <Input
-              label="Password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
-            />
-            <Button type="submit" loading={loginMutation.isPending}>
-              Sign in
-            </Button>
-          </form>
-        </Card>
-        <p className="text-sm text-text-muted">
-          New here?{' '}
-          <Link to="/register" className="text-primary hover:underline">
-            Create an account
-          </Link>
-        </p>
-      </main>
+        {/* lg: pinned to the foot of the plane, out of the brand's way. */}
+        <div className="lg:mt-auto">
+          <ThemeToggle onField />
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 px-6 py-12">
+          <div className="space-y-1">
+            <h1 className="text-2xl">Sign in</h1>
+            <p className="text-text-muted">Use your work email to access parking reservations.</p>
+          </div>
+          <Card>
+            <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-control border border-danger/30 bg-danger-subtle px-3 py-2 text-sm text-danger"
+                >
+                  {formError}
+                </p>
+              )}
+              <Input
+                label="Email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={errors.email}
+              />
+              <Input
+                label="Password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                error={errors.password}
+              />
+              <Button type="submit" loading={loginMutation.isPending}>
+                Sign in
+              </Button>
+            </form>
+          </Card>
+          <p className="text-sm text-text-muted">
+            New here?{' '}
+            <Link to="/register" className="text-accent hover:underline">
+              Create an account
+            </Link>
+          </p>
+        </main>
+      </div>
     </div>
   );
 }

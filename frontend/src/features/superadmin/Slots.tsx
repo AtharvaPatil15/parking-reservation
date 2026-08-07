@@ -104,7 +104,7 @@ export function Slots() {
     { key: 'area', header: 'Area', render: (s) => areaName(s.parkingAreaId) },
     { key: 'status', header: 'Status', render: (s) => <Badge tone={statusTone(s.status)}>{s.status}</Badge> },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (s) => (
         <div className="flex justify-end gap-2">
           <Button
@@ -133,16 +133,23 @@ export function Slots() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Parking slots</h2>
+        <h1 className="text-4xl">Parking slots</h1>
         <p className="text-text-muted">The physical inventory allocation draws from. Deactivated slots don't count as in service.</p>
       </div>
 
       <Card title="Add parking area">
-        <div className="flex flex-wrap items-end gap-3">
+        {/* items-start + .field-aligned on the button — see the note in styles/index.css.
+            `items-end` put the button a line below the field, level with the hint text. */}
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-56">
             <Input label="Area name" value={newAreaName} onChange={(e) => setNewAreaName(e.target.value)} hint="e.g. Basement 4" />
           </div>
-          <Button onClick={onCreateArea} loading={createArea.isPending} disabled={!newAreaName.trim()}>
+          <Button
+            className="field-aligned"
+            onClick={onCreateArea}
+            loading={createArea.isPending}
+            disabled={!newAreaName.trim()}
+          >
             Add area
           </Button>
         </div>
@@ -150,7 +157,7 @@ export function Slots() {
       </Card>
 
       <Card title="Add slot">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-40">
             <Input label="Slot number" value={slotNumber} onChange={(e) => setSlotNumber(e.target.value)} />
           </div>
@@ -163,7 +170,12 @@ export function Slots() {
               onChange={(e) => setAreaId(e.target.value)}
             />
           </div>
-          <Button onClick={onCreate} loading={create.isPending} disabled={!slotNumber.trim() || !parkingAreaId}>
+          <Button
+            className="field-aligned"
+            onClick={onCreate}
+            loading={create.isPending}
+            disabled={!slotNumber.trim() || !parkingAreaId}
+          >
             Add slot
           </Button>
         </div>

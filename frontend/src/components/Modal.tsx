@@ -75,9 +75,13 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
           sizeClasses[size],
         )}
       >
+        {/* No registration marks here: the system's dialog spec frames the panel
+            with a hairline border only. Marks are drawn outside their box, so on
+            an opaque panel floating over the scrim they read as stray artifacts
+            rather than as part of the frame. */}
         {title && (
           <div className="shrink-0 border-b border-border px-4 py-4 sm:px-6">
-            <h2 id={titleId} className="break-words text-base font-semibold tracking-tight text-text">
+            <h2 id={titleId} className="break-words text-xl text-text">
               {title}
             </h2>
           </div>

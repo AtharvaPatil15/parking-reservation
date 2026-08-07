@@ -48,13 +48,13 @@ export function AllocationRoster({ scope }: { scope: 'company' | 'all' }) {
 
   const columns: Column<AllocationRosterItem>[] = [
     { key: 'slot', header: 'Slot', className: 'font-medium tabular-nums', render: (a) => a.slotNumber },
-    { key: 'employee', header: 'Employee', render: (a) => (
+    { key: 'employee', header: 'Employee', stackedBare: true, render: (a) => (
       <div>
         <div className="font-medium">{a.employeeName}</div>
         <div className="text-xs text-text-muted">{a.employeeEmail}</div>
       </div>
     ) },
-    { key: 'company', header: 'Company', render: (a) => a.companyName },
+    { key: 'company', header: 'Company', stackedBare: true, render: (a) => a.companyName },
     { key: 'date', header: 'Date', className: 'tabular-nums', render: (a) => a.bookingDate },
     {
       key: 'type', header: 'Type',

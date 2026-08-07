@@ -1,6 +1,13 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
+import { cn } from '../lib/cn';
 import { Spinner } from './Spinner';
-import { buttonClasses, type ButtonSize, type ButtonVariant } from './buttonStyles';
+import {
+  buttonBase,
+  buttonSizes,
+  buttonVariants,
+  type ButtonSize,
+  type ButtonVariant,
+} from './buttonStyles';
 
 export type { ButtonSize, ButtonVariant };
 
@@ -22,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type ?? 'button'}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={buttonClasses(variant, size, className)}
+      className={cn(buttonBase, buttonVariants[variant], buttonSizes[size], className)}
       {...rest}
     >
       {loading && <Spinner />}

@@ -77,19 +77,28 @@ export function SlotCount({ boxes, size = 'md', className }: SlotCountProps) {
       )}
     >
       <span className="sr-only">{spoken}</span>
+      {/* Status colour lands on the NUMBER; the word stays muted. Colouring the whole pair (or
+          worse, the row behind it) turns a dense list into a heat map — the eye should be able to
+          scan the figures and ignore the labels. These are system state, so they are the only
+          colour in the row: selection is amber and lives on the row's own edge. */}
       <span aria-hidden="true" className="flex flex-wrap items-baseline gap-x-1.5">
         <span>
-          <span className="font-medium tabular-nums text-text">{filled}</span> filled
+          <span className="font-medium tabular-nums text-neutral">{filled}</span> filled
         </span>
         <span className="text-border">·</span>
-        <span>
-          <span className="font-medium tabular-nums text-text">{empty}</span> empty
+        {/* Nothing left is the one case worth shouting about, so it is the only pair where the
+            word takes the colour too. Also the only place a count is bolded. */}
+        <span className={cn(empty === 0 && 'font-semibold text-danger')}>
+          <span className={cn('font-medium tabular-nums', empty === 0 ? 'text-danger' : 'text-success')}>
+            {empty}
+          </span>{' '}
+          empty
         </span>
         {blocked > 0 && (
           <>
             <span className="text-border">·</span>
             <span>
-              <span className="font-medium tabular-nums text-text">{blocked}</span> blocked
+              <span className="font-medium tabular-nums text-danger">{blocked}</span> blocked
             </span>
           </>
         )}

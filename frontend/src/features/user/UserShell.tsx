@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { useRegisterNavDrawerItems } from '../../app/navDrawer';
 import { ROLE_NAV } from '../../app/roleNav';
 
-/** User-area layout: nav drawer (top bar hamburger) + routed content. */
+/** User-area layout: nav rail (see AppShell) + routed content. */
 export function UserShell() {
   useRegisterNavDrawerItems(ROLE_NAV.USER);
   return (

@@ -32,9 +32,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     placeholder && value === undefined && defaultValue === undefined ? '' : defaultValue;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       {label && (
-        <label htmlFor={selectId} className="text-sm font-medium text-text">
+        <label
+          htmlFor={selectId}
+          className="text-2xs uppercase tracking-[0.1em] text-text-muted"
+        >
           {label}
         </label>
       )}
@@ -44,9 +47,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         aria-invalid={error ? true : undefined}
         aria-describedby={describedById}
         className={cn(
-          'h-10 w-full rounded-control border bg-surface px-3 text-sm text-text transition-colors',
-          'disabled:cursor-not-allowed disabled:opacity-60',
-          error ? 'border-danger' : 'border-border hover:border-text-muted',
+          // Matches Input exactly — see the note there on border-strong and the amber focus halo.
+          'h-[34px] w-full rounded-control border bg-surface-2 px-2.5 text-sm text-text transition-colors',
+          'focus:outline-none focus:ring-[3px] focus:ring-accent-focus/25',
+          'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-text-muted disabled:opacity-100',
+          error
+            ? 'border-danger focus:border-danger focus:ring-danger/20'
+            : 'border-border-strong hover:border-text-muted focus:border-primary',
           className,
         )}
         value={value}
@@ -65,11 +72,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         ))}
       </select>
       {error ? (
-        <p id={`${selectId}-error`} className="text-sm text-danger">
+        <p id={`${selectId}-error`} className="text-xs text-danger">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${selectId}-hint`} className="text-sm text-text-muted">
+        <p id={`${selectId}-hint`} className="text-xs text-text-muted">
           {hint}
         </p>
       ) : hintReserve ? (

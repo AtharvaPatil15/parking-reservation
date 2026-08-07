@@ -1,97 +1,155 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
-import { Button, Drawer } from '../components';
+import { useState, type ReactNode } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
+import { Drawer } from '../components';
 import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth';
-import { Logo, ThemeToggle } from './chrome';
+import type { Role } from '../lib/roles';
+import { AppSidebar } from './AppSidebar';
+import { ThemeToggle } from './chrome';
 import { NavDrawerProvider, useNavDrawerItems } from './navDrawer';
-import { ROLE_NAV } from './roleNav';
+import { useRailCollapsed } from './useRailCollapsed';
 
 /**
- * Authenticated chrome: top bar + content region. The role shells (/admin,
- * /company, /app) render through the <Outlet/>. Only mounts behind a role guard,
- * so `user` is always present here.
+ * Authenticated chrome: the steel rail + a crumb strip over the content region.
+ * The role shells (/admin, /company, /app) render through the <Outlet/>. Only
+ * mounts behind a role guard, so `user` is always present here.
+ *
+ * The rail is persistent from lg up and collapses to the existing off-canvas
+ * Drawer below it, so small screens keep the behaviour they had.
  */
 export function AppShell() {
   return (
     <NavDrawerProvider>
-      <div className="min-h-screen bg-canvas text-text">
-        <TopBar />
-        <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
-          <Outlet />
-        </main>
-      </div>
+      <ShellFrame>
+        <Outlet />
+      </ShellFrame>
     </NavDrawerProvider>
   );
 }
 
-function TopBar() {
-  const { user, logout } = useAuth();
-  const registeredItems = useNavDrawerItems();
+function ShellFrame({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const initial = user?.fullName?.charAt(0).toUpperCase() ?? '?';
-  // Pages outside a role shell (/profile, the gate console) register nothing, so fall back to the
-  // signed-in role's menu — the hamburger is always shown and must never open an empty drawer.
-  const navItems = registeredItems.length > 0 ? registeredItems : (user ? ROLE_NAV[user.role] ?? [] : []);
+  const [collapsed, toggleCollapsed] = useRailCollapsed();
+
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {/* Always rendered: pages outside a role shell (e.g. /profile) register no nav items of
-              their own, and hiding the only navigation control there stranded the user. Those
-              pages fall back to the role's own menu below. */}
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Open navigation menu"
-            className="grid h-8 w-8 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-          >
-            <MenuIcon />
-          </button>
-          <Logo />
-          {/* The full wordmark wrapped to two lines at 390px and pushed the bar past its own height.
-              Keep it on one line and drop the second word on the narrowest screens. */}
-          <span className="truncate whitespace-nowrap text-base font-semibold tracking-tight">
-            Parking<span className="hidden sm:inline"> Reservation</span>
+    <div className="flex min-h-screen bg-canvas text-text">
+      {/* The rail is its own full-height plane: the wrapper stretches with the
+          page (so short pages don't leave a light gap under it) while the inner
+          panel stays pinned in view. Collapsed it narrows to an icon rail, giving
+          the content region ~190px back on a laptop. */}
+      <aside
+        className={cn(
+          'hidden shrink-0 bg-field transition-[width] duration-200 lg:block',
+          collapsed ? 'w-[60px]' : 'w-[248px]',
+        )}
+      >
+        <div className="sticky top-0 h-screen">
+          <AppSidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* The hamburger is unconditional. It used to be gated on the role shell
+            having registered nav items, but five routes mount this shell with no
+            role shell inside (/security, /book, /booking/:id, /my-bookings,
+            /profile) — so below `lg` those screens had no way to reach the rail,
+            and therefore no Sign out and no Profile. For SECURITY, whose only
+            route is /security, that meant no way to sign out at all. */}
+        <CrumbStrip onOpenNav={() => setDrawerOpen(true)} />
+        {/* Full-bleed beside the rail: the content region uses the whole frame at
+            every width rather than stopping at a fixed column, so a wide monitor
+            gets the room instead of an empty band. Prose blocks cap their own
+            measure (max-w on the sub-lines) so only panels and tables stretch. */}
+        <main className="w-full flex-1 px-5 py-6 sm:px-6 lg:px-[26px]">{children}</main>
+      </div>
+
+      {/* Below lg the same rail rides in the drawer, so there is one nav to maintain. */}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} side="left" variant="nav" bare>
+        <AppSidebar onNavigate={() => setDrawerOpen(false)} />
+      </Drawer>
+    </div>
+  );
+}
+
+/** Display strings for the strip. Existing terminology, so nothing is renamed. */
+const ROLE_LABEL: Record<Role, string> = {
+  SUPER_ADMIN: 'Super admin',
+  COMPANY_ADMIN: 'Company admin',
+  SECURITY: 'Security',
+  USER: 'Employee',
+};
+
+/**
+ * The 52px strip above the content: where you are on the left, the account and
+ * theme control on the right.
+ */
+function CrumbStrip({ onOpenNav }: { onOpenNav?: () => void }) {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const navItems = useNavDrawerItems();
+  // Name the section from the matching nav item, so the strip always uses the
+  // same wording as the rail rather than a second set of labels.
+  const section = navItems
+    .filter((i) => (i.end ? pathname === i.to : pathname.startsWith(i.to)))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.label;
+
+  return (
+    // The bar spans the frame and its contents share the content region's padding,
+    // so the crumb lines up with the heading beneath it.
+    <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center border-b border-border bg-surface-2">
+      <div className="flex w-full items-center justify-between gap-4 px-5 sm:px-6 lg:px-[26px]">
+        <div className="flex min-w-0 items-center gap-3">
+          {onOpenNav && (
+            <button
+              type="button"
+              onClick={onOpenNav}
+              aria-label="Open navigation menu"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-control text-text-muted transition-colors hover:bg-surface hover:text-text lg:hidden"
+            >
+              <MenuIcon />
+            </button>
+          )}
+          {/* An <h1>, not a <span>: this is the thing that names the area you are in.
+              The rail used to carry that heading on its role plate; with the plate gone
+              the strip owns it, which is also where it belonged — it sits directly above
+              the content it labels. Pages render their own <h1> too, so this is
+              deliberately the quieter of the two visually.
+
+              The section sits OUTSIDE the heading. Nested inside, it became part of the
+              accessible name ("Super admin / Dashboard"), which is wrong on two counts:
+              the area is named "Super admin", and the section is a sub-location that
+              changes as you navigate within that area. */}
+          <span className="flex min-w-0 items-baseline whitespace-nowrap">
+            <h1 className="truncate font-mono text-2xs font-normal uppercase tracking-[0.12em] text-text-muted">
+              {user ? ROLE_LABEL[user.role] : 'Parking Reservation'}
+            </h1>
+            {/* The slash is its own element with margins on both sides. Inline in the
+                text it rendered as "SUPER ADMIN/ SLOTS": a `truncate` span collapses
+                leading whitespace, so the gap landed on the wrong side of it. */}
+            {section && (
+              <span
+                aria-hidden="true"
+                className="mx-1.5 font-mono text-2xs text-text-muted/60"
+              >
+                /
+              </span>
+            )}
+            {section && (
+              <span className="truncate font-mono text-2xs uppercase tracking-[0.12em] text-text-muted/70">
+                {section}
+              </span>
+            )}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <ThemeToggle />
-          <Link
-            to="/profile"
-            aria-label="Open profile"
-            className="flex items-center gap-2 rounded-control border border-border bg-surface px-2.5 py-1 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-          >
-            <span className="grid h-6 w-6 place-items-center rounded-full bg-primary-subtle text-xs font-semibold text-primary">
-              {initial}
+        <div className="flex shrink-0 items-center gap-3">
+          {user?.companyName && (
+            <span className="hidden font-mono text-2xs uppercase tracking-[0.12em] text-text-muted whitespace-nowrap sm:inline">
+              {user.companyName}
             </span>
-            <span className="hidden sm:inline">{user?.fullName ?? 'Account'}</span>
-          </Link>
-          <Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={logout}>
-            Sign out
-          </Button>
+          )}
+          <ThemeToggle />
         </div>
       </div>
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Menu" side="left" variant="nav">
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={() => setDrawerOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  'rounded-control px-3 py-2 text-sm font-medium transition-colors',
-                  isActive ? 'bg-primary-subtle text-primary' : 'text-text-muted hover:bg-surface-2 hover:text-text',
-                )
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      </Drawer>
     </header>
   );
 }
@@ -102,7 +160,7 @@ function MenuIcon() {
       <path
         d="M4 6h16M4 12h16M4 18h16"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.5"
         strokeLinecap="round"
       />
     </svg>

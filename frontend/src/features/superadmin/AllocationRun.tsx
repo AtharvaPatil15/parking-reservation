@@ -14,7 +14,7 @@ type AllocationResultRow = components['schemas']['AllocationResultRow'] & { comp
 
 const columns: Column<AllocationResultRow>[] = [
   { key: 'rank', header: 'Rank', render: (r) => <span className={r.rank === 1 ? 'font-semibold text-accent' : ''}>{r.rank}</span> },
-  { key: 'company', header: 'Company', render: (r) => r.companyName ?? '-' },
+  { key: 'company', header: 'Company', stackedBare: true, render: (r) => r.companyName ?? '-' },
   { key: 'user', header: 'User', render: (r) => r.user ?? r.userId ?? '—' },
   { key: 'distance', header: 'Distance', align: 'right', className: 'tabular-nums', render: (r) => (r.distanceKm != null ? `${r.distanceKm} km` : '—') },
   { key: 'people', header: 'People', align: 'right', className: 'tabular-nums', render: (r) => r.people },
@@ -87,7 +87,7 @@ export function AllocationRun() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Allocation</h2>
+        <h1 className="text-4xl">Allocation</h1>
         <p className="text-text-muted">
           Run the scoring engine for a booking date, then open the common pool to redistribute unused slots.
         </p>

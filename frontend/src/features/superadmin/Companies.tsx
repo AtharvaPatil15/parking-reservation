@@ -16,7 +16,7 @@ const columns = (
   onQuota: (c: Company) => void,
   assignedFor: (companyId: string) => number | null,
 ): Column<Company>[] => [
-  { key: 'name', header: 'Company', render: (c) => <span className="font-medium text-text">{c.name}</span> },
+  { key: 'name', header: 'Company', stackedBare: true, render: (c) => <span className="font-medium text-text">{c.name}</span> },
   { key: 'code', header: 'Code', render: (c) => <span className="tabular-nums">{c.code}</span> },
   {
     key: 'status', header: 'Status',
@@ -30,7 +30,7 @@ const columns = (
     },
   },
   {
-    key: 'actions', header: '', align: 'right',
+    key: 'actions', header: '', align: 'right', stackedBare: true,
     render: (c) => (
       <Button size="sm" variant="secondary" onClick={() => onQuota(c)}>
         Manage quota
@@ -77,7 +77,7 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
           <p className="text-sm text-text-muted">No quota set yet.</p>
         )}
 
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-28">
             <Input
               label="Slots"
@@ -91,7 +91,12 @@ function QuotaModal({ company, onClose }: { company: Company; onClose: () => voi
           <div className="w-44">
             <Input label="Effective from" type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
           </div>
-          <Button onClick={onSubmit} loading={setQuota.isPending} disabled={slotCount.trim() === '' || countInvalid}>
+          <Button
+            className="field-aligned"
+            onClick={onSubmit}
+            loading={setQuota.isPending}
+            disabled={slotCount.trim() === '' || countInvalid}
+          >
             Set quota
           </Button>
         </div>
@@ -130,20 +135,28 @@ export function Companies() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Companies</h2>
+        <h1 className="text-4xl">Companies</h1>
         <p className="text-text-muted">Tenants and their parking quota.</p>
       </div>
 
       <Card title="Add company">
-        <div className="flex flex-wrap items-end gap-3">
+        {/* items-start + .field-aligned, matching every other form row — see the note in
+            styles/index.css. This previously needed `hintReserve` on Name plus a magic
+            `mb-[1.625rem]` on the button to fight `items-end`; aligning from the top
+            instead means neither is necessary, and the fields keep their natural heights. */}
+        <div className="flex flex-wrap items-start gap-3">
           <div className="w-56">
-            {/* Code below carries a hint; reserve the same line here so both inputs stay in line. */}
-            <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} hintReserve />
+            <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="w-40">
             <Input label="Code" value={code} onChange={(e) => setCode(e.target.value)} hint="Short tenant code" />
           </div>
-          <Button className="mb-[1.625rem]" onClick={onCreate} loading={create.isPending} disabled={!name.trim() || !code.trim()}>
+          <Button
+            className="field-aligned"
+            onClick={onCreate}
+            loading={create.isPending}
+            disabled={!name.trim() || !code.trim()}
+          >
             Add company
           </Button>
         </div>

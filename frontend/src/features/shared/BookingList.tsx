@@ -166,10 +166,16 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
       <div>
         <div className="font-medium">{b.employeeName}</div>
         <div className="text-xs text-text-muted">{b.employeeEmail}</div>
+        {/* Earlier attempts for this employee/date, when there is more than one. Hidden below
+            `md` — that is where the table becomes a stacked label/value list which already
+            carries Type and Status on their own lines, so these chips were a second, wider
+            restatement of the two rows directly beneath them. The full history is still one tap
+            away under Details, and the desktop table (where the name cell is wide enough for
+            them to sit tidily under it) is unchanged. */}
         {b.history && b.history.length > 1 && (
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div className="mt-1 hidden flex-wrap gap-1 md:flex">
             {b.history.map((h) => (
-              <span key={h.id} className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-muted">
+              <span key={h.id} className="bg-surface-2 px-1.5 py-0.5 text-xs text-text-muted">
                 {displayTypeLabel(h)} {h.status}
               </span>
             ))}

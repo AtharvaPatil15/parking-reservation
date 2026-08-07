@@ -8,7 +8,7 @@ export function Allocations() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Allocations</h2>
+        <h1 className="text-4xl">Allocations</h1>
         <p className="text-text-muted">Which seat is allotted to whom, by date — primary and common-pool.</p>
       </div>
       <AllocationRoster scope="company" />

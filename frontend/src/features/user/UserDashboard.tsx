@@ -61,7 +61,7 @@ export function UserDashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Your dashboard</h1>
+      <h1 className="text-4xl">Your dashboard</h1>
 
       {upcoming ? (
         <Card title="Upcoming booking">
@@ -75,7 +75,7 @@ export function UserDashboard() {
                 {secondsLeft <= 0 ? 'Booking window closed.' : `Cutoff in ${formatCountdown(secondsLeft)}`}
               </p>
             )}
-            <Link to={`/booking/${upcoming.id}`} className="text-primary hover:underline">
+            <Link to={`/booking/${upcoming.id}`} className="text-accent hover:underline">
               View status &amp; score
             </Link>
           </div>
@@ -85,7 +85,7 @@ export function UserDashboard() {
           title="No upcoming booking"
           description="Reserve a parking slot for the next bookable weekday."
           action={
-            <Link to="/book" className="text-primary hover:underline">
+            <Link to="/book" className="text-accent hover:underline">
               Book a slot
             </Link>
           }
@@ -131,7 +131,7 @@ export function UserDashboard() {
                         {/* Waitlisted is the one outcome with a "why?" — link through to the score
                             breakdown (via history, since this panel has no per-date booking id). */}
                         {day.myStatus === 'WAITLISTED' && (
-                          <Link to="/my-bookings" className="text-xs text-primary hover:underline">
+                          <Link to="/my-bookings" className="text-xs text-accent hover:underline">
                             Why?
                           </Link>
                         )}
@@ -152,7 +152,7 @@ export function UserDashboard() {
         </Link>
         <p className="text-sm text-text-muted">
           {d.previousBookingsCount} past booking{d.previousBookingsCount === 1 ? '' : 's'} ·{' '}
-          <Link to="/my-bookings" className="text-primary hover:underline">
+          <Link to="/my-bookings" className="text-accent hover:underline">
             View history
           </Link>
         </p>

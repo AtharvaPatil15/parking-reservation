@@ -27,6 +27,8 @@ type BookingBatchResult = components['schemas']['BookingBatchResult'];
 
 /** Escalate the run countdown to a warning tone inside the final day. */
 const FINAL_WINDOW_SECONDS = 24 * 60 * 60;
+/** Inside the last six hours the timer goes red — this is now "act or miss it". */
+const CRITICAL_WINDOW_SECONDS = 6 * 60 * 60;
 
 const dayLabel = (iso: string): string =>
   new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
@@ -158,6 +160,7 @@ export function BookingForm() {
 
   const secondsLeft = useCountdown(window_?.nextRunCountdownSeconds);
   const runUrgent = secondsLeft != null && secondsLeft > 0 && secondsLeft <= FINAL_WINDOW_SECONDS;
+  const runCritical = secondsLeft != null && secondsLeft > 0 && secondsLeft <= CRITICAL_WINDOW_SECONDS;
 
   if (me.isLoading || availability.isLoading || vehicles.isLoading) return <LoadingState label="Loading booking form…" />;
   if (availability.isError) {
@@ -185,7 +188,7 @@ export function BookingForm() {
       setFocusedDate(null);
     };
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="space-y-4">
         {failedCount === 0 ? (
           <SuccessState
             title={createdCount === 1 ? 'Request queued' : `${createdCount} requests queued`}
@@ -231,7 +234,7 @@ export function BookingForm() {
                   <span className="flex items-center gap-3">
                     <Badge tone="success">Submitted</Badge>
                     {r.booking && (
-                      <Link to={`/booking/${r.booking.id}`} className="text-sm text-primary hover:underline">
+                      <Link to={`/booking/${r.booking.id}`} className="text-sm text-accent hover:underline">
                         View status
                       </Link>
                     )}
@@ -313,29 +316,49 @@ export function BookingForm() {
   });
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    // Left-aligned like every other screen (the shell no longer centres content),
+    // but the form keeps a readable measure rather than stretching to a wide monitor.
+    <div className="space-y-5">
       <div className="space-y-3">
         <BackLink />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Book a parking slot</h1>
+            <h1 className="text-4xl">Book a parking slot</h1>
             <p className="text-text-muted">
               Home → office: {me.data?.distanceKm != null ? `${me.data.distanceKm} km` : 'not set'} · used in scoring.
             </p>
           </div>
           {window_ && (
+            /* The deadline panel. It had no hierarchy — a flat bordered box in muted ink, which is
+               why it read as a caption rather than as the clock the whole screen is racing. Now it
+               is a card with a 2px amber top edge: the label stays quiet, the DIGITS carry the
+               weight, and the timer alone changes colour as the deadline closes (amber → warning at
+               24h → blocked inside 6h). The tint moves with it rather than filling the box, so the
+               panel never competes with the primary button. */
             <span
               {...(runUrgent ? { role: 'status' } : {})}
               className={cn(
-                'inline-flex flex-col rounded-control border px-3 py-1.5 text-sm',
-                runUrgent
-                  ? 'border-warning/30 bg-warning-subtle text-warning'
-                  : 'border-border bg-surface text-text-muted',
+                'inline-flex flex-col gap-0.5 rounded-control border border-t-2 bg-surface px-3 py-2',
+                runCritical
+                  ? 'border-border border-t-danger'
+                  : runUrgent
+                    ? 'border-border border-t-warning'
+                    : 'border-border border-t-primary',
               )}
             >
-              <span>Results published {runLabel(window_.nextRunAt)}</span>
+              <span className="text-2xs uppercase tracking-[0.1em] text-text-muted">
+                Results published
+              </span>
+              <span className="text-sm text-text">{runLabel(window_.nextRunAt)}</span>
               {secondsLeft != null && secondsLeft > 0 && (
-                <span className="font-medium tabular-nums">in {formatCountdown(secondsLeft)}</span>
+                <span
+                  className={cn(
+                    'font-heading text-lg font-semibold tabular-nums',
+                    runCritical ? 'text-danger' : runUrgent ? 'text-warning' : 'text-text',
+                  )}
+                >
+                  in {formatCountdown(secondsLeft)}
+                </span>
               )}
             </span>
           )}
@@ -364,9 +387,12 @@ export function BookingForm() {
 
           {openDates.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
+              {/* Both are text buttons: they are shortcuts for adjusting the selection, not the
+                  screen's action. "Submit request" is the one primary here, and a bordered button
+                  beside it read as a second one — the doc's rule is one per screen. */}
               <Button
                 type="button"
-                variant="secondary"
+                variant="ghost"
                 size="sm"
                 disabled={allOpenSelected}
                 onClick={selectAllOpen}
@@ -393,7 +419,10 @@ export function BookingForm() {
           {days.length === 0 ? (
             <p className="text-sm text-text-muted">No dates are open for booking right now.</p>
           ) : (
-            <ul className="divide-y divide-border">
+            /* Hairline rules between rows. The rows carry their own transparent border for the
+               selected state, which visually swallowed `divide-y` — without a rule the list read
+               as floating fragments rather than one scannable column. */
+            <ul className="divide-y divide-border border-y border-border">
               {days.map((day) => {
                 const isSelected = selectedDates.has(day.date);
                 return (
@@ -407,10 +436,23 @@ export function BookingForm() {
                       disabled={!day.requestable}
                       onClick={() => toggleDate(day.date)}
                       className={cn(
-                        'flex w-full flex-wrap items-center justify-between gap-3 rounded-control px-2 py-2.5 text-left transition-colors',
-                        day.requestable ? 'hover:bg-surface-2' : 'cursor-not-allowed opacity-60',
-                        isSelected && 'bg-primary-subtle',
-                        day.date === focusedDate && 'ring-1 ring-inset ring-primary/40',
+                        // Each row carries two INDEPENDENT signals and they must stay on separate
+                        // channels or the list stops being readable: "is it selected" is user
+                        // intent (amber, on the row itself) and "how busy is it" is system state
+                        // (green/grey/red, confined to the counts on the right). A row is never
+                        // filled with a status colour.
+                        'flex w-full flex-wrap items-center justify-between gap-3 rounded-control border border-transparent px-2 py-2.5 text-left transition-colors',
+                        day.requestable
+                          ? 'hover:border-border-strong hover:bg-surface-2'
+                          : // Already requested/decided. Dimming alone was not enough: at 0.65 on a
+                            // white card these rows still read as pickable, so they also take the
+                            // sunken fill — "this row is not a surface you act on". No colour spent.
+                            'cursor-not-allowed bg-surface-2/70 opacity-65',
+                        // Selected: tint + edge + a 3px amber bar. Three cues, so the state never
+                        // rests on colour alone (the tick box below is the fourth).
+                        isSelected &&
+                          'border-accent-border bg-accent-subtle shadow-[inset_3px_0_0_rgb(var(--primary))]',
+                        day.date === focusedDate && 'ring-1 ring-inset ring-accent-focus/50',
                       )}
                     >
                       <span className="flex min-w-[9rem] items-center gap-2.5">
@@ -418,10 +460,10 @@ export function BookingForm() {
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[10px] font-bold leading-none',
+                            'flex h-4 w-4 shrink-0 items-center justify-center  border text-[11px] font-bold leading-none',
                             isSelected
-                              ? 'border-primary bg-primary text-white'
-                              : 'border-border bg-surface text-transparent',
+                              ? 'border-primary bg-primary text-primary-ink'
+                              : 'border-border-strong bg-surface text-transparent',
                           )}
                         >
                           ✓
@@ -434,8 +476,13 @@ export function BookingForm() {
                               requestable (`reason = ALREADY_BOOKED`), so it can never be focused. It
                               sits above the server's own message rather than replacing it — the message
                               explains why the row is disabled, which the slot number does not. */}
+                          {/* Good news, so it reads as good news — the success role, not the
+                              accent. Amber would claim "you can act here", and an allocated date
+                              is precisely the one you cannot act on. */}
                           {day.mySlotNumber && (
-                            <span className="text-xs text-primary">You got slot {day.mySlotNumber}</span>
+                            <span className="text-xs font-medium text-success">
+                              You got slot {day.mySlotNumber}
+                            </span>
                           )}
                           <span className="text-xs text-text-muted">
                             {day.requestable ? dayStatusLine(day) : (day.message ?? 'Not available')}
@@ -494,7 +541,7 @@ export function BookingForm() {
                   // announce as "Tue, 6 Jan" and give no hint that activating it removes the date.
                   aria-label={`Remove ${dayLabel(d)}`}
                   title={`Remove ${dayLabel(d)}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-text hover:bg-surface-2"
+                  className="inline-flex items-center gap-1 border border-border bg-surface px-2.5 py-1 text-xs text-text hover:bg-surface-2"
                 >
                   {dayLabel(d)}
                   <span aria-hidden="true" className="text-text-muted">

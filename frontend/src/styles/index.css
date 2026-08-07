@@ -1,3 +1,11 @@
+/* Barlow (body) + Barlow Condensed (headings), self-hosted so there is no
+   render-blocking third-party request and the app still styles offline. */
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/700.css';
+@import '@fontsource/barlow-condensed/400.css';
+@import '@fontsource/barlow-condensed/600.css';
+
 @import './theme.css';
 
 @tailwind base;
@@ -11,14 +19,106 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Tell the browser which chrome to render for native controls. Without this a
+     date/time input keeps its light UA styling in dark mode — a white box with a
+     black glyph, which was the brightest object on several dark screens — and the
+     select dropdown list stayed light too. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
   body {
-    @apply bg-canvas text-text;
+    @apply bg-canvas text-text text-base;
     margin: 0;
     min-height: 100vh;
   }
 
-  /* Consistent, visible focus ring for keyboard users across the app. */
+  /* Headings take the condensed face system-wide, so screens don't each restate it. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: theme('fontFamily.heading');
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Consistent, visible focus ring for keyboard users across the app: a 2px
+     accent outline rather than a browser default. Always --accent-focus, which is
+     a lighter step than the amber fill so the ring stays visible even when it
+     lands on a primary button. Never removed — only ever replaced (Input and
+     Select swap it for a border + halo so the field itself lights up). */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-canvas;
+    @apply outline-none ring-2 ring-accent-focus ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Inside a card the offset band must be the card's white, not the page ground,
+     or a 1px pale-grey line appears between the control and its ring. */
+  .bg-surface :focus-visible {
+    --tw-ring-offset-color: rgb(var(--surface));
+  }
+
+  /* The nav rail is its own dark plane, so the ring's offset must be the rail's
+     own colour — not --canvas. In dark mode --canvas (#15181B) and --field
+     (#0E1215) are 1.06:1 apart, so a canvas-coloured offset band vanished and
+     the ring read as a smudge on the app's primary navigation. */
+  .bg-field :focus-visible {
+    --tw-ring-offset-color: rgb(var(--field));
+    @apply ring-field-accent;
+  }
+
+  ::selection {
+    background: rgb(var(--primary) / 0.3);
+  }
+
+  /* A control that sits beside a labelled Input on the SAME baseline as the field.
+     `items-end` on the row is the obvious move but aligns to the bottom of the
+     hint line, so a button floated a line below the input it belonged to; and
+     `items-center` drifts as soon as one field has a hint and another doesn't.
+     This pushes the control down by exactly the label's box — 15px of line plus
+     the wrapper's 4px gap — so the row holds whether hints are present or not.
+     Keep it in step with Input/Select's label (text-2xs) and their `gap-1`. */
+  .field-aligned {
+    margin-top: 19px;
+  }
+
+  /* A horizontally-scrolling region (wide data tables on a narrow screen) fades
+     at whichever edge still has content, so hidden columns announce themselves.
+     `local` background-attachment is what makes the fade track the scroll. */
+  .scroll-shadow {
+    background:
+      linear-gradient(to right, rgb(var(--canvas)) 30%, transparent),
+      linear-gradient(to right, transparent, rgb(var(--canvas)) 70%) 100% 0,
+      radial-gradient(farthest-side at 0 50%, rgb(var(--text) / 0.13), transparent),
+      radial-gradient(farthest-side at 100% 50%, rgb(var(--text) / 0.13), transparent) 100% 0;
+    background-repeat: no-repeat;
+    background-size:
+      40px 100%,
+      40px 100%,
+      13px 100%,
+      13px 100%;
+    background-attachment: local, local, scroll, scroll;
+  }
+
+  /* Native date/time pickers ship a dark-on-light glyph that reads as a foreign
+     object on the steel ground — and disappears entirely in dark mode. Tint it
+     to the muted ink instead, and let it take the accent on hover. */
+  ::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.55;
+  }
+
+  ::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  :root[data-theme='dark'] ::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 }

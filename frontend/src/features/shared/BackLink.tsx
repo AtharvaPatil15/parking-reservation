@@ -11,7 +11,13 @@ export function BackLink({ to, label = 'Back' }: { to?: string; label?: string }
   const auth = useOptionalAuth();
   const dest = to ?? (auth?.user ? roleHome(auth.user.role) : '/');
   return (
-    <Link to={dest} className="inline-flex items-center gap-1 text-sm text-text-muted transition-colors hover:text-text">
+    // A bordered control, not a bare text link: on the wide reskinned pages a
+    // 13px muted link read as absent, and this is the only way back from the
+    // cross-role pages, which render outside a role shell.
+    <Link
+      to={dest}
+      className="inline-flex h-[30px] items-center gap-1.5 rounded-control border border-border px-3 font-heading text-sm font-semibold tracking-[0.01em] text-text transition-colors hover:bg-surface-2"
+    >
       <span aria-hidden="true">←</span> {label}
     </Link>
   );

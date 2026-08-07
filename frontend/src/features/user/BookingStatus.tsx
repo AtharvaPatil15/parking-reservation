@@ -4,6 +4,7 @@ import {
   Badge, Button, Card, ErrorState, Input, LoadingState, Modal, useToast,
 } from '../../components';
 import { useBooking, useReleaseBooking, useUpdateBooking } from '../../api/hooks';
+import { enumLabel } from '../../lib/enumLabel';
 import { apiErrorText } from '../../api/http';
 import { isTodayOrFuture } from '../../lib/dates';
 import { BackLink } from '../shared/BackLink';
@@ -43,7 +44,7 @@ export function BookingStatus() {
       <ErrorState
         title="Couldn't load booking"
         action={
-          <Link to="/my-bookings" className="text-primary hover:underline">
+          <Link to="/my-bookings" className="text-accent hover:underline">
             Back to my bookings
           </Link>
         }
@@ -114,9 +115,9 @@ export function BookingStatus() {
       <BackLink to="/my-bookings" label="Back to my bookings" />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Booking status</h1>
+          <h1 className="text-4xl">Booking status</h1>
           <p className="text-text-muted">
-            {b.bookingDate} · {b.bookingType}
+            {b.bookingDate} · {enumLabel(b.bookingType)}
           </p>
         </div>
         <Badge tone={statusTone(b.status)}>{b.status}</Badge>

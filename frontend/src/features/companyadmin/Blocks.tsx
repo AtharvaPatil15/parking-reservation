@@ -4,6 +4,7 @@ import {
   type Column, type SelectOption,
 } from '../../components';
 import { useBlocks, useCreateBlock, useDeleteBlock } from '../../api/hooks';
+import { enumLabel } from '../../lib/enumLabel';
 import { useAuth } from '../../lib/auth';
 import { apiErrorText } from '../../api/http';
 import { nextBookableWeekday } from '../../lib/dates';
@@ -63,10 +64,10 @@ export function Blocks() {
   const columns: Column<SlotBlock>[] = [
     { key: 'dates', header: 'Dates', render: (b) => (b.endDate === '9999-12-31' ? `${b.startDate} onward` : `${b.startDate} to ${b.endDate}`) },
     { key: 'count', header: 'Slots', align: 'right', className: 'tabular-nums', render: (b) => b.blockedCount },
-    { key: 'reason', header: 'Reason', render: (b) => <Badge tone="neutral">{b.reason}</Badge> },
+    { key: 'reason', header: 'Reason', render: (b) => <Badge tone="neutral">{enumLabel(b.reason)}</Badge> },
     { key: 'note', header: 'Note', render: (b) => b.reasonText ?? '—' },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', align: 'right', stackedBare: true,
       render: (b) => (
         <Button size="sm" variant="secondary" loading={removingId === b.id} disabled={removingId !== null} onClick={() => onRemove(b.id)}>
           Remove
@@ -78,7 +79,7 @@ export function Blocks() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">Quota blocks</h2>
+        <h1 className="text-4xl">Quota blocks</h1>
         <p className="text-text-muted">Hold back a count of your quota for a date range, with a reason.</p>
       </div>
 
@@ -106,7 +107,9 @@ export function Blocks() {
             <label className="flex min-h-11 items-center gap-2 pt-6 text-sm text-text">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-border text-primary"
+                // accent-color drives the native checked fill, so the tick takes amber (user
+                // intent) rather than the UA blue — the one blue that was still leaking through.
+                className="h-4 w-4 border-border-strong accent-primary"
                 checked={permanent}
                 onChange={(e) => setPermanent(e.target.checked)}
               />

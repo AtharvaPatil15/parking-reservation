@@ -72,7 +72,7 @@ export function UserDetailsModal({ userId, onClose, actions }: UserDetailsModalP
           </dl>
 
           <div className="space-y-2 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-text">Home</h3>
+            <h3 className="text-lg text-text">Home</h3>
             <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 text-sm">
               <Row label="Address" value={u.address || '—'} />
               <Row label="Pin code" value={u.pinCode || '—'} />
@@ -97,7 +97,7 @@ export function UserDetailsModal({ userId, onClose, actions }: UserDetailsModalP
           </div>
 
           <div className="space-y-2 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-text">Cars</h3>
+            <h3 className="text-lg text-text">Cars</h3>
             {u.vehicles.length === 0 ? (
               <p className="text-sm text-text-muted">No cars in the registry yet.</p>
             ) : (

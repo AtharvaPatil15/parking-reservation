@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, Select, Table, type Column, type SelectOption } from '../../components';
+import { enumLabel } from '../../lib/enumLabel';
 import { useMyBookings } from '../../api/hooks';
 import { BackLink } from '../shared/BackLink';
 import { statusTone } from './statusTone';
@@ -21,10 +22,10 @@ const STATUS_OPTIONS: SelectOption[] = [
 
 const columns: Column<Booking>[] = [
   { key: 'date', header: 'Date', render: (b) => b.bookingDate },
-  { key: 'type', header: 'Type', render: (b) => b.bookingType },
+  { key: 'type', header: 'Type', render: (b) => enumLabel(b.bookingType) },
   { key: 'status', header: 'Status', render: (b) => <Badge tone={statusTone(b.status)}>{b.status}</Badge> },
   { key: 'view', header: '', align: 'right', render: (b) => (
-      <Link to={`/booking/${b.id}`} className="text-primary hover:underline">
+      <Link to={`/booking/${b.id}`} className="text-accent hover:underline">
         View
       </Link>
     ) },
@@ -42,10 +43,12 @@ export function History() {
   const pageCount = Math.max(1, Math.ceil(total / (q.data?.meta.pageSize ?? PAGE_SIZE)));
 
   return (
+    // Capped: this table has four narrow columns, so full-bleed on a wide monitor
+    // left a vast gap between "Status" and the right-aligned action.
     <div className="space-y-4">
       <div className="space-y-2">
         <BackLink />
-        <h1 className="text-2xl font-semibold tracking-tight">Booking history</h1>
+        <h1 className="text-4xl">Booking history</h1>
       </div>
 
       <Card>

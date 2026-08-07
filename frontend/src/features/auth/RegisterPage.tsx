@@ -103,7 +103,7 @@ export function RegisterPage() {
                   : `Your ${submittedAs === 'SECURITY' ? 'security' : 'company-admin'} request is pending approval by the super admin. You'll be able to sign in once it's approved.`
               }
               action={
-                <Link to="/login" className="text-primary hover:underline">
+                <Link to="/login" className="text-accent hover:underline">
                   Back to sign in
                 </Link>
               }
@@ -112,7 +112,7 @@ export function RegisterPage() {
         ) : (
           <>
             <div className="space-y-1">
-              <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
+              <h1 className="text-4xl">Create an account</h1>
               <p className="text-text-muted">Register to request parking. An admin approves new accounts.</p>
             </div>
 
@@ -172,7 +172,7 @@ export function RegisterPage() {
 
             <p className="text-center text-sm text-text-muted">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline">
+              <Link to="/login" className="text-accent hover:underline">
                 Sign in
               </Link>
             </p>

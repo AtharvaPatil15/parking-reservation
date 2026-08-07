@@ -3,6 +3,7 @@ import { Button, ErrorState, Input, LoadingState } from '../../components';
 import { useCompanyAdminDashboard } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import { StatTiles, type Stat } from '../shared/StatTiles';
+import { SlotSplit } from '../shared/SlotSplit';
 import { BookingList } from '../shared/BookingList';
 import { UnbookedEntries } from '../shared/UnbookedEntries';
 
@@ -28,11 +29,12 @@ export function CompanyDashboard() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold tracking-tight">Overview</h2>
-          <p className="text-text-muted">
+        <div>
+          <p className="font-mono text-3xs uppercase tracking-[0.16em] text-text-muted">Company utilization</p>
+          <h1 className="mt-1 text-4xl">Overview</h1>
+          <p className="mt-1 max-w-[62ch] text-text-muted">
             Parking utilization {date ? `on ${date}` : 'today'} for your company.
           </p>
         </div>
@@ -54,11 +56,20 @@ export function CompanyDashboard() {
           }
         />
       ) : (
-        <StatTiles stats={stats} />
+        <>
+          <StatTiles stats={stats} />
+          <div className="grid items-start gap-5 lg:grid-cols-[396px_minmax(0,1fr)]">
+            <SlotSplit
+              total={d.totalCompanySlots}
+              booked={d.bookedSlots}
+              blocked={d.blockedSlots}
+              free={d.availableCompanySlots}
+            />
+            {/* Phase 7 D16: security never blocks the barrier, so unbooked entries land here. */}
+            <UnbookedEntries date={date || undefined} />
+          </div>
+        </>
       )}
-
-      {/* Phase 7 D16: security never blocks the barrier, so unbooked entries land here for follow-up. */}
-      <UnbookedEntries date={date || undefined} />
 
       <BookingList scope="company" date={date} />
     </div>

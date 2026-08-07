@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Card } from '../../components';
+import { Blueprint } from '../../components';
 
 export interface Stat {
   label: string;
@@ -7,19 +7,31 @@ export interface Stat {
   hint?: string;
 }
 
-/** Responsive grid of headline metric tiles, shared by the admin dashboards. */
+/**
+ * Headline metrics as one drawn spec-sheet plate: a single framed grid of equal
+ * cells sharing hairline rules, rather than a row of separate cards. Figures take
+ * the condensed face at display size with tabular figures so columns align.
+ */
 export function StatTiles({ stats }: { stats: Stat[] }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((s) => (
-        <Card key={s.label}>
-          <div className="space-y-1">
-            <p className="text-sm text-text-muted">{s.label}</p>
-            <p className="text-2xl font-semibold tabular-nums text-text">{s.value}</p>
-            {s.hint && <p className="text-xs text-text-muted">{s.hint}</p>}
-          </div>
-        </Card>
+    // A 1px gap over a border-coloured ground draws every internal rule at once,
+    // so cell count and wrapping can't leave a stray or missing edge.
+    // Capped: past ~1400px the 4-up grid gives each cell 600px to hold a short
+    // label and one figure, which reads as lost rather than generous.
+    <Blueprint className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
+      {stats.map((s, i) => (
+        <div key={s.label} className="bg-canvas px-3.5 py-3">
+          {/* Numbered like a spec sheet: the index reads as a plate reference. */}
+          <p className="font-mono text-3xs uppercase tracking-[0.14em] text-text-muted">
+            {/* Set apart by ink weight, not hue: it was amber, which claimed "actionable" for what
+                is really a plate reference, and put a third amber object on a screen that already
+                has a primary button. */}
+            <span className="font-medium text-text">{String(i + 1).padStart(2, '0')}</span> · {s.label}
+          </p>
+          <p className="mt-1 font-heading text-3xl tabular-nums text-text">{s.value}</p>
+          {s.hint && <p className="mt-0.5 text-xs text-text-muted">{s.hint}</p>}
+        </div>
       ))}
-    </div>
+    </Blueprint>
   );
 }
