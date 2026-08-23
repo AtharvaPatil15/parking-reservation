@@ -11,7 +11,7 @@
 --
 -- DELETES: every user, company, admin grant, slot, quota, block, booking, carpool
 --          member, allocation, run, score breakdown, common-pool row, notification,
---          audit row and refresh token.
+--          audit row, refresh token, vehicle, gate event and walk-in registration.
 --
 -- Idempotent: safe to run repeatedly. Transactional: all-or-nothing.
 --
@@ -43,6 +43,15 @@ END $$;
 
 -- --- 1. Transactional + inventory data --------------------------------------
 -- One statement so mutual FKs never block the order. CASCADE covers dependents.
+--
+-- `VehicleRegistrationRequest` has to be named explicitly. TRUNCATE ... CASCADE only follows real
+-- foreign keys, and its link to `Vehicle` is `vehicleId` — a plain nullable column with no @relation,
+-- so truncating Vehicle does NOT reach it. Its `companyId`, however, IS a required FK defaulting to
+-- RESTRICT, so a single leftover walk-in request made step 4 below fail with
+--   "update or delete on table Company violates RESTRICT setting of foreign key constraint
+--    VehicleRegistrationRequest_companyId_fkey"
+-- and roll the whole reset back. Harmless (the transaction protects the data) but the script could not
+-- complete on any database where a guard had ever registered a walk-in car. Fixed 2026-08-23.
 TRUNCATE TABLE
   "BookingCarpoolMember",
   "AllocationScoreBreakdown",
@@ -58,6 +67,7 @@ TRUNCATE TABLE
   "AuditLog",
   "RefreshToken",
   "GateEvent",
+  "VehicleRegistrationRequest",
   "Vehicle"
 CASCADE;
 
