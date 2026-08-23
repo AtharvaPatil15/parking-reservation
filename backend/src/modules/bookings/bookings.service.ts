@@ -24,6 +24,7 @@ import type {
   UpdateBookingInput,
   ListBookingsQuery,
   ReleaseBookingInput,
+  ReassignBookingInput,
 } from './bookings.schema';
 
 const DEFAULT_MAX_PEOPLE = 4;
@@ -762,6 +763,243 @@ export async function releaseBooking(
         }),
       });
     });
+
+  return getBookingForPrincipal(principal, bookingId);
+}
+
+/**
+ * Hand an allocated booking to a colleague — the last-minute Slack swap, made official
+ * (POST /bookings/{id}/reassign, 2026-08-23).
+ *
+ * The real-world flow this serves: someone posts "not coming in today", someone else says "I'll take
+ * your slot", and today the only tools were release (which hands the slot to whoever the waitlist
+ * cascade picks, not the person who asked) or nothing at all. Editing is closed by then — `updateBooking`
+ * deliberately refuses once a date is decided — so this is a separate, admin-only override rather than a
+ * widened PATCH.
+ *
+ * **The booking changes owner in place** (Prithviraj's call, 2026-08-23): same row, same slot, same
+ * `ParkingAllocation`, re-snapshotted PII. The consequence is that the original booker no longer has a
+ * row for the date, which is why the previous owner is snapshotted onto the booking — otherwise nothing
+ * would remember that they were the one who won the slot.
+ *
+ * `allocationScore` and `scoreBreakdown` are deliberately left as they are: they record how this slot
+ * was *won*, which is genuinely the original booker's request, and deleting a completed run's output to
+ * tidy up the display would make the run's own record incomplete. The reassignment snapshot is what
+ * makes them readable in context.
+ *
+ * Refuses (all of these are cases where the swap would be a lie about the physical world):
+ *  - the booking is not ALLOCATED, or its date has passed → 409
+ *  - the original booker's car is already inside on this booking → 409, the slot is occupied
+ *  - the taker is not an ACTIVE colleague in the same company → 400
+ *  - the taker already holds a slot for that date → 409
+ */
+export async function reassignBooking(
+  principal: Principal,
+  bookingId: string,
+  input: ReassignBookingInput,
+  now: Date = new Date(),
+) {
+  const booking = await prisma.bookingRequest.findUnique({
+    where: { id: bookingId },
+    include: { allocation: true, user: { select: { id: true, fullName: true, email: true } } },
+  });
+  if (!booking) throw new NotFoundError('Booking not found');
+  assertCanSeeBooking(principal, booking);
+  if (booking.status !== 'ALLOCATED' || !booking.allocation) {
+    throw new ConflictError('Only an allocated booking can be handed to someone else');
+  }
+  // Yesterday's slot cannot change hands — it is already spent (same guard as release, KI-1). Today's
+  // can, and must: that is the entire point of this endpoint.
+  if (booking.bookingDate.getTime() < currentIstCalendarDate(now).getTime()) {
+    throw new ConflictError('This booking date has passed and can no longer be reassigned');
+  }
+  if (input.toUserId === booking.userId) {
+    fail('toUserId', 'This booking already belongs to that employee');
+  }
+
+  // The original booker is already parked in the bay, so there is nothing to hand over — whatever was
+  // said on Slack, they came in. Only an OPEN visit blocks: a car that came and left has vacated it.
+  const openVisit = await prisma.gateEvent.findFirst({
+    where: { bookingRequestId: bookingId, status: 'CHECKED_IN' },
+    select: { id: true, checkInAt: true },
+  });
+  if (openVisit) {
+    throw new ConflictError(
+      `${booking.user.fullName} is already checked in on this booking (since ${openVisit.checkInAt.toISOString()}) — the slot is occupied`,
+    );
+  }
+
+  // Same company only: the slot came out of this company's quota, so moving it to another tenant would
+  // silently rewrite that date's quota accounting. A Company Admin is scoped to their own company
+  // anyway (`assertCanSeeBooking`); this is the check that the *taker* is in it too.
+  const taker = await prisma.user.findFirst({
+    where: { id: input.toUserId, companyId: booking.companyId, status: 'ACTIVE', deletedAt: null },
+    select: { id: true, fullName: true, email: true, address: true, pinCode: true, distanceKm: true },
+  });
+  // Thrown inline rather than via `fail` so the null is narrowed away for the rest of the function.
+  if (!taker) {
+    throw new ValidationError('Request validation failed', [
+      { field: 'toUserId', message: 'Pick an active employee from this company' },
+    ]);
+  }
+
+  // One person, one slot per day. Checked on the allocation table rather than booking status so a row
+  // whose status has drifted from its allocation still counts.
+  const takerAlreadyHasSlot = await prisma.parkingAllocation.findFirst({
+    where: { bookingDate: booking.bookingDate, bookingRequest: { userId: taker.id } },
+    select: { id: true },
+  });
+  if (takerAlreadyHasSlot) {
+    throw new ConflictError(`${taker.fullName} already has a slot for this date`);
+  }
+
+  /**
+   * Whose car will be at the barrier. This is not cosmetic: the gate matches an arriving plate to
+   * today's booking (gate.service `findTodaysBooking`), so leaving the original booker's plate on the
+   * row would point the guard at the wrong person. Explicit input wins; otherwise the taker's
+   * registered car; otherwise cleared, which at least fails honestly as an unrecognised plate.
+   */
+  const registeredCar = input.vehicleNumber
+    ? null
+    : await prisma.vehicle.findFirst({
+        where: { userId: taker.id, isActive: true },
+        select: { displayNumber: true },
+        orderBy: { createdAt: 'asc' },
+      });
+  const nextVehicleNumber = input.vehicleNumber?.trim() || registeredCar?.displayNumber || null;
+
+  const previousOwner = booking.user;
+
+  await withSerializableRetry(async (tx) => {
+    // Re-read inside the transaction: a concurrent release could have freed this slot between the
+    // checks above and here, and reassigning a booking that no longer holds a slot would invent one.
+    const live = await tx.bookingRequest.findUnique({
+      where: { id: bookingId },
+      include: { allocation: true },
+    });
+    if (!live || live.status !== 'ALLOCATED' || !live.allocation) {
+      throw new ConflictError('Only an allocated booking can be handed to someone else');
+    }
+    // Re-checked inside the transaction, not just above: an allocation run or a release cascade could
+    // have handed the taker a bay in between, and nothing else in this transaction reads the allocation
+    // table for them — so without this read, serializable isolation has no conflict to detect and the
+    // taker could end up holding two.
+    if (await tx.parkingAllocation.findFirst({
+      where: { bookingDate: live.bookingDate, bookingRequest: { userId: taker.id } },
+      select: { id: true },
+    })) {
+      throw new ConflictError(`${taker.fullName} already has a slot for this date`);
+    }
+
+    /**
+     * The taker's own requests for this date have to get out of the way.
+     *
+     * The same-type row is a hard blocker, not a preference: `@@unique([userId, bookingDate,
+     * bookingType])` is a full index that ignores status, so the taker's WAITLISTED row — the likely
+     * case, since the person asking for a slot on Slack is usually someone the run turned down — would
+     * collide with the row we are about to hand them. It is deleted (its score breakdown first, which
+     * has no cascade), and its full state goes into the audit log so the queue history is not just lost.
+     *
+     * Rows of the *other* type cannot collide, but leaving one WAITLISTED would let the common-pool run
+     * hand the same person a second slot. Expired, exactly as `releaseBooking` does for its winner.
+     */
+    const colliding = await tx.bookingRequest.findFirst({
+      where: { userId: taker.id, bookingDate: live.bookingDate, bookingType: live.bookingType },
+      include: { scoreBreakdown: { select: { id: true } } },
+    });
+    if (colliding) {
+      if (colliding.scoreBreakdown) {
+        await tx.allocationScoreBreakdown.delete({ where: { id: colliding.scoreBreakdown.id } });
+      }
+      await tx.bookingRequest.delete({ where: { id: colliding.id } });
+    }
+    const superseded = await tx.bookingRequest.updateMany({
+      where: {
+        userId: taker.id,
+        bookingDate: live.bookingDate,
+        status: { in: ['DRAFT', 'SUBMITTED', 'WAITLISTED'] },
+      },
+      data: { status: 'EXPIRED', cancellationReason: 'Superseded by a reassigned slot' },
+    });
+
+    /**
+     * The declared passengers were the *original* driver's carpool — their colleagues arranged a lift
+     * with someone who is not coming in. Carrying them over would credit the taker with a carpool they
+     * never agreed to, and the `(bookingDate, employeeEmail)` uniqueness would then pin those people to
+     * this booking for the rest of the day. Cleared; the taker starts as a solo driver.
+     */
+    await tx.bookingCarpoolMember.deleteMany({ where: { bookingRequestId: bookingId } });
+
+    await tx.bookingRequest.update({
+      where: { id: bookingId },
+      data: {
+        userId: taker.id,
+        // Re-snapshot the PII the booking carries (F6) — it describes whoever is travelling, and the
+        // previous owner's address on the taker's row would be both wrong and a small privacy leak.
+        userAddress: taker.address,
+        pinCode: taker.pinCode,
+        travelDistanceKm: taker.distanceKm,
+        vehicleNumber: nextVehicleNumber,
+        carpoolMemberCount: 0,
+        reassignedFromUserId: previousOwner.id,
+        reassignedFromName: previousOwner.fullName,
+        reassignedFromEmail: previousOwner.email,
+        reassignedById: principal.id,
+        reassignedAt: now,
+        reassignmentReason: input.reason ?? null,
+      },
+    });
+
+    // The slot is unchanged (same bay, same company quota) but it is no longer where the run put it —
+    // flag it as a manual override so the roster and the allocation audit both say so.
+    await tx.parkingAllocation.update({
+      where: { bookingRequestId: bookingId },
+      data: { isManualOverride: true, overrideById: principal.id },
+    });
+
+    await tx.auditLog.create({
+      data: buildAuditData({
+        actionType: 'BOOKING_REASSIGNED',
+        entityType: 'BookingRequest',
+        entityId: bookingId,
+        oldValue: {
+          userId: previousOwner.id,
+          employeeName: previousOwner.fullName,
+          employeeEmail: previousOwner.email,
+          vehicleNumber: booking.vehicleNumber,
+          carpoolMemberCount: booking.carpoolMemberCount,
+          slotId: live.allocation.slotId,
+          // The taker's own request for this date, as it stood before being consumed by the handover.
+          // Deleted from the queue, so this is the only remaining record of it.
+          takerExistingRequest: colliding
+            ? {
+                id: colliding.id,
+                status: colliding.status,
+                bookingType: colliding.bookingType,
+                allocationScore: colliding.allocationScore != null ? Number(colliding.allocationScore) : null,
+                submittedAt: colliding.submittedAt?.toISOString() ?? null,
+              }
+            : null,
+        },
+        newValue: {
+          userId: taker.id,
+          employeeName: taker.fullName,
+          employeeEmail: taker.email,
+          vehicleNumber: nextVehicleNumber,
+          reassignedById: principal.id,
+          reason: input.reason ?? null,
+          supersededRequestCount: superseded.count,
+        },
+      }),
+    });
+  });
+
+  // Make the taker's car recognisable at the barrier for next time. Only for an explicitly typed plate:
+  // one that came from the registry is already there. Never fatal — a plate a colleague already owns is
+  // the expected miss, and the booking has been handed over either way.
+  if (input.vehicleNumber?.trim()) {
+    await mirrorVehicleToProfile(taker.id, input.vehicleNumber.trim(), 'CAR');
+  }
 
   return getBookingForPrincipal(principal, bookingId);
 }

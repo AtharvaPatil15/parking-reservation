@@ -33,6 +33,27 @@ function toBookingCreated(b: CreatedBooking) {
   };
 }
 
+/**
+ * Who this booking was taken over from, if anyone (openapi `ReassignmentInfo` fields, shared by
+ * BookingDetail and AdminBooking).
+ *
+ * Read from the row's own snapshot rather than a join: after a handover the booking *is* the taker's,
+ * so this is the only place the original booker survives. Absent (all-null) on a normal booking.
+ */
+function reassignment(b: {
+  reassignedFromName: string | null;
+  reassignedFromEmail: string | null;
+  reassignedAt: Date | null;
+  reassignmentReason: string | null;
+}) {
+  return {
+    reassignedFromName: b.reassignedFromName ?? null,
+    reassignedFromEmail: b.reassignedFromEmail ?? null,
+    reassignedAt: b.reassignedAt ? b.reassignedAt.toISOString() : null,
+    reassignmentReason: b.reassignmentReason ?? null,
+  };
+}
+
 /** openapi BookingDetail (Booking + carpoolMembers + scoreBreakdown once allocation has run). */
 function toBookingDetail(b: BookingDetail) {
   return {
@@ -49,6 +70,7 @@ function toBookingDetail(b: BookingDetail) {
     allocatedSlotNumber: b.allocation?.slot?.slotNumber ?? null,
     submittedAt: b.submittedAt ? b.submittedAt.toISOString() : null,
     createdAt: b.createdAt.toISOString(),
+    ...reassignment(b),
     carpoolMembers: b.carpoolMembers.map((m) => ({
       id: m.id,
       name: m.name,
@@ -105,6 +127,7 @@ function toAdminBooking(b: AdminBookingHistoryRow) {
     allocatedSlotNumber: b.allocation?.slot?.slotNumber ?? null,
     submittedAt: b.submittedAt ? b.submittedAt.toISOString() : null,
     createdAt: b.createdAt.toISOString(),
+    ...reassignment(b),
   };
 }
 
@@ -184,6 +207,13 @@ export const updateBooking = asyncHandler(async (req, res) => {
 export const releaseBooking = asyncHandler(async (req, res) => {
   if (!req.user) throw new UnauthenticatedError();
   const booking = await service.releaseBooking(req.user, req.params.id, req.body ?? {});
+  sendSuccess(res, toBookingDetail(booking), 200);
+});
+
+/** POST /bookings/{id}/reassign — hand an allocated slot to a colleague (COMPANY_ADMIN). */
+export const reassignBooking = asyncHandler(async (req, res) => {
+  if (!req.user) throw new UnauthenticatedError();
+  const booking = await service.reassignBooking(req.user, req.params.id, req.body);
   sendSuccess(res, toBookingDetail(booking), 200);
 });
 

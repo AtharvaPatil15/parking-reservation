@@ -408,6 +408,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings/{id}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand an allocated slot to a colleague
+         * @description Role: COMPANY_ADMIN (own company only). The last-minute swap: the original booker says on Slack they are not coming and a colleague takes the slot. The booking changes owner **in place** — same row, same slot, same allocation — with the PII snapshot re-taken from the taker's profile, the declared carpool cleared, the allocation flagged as a manual override, and the previous owner recorded on the booking (`reassignedFrom*`). The taker's own request for that date is consumed: a same-type row is removed (its prior state is kept in the audit log) and any other live row is expired, so they cannot end up holding two slots. Distinct from `/release`, which frees the slot to the waitlist cascade rather than to a named person, and from `PATCH /bookings/{id}`, which is closed once a date is decided.
+         */
+        post: operations["reassignBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/allocation/primary/run": {
         parameters: {
             query?: never;
@@ -1532,6 +1555,13 @@ export interface components {
             submittedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Employee this booking was taken over from. */
+            reassignedFromName?: string | null;
+            /** Format: email */
+            reassignedFromEmail?: string | null;
+            /** Format: date-time */
+            reassignedAt?: string | null;
+            reassignmentReason?: string | null;
             /** @description Same employee/date booking lifecycle rows, grouped before pagination. */
             history?: components["schemas"]["AdminBooking"][];
         };
@@ -2158,6 +2188,14 @@ export interface components {
         ReleaseBookingRequest: {
             reason?: string | null;
         };
+        ReassignBookingRequest: {
+            /** @description Employee taking the slot. Must be an ACTIVE user of the same company as the booking. */
+            toUserId: string;
+            /** @description The car that will actually arrive. Omit to fall back to the taker's registered car; the gate matches an arriving plate to today's booking, so a stale plate points the guard at the wrong person. A plate given here is also added to the vehicle registry. */
+            vehicleNumber?: string | null;
+            /** @description Why the slot changed hands (e.g. the Slack thread). */
+            reason?: string | null;
+        };
         BookingCreatedData: {
             id: string;
             status: components["schemas"]["BookingStatus"];
@@ -2189,6 +2227,13 @@ export interface components {
             carpoolMembers?: components["schemas"]["CarpoolMember"][];
             /** @description Per-factor scores; present only after an allocation run has scored this booking (absent/null before). */
             scoreBreakdown?: components["schemas"]["ScoreBreakdown"];
+            /** @description Employee this booking was taken over from. */
+            reassignedFromName?: string | null;
+            /** Format: email */
+            reassignedFromEmail?: string | null;
+            /** Format: date-time */
+            reassignedAt?: string | null;
+            reassignmentReason?: string | null;
         };
         PrimaryRunRequest: {
             /** Format: date */
@@ -3253,6 +3298,41 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    reassignBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Booking request id. */
+                id: components["parameters"]["BookingIdParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Slot handed over; the booking now belongs to the taker. */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["BookingDetail"];
+                    };
+                };
+            };
+            400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

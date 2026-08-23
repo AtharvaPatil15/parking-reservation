@@ -5,6 +5,7 @@ export {
   useUpdateBooking,
   useBooking,
   useReleaseBooking,
+  useReassignBooking,
   useAdminBookings,
 } from './bookings';
 export type { AdminBookingsFilter } from './bookings';

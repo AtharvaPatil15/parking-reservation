@@ -8,6 +8,7 @@ type CreateBookingRequest = components['schemas']['CreateBookingRequest'];
 type CreateBookingsBatchRequest = components['schemas']['CreateBookingsBatchRequest'];
 type BookingsBatchData = components['schemas']['BookingsBatchData'];
 type UpdateBookingRequest = components['schemas']['UpdateBookingRequest'];
+type ReassignBookingRequest = components['schemas']['ReassignBookingRequest'];
 type BookingCreatedData = components['schemas']['BookingCreatedData'];
 type BookingDetail = components['schemas']['BookingDetail'];
 type AdminBooking = components['schemas']['AdminBooking'];
@@ -103,6 +104,28 @@ export function useBooking(id: string | undefined) {
     queryKey: id ? queryKeys.booking(id) : ['booking', 'none'],
     queryFn: () => unwrap<BookingDetail>(api.GET('/bookings/{id}', { params: { path: { id: id! } } })),
     enabled: Boolean(id),
+  });
+}
+
+/**
+ * POST /bookings/{id}/reassign — hand an allocated slot to a colleague (COMPANY_ADMIN).
+ *
+ * Invalidates widely on purpose: the booking changes owner, so the admin roster, the allocation roster
+ * (who holds which bay), the company dashboard and *both* employees' own views are all now stale.
+ */
+export function useReassignBooking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & ReassignBookingRequest) =>
+      unwrap<BookingDetail>(api.POST('/bookings/{id}/reassign', { params: { path: { id } }, body })),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.booking(id) });
+      qc.invalidateQueries({ queryKey: ['bookings', 'admin'] });
+      qc.invalidateQueries({ queryKey: ['allocations'] });
+      qc.invalidateQueries({ queryKey: queryKeys.companyAdminDashboard });
+      qc.invalidateQueries({ queryKey: queryKeys.userDashboard });
+      qc.invalidateQueries({ queryKey: ['me', 'bookings'] });
+    },
   });
 }
 
