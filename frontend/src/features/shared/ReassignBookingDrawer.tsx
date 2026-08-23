@@ -40,17 +40,31 @@ export function ReassignBookingDrawer({ booking, onClose, companyId }: ReassignB
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [reason, setReason] = useState('');
 
-  // The current holder is filtered out rather than left in and rejected server-side: picking the person
-  // who already has the slot is never a thing the admin meant to do.
+  /**
+   * The current holder is filtered out rather than left in and rejected server-side: picking the person
+   * who already has the slot is never a thing the admin meant to do.
+   *
+   * The placeholder distinguishes "still loading" from "genuinely nobody". They look identical from an
+   * empty list, and showing "No other active colleagues" for the second or two the fetch takes reads as
+   * *there is nobody to hand this to* — the opposite of the truth, on the one screen where the admin is
+   * trying to find somebody.
+   */
   const options = useMemo(() => {
     const rows = (colleagues.data?.items ?? [])
       .filter((u) => u.email !== booking.employeeEmail)
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
+    const placeholder = colleagues.isLoading
+      ? 'Loading colleagues…'
+      : colleagues.isError
+        ? 'Could not load colleagues'
+        : rows.length
+          ? 'Pick a colleague…'
+          : 'No other active colleagues';
     return [
-      { value: '', label: rows.length ? 'Pick a colleague…' : 'No other active colleagues' },
+      { value: '', label: placeholder },
       ...rows.map((u) => ({ value: u.id, label: `${u.fullName} — ${u.email}` })),
     ];
-  }, [colleagues.data, booking.employeeEmail]);
+  }, [colleagues.data, colleagues.isLoading, colleagues.isError, booking.employeeEmail]);
 
   const taker = colleagues.data?.items.find((u) => u.id === toUserId);
 

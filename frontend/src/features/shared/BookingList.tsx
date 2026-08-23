@@ -90,9 +90,10 @@ function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; sh
           <p className="mt-0.5 text-xs text-text-muted">
             {b.reassignedFromEmail} · {dateTime(b.reassignedAt) ?? 'time not recorded'}
           </p>
-          <p className="mt-1 text-xs text-text-muted">
-            {b.reassignmentReason || 'No reason recorded.'} The score and submitted time above are from
-            the original request that won this slot.
+          {/* The reason is someone's own sentence — kept on its own line so it cannot run into ours. */}
+          {b.reassignmentReason && <p className="mt-1.5 text-xs italic text-text-muted">“{b.reassignmentReason}”</p>}
+          <p className="mt-1.5 text-xs text-text-muted">
+            The score and submitted time above are from the original request that won this slot.
           </p>
         </div>
       )}
