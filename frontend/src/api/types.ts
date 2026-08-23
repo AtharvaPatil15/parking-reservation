@@ -625,7 +625,18 @@ export interface paths {
         get: operations["getCompany"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a company
+         * @description Soft delete — sets `deletedAt`, so the company disappears from every list, the public
+         *     registration dropdown and the gate capacity panel while all historical rows are preserved.
+         *
+         *     Refused with `409` while the tenant still has non-deleted users or bookings in a live status
+         *     (DRAFT / SUBMITTED / WAITLISTED / ALLOCATED). Remove the members and settle the bookings first.
+         *
+         *     The company's `code` is released on deletion (renamed to `<code>__deleted_<epoch>`) so the same
+         *     code can be used again by a new tenant. The original is recorded in the audit log.
+         */
+        delete: operations["deleteCompany"];
         options?: never;
         head?: never;
         /** Update a company */
@@ -3652,6 +3663,35 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    deleteCompany: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted company */
+            200: {
+                headers: {
+                    "X-Correlation-Id": components["headers"]["CorrelationId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessEnvelope"] & {
+                        data?: components["schemas"]["Company"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     updateCompany: {
         parameters: {
             query?: never;
@@ -4801,7 +4841,6 @@ export interface operations {
             400: components["responses"]["ValidationError"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description Already in the registry (check it in as normal), or already waiting for approval. */
             409: components["responses"]["Conflict"];
         };
     };

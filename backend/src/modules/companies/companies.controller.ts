@@ -53,6 +53,11 @@ export const setCompanyStatus = asyncHandler(async (req, res) => {
   sendSuccess(res, toCompany(c));
 });
 
+export const deleteCompany = asyncHandler(async (req, res) => {
+  const c = await service.deleteCompany(req.params.id);
+  sendSuccess(res, toCompany(c));
+});
+
 export const listCompanyUsers = asyncHandler(async (req, res) => {
   const p = parsePagination(req.query as Record<string, unknown>);
   const { rows, total } = await service.listCompanyUsers(req.params.id, {

@@ -1148,6 +1148,42 @@ const hero = [
     if (body.status) company.status = body.status;
     return ok<Company>(company);
   }),
+  /**
+   * Soft delete. Mirrors the server's guard rails rather than always succeeding, because the 409 is the
+   * case the UI actually has to handle — the seeded companies give both outcomes: Mock Co / Acme Corp
+   * have users and bookings and are refused; Globex has neither and deletes cleanly.
+   */
+  http.delete(`${baseURL}/companies/:id`, ({ params }) => {
+    const id = String(params.id);
+    const company = companyState.find((c) => c.id === id);
+    if (!company) return fail(404, 'NOT_FOUND', 'Company not found');
+
+    const userCount = (companyUserState[id] ?? []).length;
+    if (userCount > 0) {
+      return fail(
+        409, 'CONFLICT',
+        `${company.name} still has ${userCount} user${userCount === 1 ? '' : 's'} — remove them before deleting the company`,
+      );
+    }
+    const live = seedAdminBookings().filter(
+      (b) => b.companyId === id && ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'ALLOCATED'].includes(b.status),
+    ).length;
+    if (live > 0) {
+      return fail(
+        409, 'CONFLICT',
+        `${company.name} has ${live} booking${live === 1 ? '' : 's'} still in play — wait for them to finish or cancel them first`,
+      );
+    }
+
+    const deleted: Company = {
+      ...company,
+      status: 'INACTIVE',
+      code: `${company.code}__deleted_1`,
+      updatedAt: new Date().toISOString(),
+    };
+    companyState = companyState.filter((c) => c.id !== id);
+    return ok<Company>(deleted);
+  }),
 
   // --- Company users + approvals ---
   // Super Admin's pending company-admin request queue (F11): PENDING + COMPANY_ADMIN, any company.

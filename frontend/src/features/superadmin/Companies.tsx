@@ -5,6 +5,7 @@ import {
 } from '../../components';
 import {
   useCompanies, useCreateCompany, useCompanyQuota, useSetCompanyQuota, useCompanyQuotaSummary,
+  useSetCompanyStatus, useDeleteCompany,
 } from '../../api/hooks';
 import { apiErrorText } from '../../api/http';
 import { nextBookableWeekday } from '../../lib/dates';
@@ -12,8 +13,16 @@ import type { components } from '../../api/types';
 
 type Company = components['schemas']['Company'];
 
+interface RowActions {
+  onQuota: (c: Company) => void;
+  onToggleStatus: (c: Company) => void;
+  onDelete: (c: Company) => void;
+  /** Id of the company whose status is mid-flight, so only that row's button spins. */
+  pendingStatusId: string | null;
+}
+
 const columns = (
-  onQuota: (c: Company) => void,
+  { onQuota, onToggleStatus, onDelete, pendingStatusId }: RowActions,
   assignedFor: (companyId: string) => number | null,
 ): Column<Company>[] => [
   { key: 'name', header: 'Company', render: (c) => <span className="font-medium text-text">{c.name}</span> },
@@ -32,12 +41,71 @@ const columns = (
   {
     key: 'actions', header: '', align: 'right',
     render: (c) => (
-      <Button size="sm" variant="secondary" onClick={() => onQuota(c)}>
-        Manage quota
-      </Button>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="secondary" onClick={() => onQuota(c)}>
+          Manage quota
+        </Button>
+        {/* Reversible, so it acts immediately — no confirmation. The label states the resulting state,
+            not the current one, which is what the badge in the Status column is already for. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={pendingStatusId === c.id}
+          onClick={() => onToggleStatus(c)}
+        >
+          {c.status === 'ACTIVE' ? 'Disable' : 'Enable'}
+        </Button>
+        <Button size="sm" variant="danger" onClick={() => onDelete(c)}>
+          Delete
+        </Button>
+      </div>
     ),
   },
 ];
+
+/**
+ * Delete confirmation. The server refuses (409) while the tenant still has users or live bookings, so
+ * this dialog does not try to pre-check anything — it states the consequence and surfaces whatever the
+ * server says, which is the only account that is actually authoritative.
+ */
+function DeleteModal({ company, onClose }: { company: Company; onClose: () => void }) {
+  const del = useDeleteCompany();
+  const { toast } = useToast();
+  const error = apiErrorText(del.error);
+
+  function onConfirm() {
+    del.mutate(company.id, {
+      onSuccess: () => { toast(`${company.name} deleted.`, { tone: 'success' }); onClose(); },
+    });
+  }
+
+  return (
+    <Modal
+      open
+      size="sm"
+      onClose={onClose}
+      title={`Delete ${company.name}?`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="danger" loading={del.isPending} onClick={onConfirm}>Delete company</Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <p className="text-text-muted">
+          {company.name} will be removed from the company list, the registration dropdown and the gate
+          capacity panel. Past bookings and gate records are kept for reporting.
+        </p>
+        <p className="text-text-muted">
+          Only possible once the company has no users and no bookings still in play. Its code{' '}
+          <span className="font-medium text-text">{company.code}</span> is released for reuse.
+        </p>
+        {error && <p role="alert" className="text-danger">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
 
 function QuotaModal({ company, onClose }: { company: Company; onClose: () => void }) {
   const quota = useCompanyQuota(company.id);
@@ -109,9 +177,13 @@ export function Companies() {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [active, setActive] = useState<Company | null>(null);
+  const [deleting, setDeleting] = useState<Company | null>(null);
   const [assignedOn, setAssignedOn] = useState(nextBookableWeekday());
   const summary = useCompanyQuotaSummary(assignedOn);
+  const setStatus = useSetCompanyStatus();
   const createError = apiErrorText(create.error);
+  // The status toggle has no dialog to show its error in, so it reports through the toast instead.
+  const statusError = apiErrorText(setStatus.error);
 
   // companyId → assigned slots for the picked date (null while loading, so the column shows '—').
   const assignedFor = (companyId: string): number | null => {
@@ -124,6 +196,17 @@ export function Companies() {
     create.mutate(
       { name: name.trim(), code: code.trim().toUpperCase() },
       { onSuccess: () => { toast('Company created.', { tone: 'success' }); setName(''); setCode(''); } },
+    );
+  }
+
+  function onToggleStatus(c: Company) {
+    const status = c.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    setStatus.mutate(
+      { id: c.id, status },
+      {
+        onSuccess: () =>
+          toast(`${c.name} ${status === 'ACTIVE' ? 'enabled' : 'disabled'}.`, { tone: 'success' }),
+      },
     );
   }
 
@@ -170,13 +253,27 @@ export function Companies() {
           <EmptyState title="No companies" />
         ) : (
           <>
-            <Table columns={columns(setActive, assignedFor)} rows={companies.data.items} rowKey={(c) => c.id} />
+            <Table
+              columns={columns(
+                {
+                  onQuota: setActive,
+                  onToggleStatus,
+                  onDelete: setDeleting,
+                  pendingStatusId: setStatus.isPending ? setStatus.variables.id : null,
+                },
+                assignedFor,
+              )}
+              rows={companies.data.items}
+              rowKey={(c) => c.id}
+            />
             <Pager page={companies.data.meta.page} pageSize={companies.data.meta.pageSize} total={companies.data.meta.total} onPage={setPage} />
           </>
         )}
+        {statusError && <p role="alert" className="px-4 pb-4 text-sm text-danger sm:px-6">{statusError}</p>}
       </Card>
 
       {active && <QuotaModal company={active} onClose={() => setActive(null)} />}
+      {deleting && <DeleteModal company={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }

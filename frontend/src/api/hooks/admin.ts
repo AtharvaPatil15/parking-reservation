@@ -63,6 +63,49 @@ export function useCreateCompany() {
   });
 }
 
+// Both mutations below drop the company out of, or change its badge in, the paged list — and only that
+// list. Same predicate as useCreateCompany: `['companies', <page>, <pageSize>]`, never the
+// company-scoped quota/users/blocks queries that share the 'companies' key prefix.
+const invalidateCompanyLists = (qc: QueryClient) =>
+  qc.invalidateQueries({
+    predicate: (q) => q.queryKey[0] === 'companies' && typeof q.queryKey[1] === 'number',
+  });
+
+/** PATCH /companies/{id}/status — activate or deactivate a tenant. Reversible either way. */
+export function useSetCompanyStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'ACTIVE' | 'INACTIVE' }) =>
+      unwrap<Company>(api.PATCH('/companies/{id}/status', { params: { path: { id } }, body: { status } })),
+    onSuccess: () => {
+      invalidateCompanyLists(qc);
+      // An inactive company drops out of the public registration dropdown and the gate's capacity
+      // panel, both of which filter on status — neither is keyed under 'companies'.
+      qc.invalidateQueries({ queryKey: queryKeys.activeCompanies });
+      // Prefix, not gateCapacity(date) — the panel is cached per date and every date is now stale.
+      qc.invalidateQueries({ queryKey: ['gate', 'capacity'] });
+    },
+  });
+}
+
+/** DELETE /companies/{id} — soft delete. 409s while the tenant still has users or live bookings. */
+export function useDeleteCompany() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap<Company>(api.DELETE('/companies/{id}', { params: { path: { id } } })),
+    onSuccess: () => {
+      invalidateCompanyLists(qc);
+      qc.invalidateQueries({ queryKey: queryKeys.activeCompanies });
+      // Prefix, not gateCapacity(date) — the panel is cached per date and every date is now stale.
+      qc.invalidateQueries({ queryKey: ['gate', 'capacity'] });
+      // The quota summary is keyed by date and lists every company, so the deleted row lingers in the
+      // "Assigned" column until it is refetched.
+      qc.invalidateQueries({ queryKey: ['companies', 'quota-summary'] });
+    },
+  });
+}
+
 /** GET /users/pending-admins — the Super Admin's pending company-admin request queue (F11). */
 export function usePendingAdmins(page = 1, pageSize = 10) {
   return useQuery<{ items: UserProfile[]; meta: PageMeta }>({

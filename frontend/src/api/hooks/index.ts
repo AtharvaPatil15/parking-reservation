@@ -54,6 +54,8 @@ export {
   useRemovePrivilegedUser,
   useCompanies,
   useCreateCompany,
+  useSetCompanyStatus,
+  useDeleteCompany,
   useCompanyQuotaSummary,
   useSlots,
   useCreateSlot,

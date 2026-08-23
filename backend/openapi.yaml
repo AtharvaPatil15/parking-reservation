@@ -1259,6 +1259,37 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Companies]
+      operationId: deleteCompany
+      summary: Delete a company
+      description: |
+        Soft delete — sets `deletedAt`, so the company disappears from every list, the public
+        registration dropdown and the gate capacity panel while all historical rows are preserved.
+
+        Refused with `409` while the tenant still has non-deleted users or bookings in a live status
+        (DRAFT / SUBMITTED / WAITLISTED / ALLOCATED). Remove the members and settle the bookings first.
+
+        The company's `code` is released on deletion (renamed to `<code>__deleted_<epoch>`) so the same
+        code can be used again by a new tenant. The original is recorded in the audit log.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Deleted company
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /companies/{id}/status:
     parameters:
