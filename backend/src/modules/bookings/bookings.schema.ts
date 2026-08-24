@@ -91,6 +91,20 @@ export const releaseBookingSchema = z.preprocess((body) => body ?? {}, releaseBo
 export type ReleaseBookingInput = z.infer<typeof releaseBookingBodySchema>;
 
 /**
+ * Hand an allocated booking to a colleague (openapi `ReassignBookingRequest`).
+ *
+ * `vehicleNumber` is optional but matters more than it looks: the gate matches a car to today's booking
+ * by plate, so leaving it as the original booker's car means the guard cannot place the person who
+ * actually turns up. Omitted, the service falls back to the taker's registered car.
+ */
+export const reassignBookingSchema = z.object({
+  toUserId: z.string().min(1),
+  vehicleNumber: z.string().min(1).nullable().optional(),
+  reason: z.string().min(1).nullable().optional(),
+});
+export type ReassignBookingInput = z.infer<typeof reassignBookingSchema>;
+
+/**
  * Admin booking-list query (GET /bookings). COMPANY_ADMIN is scoped to their own company in the
  * service; `companyId` is honoured only for SUPER_ADMIN. `date` filters by bookingDate.
  */

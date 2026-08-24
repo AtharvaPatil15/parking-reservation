@@ -650,6 +650,9 @@ function seedGateEvents(): GateEvent[] {
 // --- Mutable demo state (reset via resetMockData) ---
 let configState = seedConfig();
 let bookingState = seedBookings();
+// Stateful since the handover mutates the roster in place (POST /bookings/:id/reassign) — a per-request
+// re-seed would show the slot bouncing back to the original booker on the next refetch.
+let adminBookingState = seedAdminBookings();
 let companyState = seedCompanies();
 let companyUserState = seedCompanyUsers();
 let slotState = seedSlots();
@@ -678,6 +681,7 @@ function currentMockProfile(): UserProfile {
 export function resetMockData(): void {
   configState = seedConfig();
   bookingState = seedBookings();
+  adminBookingState = seedAdminBookings();
   companyState = seedCompanies();
   companyUserState = seedCompanyUsers();
   slotState = seedSlots();
@@ -925,6 +929,58 @@ const hero = [
     bookingState[id] = { ...detail, status: 'RELEASED', allocatedSlotNumber: null };
     return ok<BookingDetail>(bookingState[id]);
   }),
+  /**
+   * POST /bookings/:id/reassign — the last-minute handover (COMPANY_ADMIN).
+   *
+   * Mutates the roster row in place exactly as the server does: same id, same bay, new owner, previous
+   * owner snapshotted onto the row and the allocation reclassified as a manual override. Stateful so a
+   * demo refresh keeps showing the taker rather than reverting to whoever originally booked.
+   */
+  http.post(`${baseURL}/bookings/:id/reassign`, async ({ params, request }) => {
+    const id = String(params.id);
+    const row = adminBookingState.find((r) => r.id === id);
+    if (!row) return fail(404, 'NOT_FOUND', 'Booking not found');
+    if (row.status !== 'ALLOCATED') {
+      return fail(409, 'CONFLICT', 'Only an allocated booking can be handed to someone else');
+    }
+    const body = (await request.json().catch(() => ({}))) as {
+      toUserId?: string; vehicleNumber?: string | null; reason?: string | null;
+    };
+    const taker = Object.values(companyUserState)
+      .flat()
+      .find((u) => u.id === body.toUserId && u.status === 'ACTIVE');
+    if (!taker) return fail(400, 'VALIDATION_ERROR', 'Pick an active employee from this company');
+
+    Object.assign(row, {
+      employeeName: taker.fullName,
+      employeeEmail: taker.email,
+      allocationSource: 'MANUAL_OVERRIDE' as const,
+      // The taker starts as a solo driver — the declared carpool was the previous driver's.
+      carpoolPeople: 1,
+      carpoolMembers: [],
+      reassignedFromName: row.employeeName,
+      reassignedFromEmail: row.employeeEmail,
+      reassignedAt: new Date().toISOString(),
+      reassignmentReason: body.reason ?? null,
+    });
+    return ok<BookingDetail>({
+      id: row.id,
+      bookingDate: row.bookingDate,
+      bookingType: row.bookingType,
+      status: row.status,
+      travelDistanceKm: row.travelDistanceKm,
+      vehicleNumber: body.vehicleNumber ?? null,
+      carpoolMemberCount: 0,
+      allocationScore: row.allocationScore,
+      allocatedSlotNumber: row.allocatedSlotNumber,
+      createdAt: row.createdAt,
+      carpoolMembers: [],
+      reassignedFromName: row.reassignedFromName,
+      reassignedFromEmail: row.reassignedFromEmail,
+      reassignedAt: row.reassignedAt,
+      reassignmentReason: row.reassignmentReason,
+    });
+  }),
   http.patch(`${baseURL}/bookings/:id`, async ({ params, request }) => {
     const id = String(params.id);
     const detail = bookingState[id];
@@ -1041,7 +1097,7 @@ const hero = [
     const companyId = url.searchParams.get('companyId');
     const status = url.searchParams.get('status');
     const { page, pageSize } = pageParams(request);
-    let rows = seedAdminBookings();
+    let rows = adminBookingState;
     if (date) rows = rows.filter((r) => r.bookingDate === date);
     if (companyId) rows = rows.filter((r) => r.companyId === companyId);
     if (status) rows = rows.filter((r) => r.status === status);
@@ -1147,6 +1203,42 @@ const hero = [
     if (!company) return fail(404, 'NOT_FOUND', 'Company not found');
     if (body.status) company.status = body.status;
     return ok<Company>(company);
+  }),
+  /**
+   * Soft delete. Mirrors the server's guard rails rather than always succeeding, because the 409 is the
+   * case the UI actually has to handle — the seeded companies give both outcomes: Mock Co / Acme Corp
+   * have users and bookings and are refused; Globex has neither and deletes cleanly.
+   */
+  http.delete(`${baseURL}/companies/:id`, ({ params }) => {
+    const id = String(params.id);
+    const company = companyState.find((c) => c.id === id);
+    if (!company) return fail(404, 'NOT_FOUND', 'Company not found');
+
+    const userCount = (companyUserState[id] ?? []).length;
+    if (userCount > 0) {
+      return fail(
+        409, 'CONFLICT',
+        `${company.name} still has ${userCount} user${userCount === 1 ? '' : 's'} — remove them before deleting the company`,
+      );
+    }
+    const live = seedAdminBookings().filter(
+      (b) => b.companyId === id && ['DRAFT', 'SUBMITTED', 'WAITLISTED', 'ALLOCATED'].includes(b.status),
+    ).length;
+    if (live > 0) {
+      return fail(
+        409, 'CONFLICT',
+        `${company.name} has ${live} booking${live === 1 ? '' : 's'} still in play — wait for them to finish or cancel them first`,
+      );
+    }
+
+    const deleted: Company = {
+      ...company,
+      status: 'INACTIVE',
+      code: `${company.code}__deleted_1`,
+      updatedAt: new Date().toISOString(),
+    };
+    companyState = companyState.filter((c) => c.id !== id);
+    return ok<Company>(deleted);
   }),
 
   // --- Company users + approvals ---

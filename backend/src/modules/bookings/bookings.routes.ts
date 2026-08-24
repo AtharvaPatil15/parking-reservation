@@ -7,6 +7,7 @@ import {
   createBookingsBatchSchema,
   updateBookingSchema,
   releaseBookingSchema,
+  reassignBookingSchema,
   listBookingsQuery,
   availabilityQuery,
 } from './bookings.schema';
@@ -49,6 +50,16 @@ bookingsRouter.post(
   requireRole('USER', 'COMPANY_ADMIN', 'SUPER_ADMIN'),
   validate(releaseBookingSchema),
   c.releaseBooking,
+);
+// Hand an allocated slot to a colleague — the last-minute Slack swap (2026-08-23). COMPANY_ADMIN only,
+// by decision: it is the tenant's own people-shuffle, and the acting admin is the one who can verify
+// the swap actually happened. The service scopes it to their own company.
+bookingsRouter.post(
+  '/:id/reassign',
+  authenticate,
+  requireRole('COMPANY_ADMIN'),
+  validate(reassignBookingSchema),
+  c.reassignBooking,
 );
 bookingsRouter.get('/:id', authenticate, requireRole('USER', 'COMPANY_ADMIN', 'SUPER_ADMIN'), c.getBooking);
 

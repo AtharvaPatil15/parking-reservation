@@ -4,6 +4,12 @@ import {
   type BadgeTone, type Column, type SelectOption,
 } from '../../components';
 import { useAdminBookings, useActiveCompanies } from '../../api/hooks';
+// Optional, not `useAuth`: this roster is rendered by both dashboards and in tests that mount it
+// without the app's provider tree, and a missing provider must degrade to "no admin actions" rather
+// than throw.
+import { useOptionalAuth } from '../../lib/auth';
+import { todayIstIso } from '../../lib/dates';
+import { ReassignBookingDrawer } from './ReassignBookingDrawer';
 import type { components } from '../../api/types';
 
 type AdminBooking = components['schemas']['AdminBooking'];
@@ -73,6 +79,25 @@ function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; sh
         <DetailLine label="Created" value={dateTime(b.createdAt)} />
       </dl>
 
+      {/*
+        A handed-over booking reads oddly without this: the row is the taker's, but the score and the
+        submit time belong to the request that originally won the bay. Saying so is what makes the rest
+        of the panel interpretable.
+      */}
+      {b.reassignedFromName && (
+        <div className="mt-4 rounded-control border border-border bg-surface-2 px-3 py-2 text-sm">
+          <p className="font-medium">Taken over from {b.reassignedFromName}</p>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {b.reassignedFromEmail} · {dateTime(b.reassignedAt) ?? 'time not recorded'}
+          </p>
+          {/* The reason is someone's own sentence — kept on its own line so it cannot run into ours. */}
+          {b.reassignmentReason && <p className="mt-1.5 text-xs italic text-text-muted">“{b.reassignmentReason}”</p>}
+          <p className="mt-1.5 text-xs text-text-muted">
+            The score and submitted time above are from the original request that won this slot.
+          </p>
+        </div>
+      )}
+
       <div className="mt-5 border-t border-border pt-4">
         <p className="text-xs font-medium uppercase text-text-muted">
           Passenger details {members.length > 0 && `(${members.length})`}
@@ -130,8 +155,12 @@ function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; sh
  */
 export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; date?: string }) {
   const showCompany = scope === 'all';
+  const user = useOptionalAuth()?.user;
   const [companyId, setCompanyId] = useState('');
   const [page, setPage] = useState(1);
+  // The booking currently being handed to a colleague. Held separately from `openBooking` so the
+  // details popup stays behind the drawer and reappears if the handover is cancelled.
+  const [reassigning, setReassigning] = useState<AdminBooking | null>(null);
   // The row itself, not just its id: a background refetch can transiently empty `items`, and
   // re-deriving from the current page would make the popup vanish mid-read. The snapshot is
   // refreshed below while the row is still on the page, so edits are not shown stale.
@@ -212,6 +241,20 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
   // Stable identity so Modal's keydown/scroll-lock effect doesn't tear down on every re-render
   // (the dashboard re-renders once a second while a countdown is on screen).
   const closeDetails = useCallback(() => setOpenBooking(null), []);
+  const closeReassign = useCallback(() => setReassigning(null), []);
+
+  /**
+   * Whether this row can be handed to a colleague. COMPANY_ADMIN only, by decision (2026-08-23) — the
+   * handover is the tenant's own people-shuffle, and the acting admin is the one who can verify the swap
+   * actually happened. A past date is already spent, and only an allocated bay is anyone's to give away.
+   *
+   * The server enforces all of this; this just avoids offering a button that can only fail.
+   */
+  const canReassign =
+    shownBooking !== null &&
+    user?.role === 'COMPANY_ADMIN' &&
+    shownBooking.status === 'ALLOCATED' &&
+    shownBooking.bookingDate >= todayIstIso();
 
   return (
     <Card title="Bookings" padded={false}>
@@ -247,13 +290,27 @@ export function BookingList({ scope, date = '' }: { scope: 'company' | 'all'; da
         title={shownBooking ? shownBooking.employeeName : ''}
         size="lg"
         footer={
-          <Button variant="secondary" onClick={closeDetails}>
-            Close
-          </Button>
+          <>
+            {canReassign && (
+              <Button onClick={() => setReassigning(shownBooking)}>Hand to a colleague</Button>
+            )}
+            <Button variant="secondary" onClick={closeDetails}>
+              Close
+            </Button>
+          </>
         }
       >
         {shownBooking && <BookingDetails booking={shownBooking} showCompany={showCompany} />}
       </Modal>
+
+      {/* Mounted only while open, so each handover starts on a clean form. */}
+      {reassigning && (
+        <ReassignBookingDrawer
+          booking={reassigning}
+          onClose={closeReassign}
+          companyId={user?.companyId ?? undefined}
+        />
+      )}
     </Card>
   );
 }

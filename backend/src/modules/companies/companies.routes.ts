@@ -29,6 +29,8 @@ router.get('/', authenticate, requireRole('SUPER_ADMIN'), validate(listCompanies
 router.get('/:id', authenticate, requireRole('SUPER_ADMIN'), c.getCompany);
 router.patch('/:id', authenticate, requireRole('SUPER_ADMIN'), validate(updateCompanySchema), c.updateCompany);
 router.patch('/:id/status', authenticate, requireRole('SUPER_ADMIN'), validate(updateStatusSchema), c.setCompanyStatus);
+// Soft delete. Guarded in the service: refused while the tenant still has users or live bookings.
+router.delete('/:id', authenticate, requireRole('SUPER_ADMIN'), c.deleteCompany);
 
 // Company users — SUPER_ADMIN (any) or COMPANY_ADMIN (own company, tenant-scoped on :id).
 router.get(

@@ -841,6 +841,50 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /bookings/{id}/reassign:
+    parameters:
+      - $ref: '#/components/parameters/BookingIdParam'
+    post:
+      tags: [Bookings]
+      operationId: reassignBooking
+      summary: Hand an allocated slot to a colleague
+      description: >
+        Role: COMPANY_ADMIN (own company only). The last-minute swap: the original booker says on Slack they
+        are not coming and a colleague takes the slot. The booking changes owner **in place** — same row,
+        same slot, same allocation — with the PII snapshot re-taken from the taker's profile, the declared
+        carpool cleared, the allocation flagged as a manual override, and the previous owner recorded on the
+        booking (`reassignedFrom*`). The taker's own request for that date is consumed: a same-type row is
+        removed (its prior state is kept in the audit log) and any other live row is expired, so they cannot
+        end up holding two slots. Distinct from `/release`, which frees the slot to the waitlist cascade
+        rather than to a named person, and from `PATCH /bookings/{id}`, which is closed once a date is decided.
+      x-maturity: DEMO
+      x-required-roles: [COMPANY_ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReassignBookingRequest' }
+      responses:
+        '200':
+          description: Slot handed over; the booking now belongs to the taker.
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BookingDetail' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+          # Not allocated, the date has passed, the original booker is already checked in on this
+          # booking, or the taker already holds a slot for the date.
+
   # ---------------------------------------------------------------------------
   # Allocation  (P3-07)  — Role: SUPER_ADMIN.
   # ---------------------------------------------------------------------------
@@ -1259,6 +1303,37 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Companies]
+      operationId: deleteCompany
+      summary: Delete a company
+      description: |
+        Soft delete — sets `deletedAt`, so the company disappears from every list, the public
+        registration dropdown and the gate capacity panel while all historical rows are preserved.
+
+        Refused with `409` while the tenant still has non-deleted users or bookings in a live status
+        (DRAFT / SUBMITTED / WAITLISTED / ALLOCATED). Remove the members and settle the bookings first.
+
+        The company's `code` is released on deletion (renamed to `<code>__deleted_<epoch>`) so the same
+        code can be used again by a new tenant. The original is recorded in the audit log.
+      x-maturity: MVP
+      x-required-roles: [SUPER_ADMIN]
+      responses:
+        '200':
+          description: Deleted company
+          headers: { X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Company' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /companies/{id}/status:
     parameters:
@@ -2913,6 +2988,13 @@ components:
         allocatedSlotNumber: { type: string, nullable: true, description: Slot number if ALLOCATED, else null. }
         submittedAt: { type: string, nullable: true, format: date-time }
         createdAt: { type: string, format: date-time }
+        # Set only when a company admin handed this booking to a colleague (POST /bookings/{id}/reassign).
+        # The row belongs to the taker afterwards, so these are the only record of who won the slot —
+        # and they explain why `allocationScore` describes a different person's trip.
+        reassignedFromName: { type: string, nullable: true, description: Employee this booking was taken over from. }
+        reassignedFromEmail: { type: string, format: email, nullable: true }
+        reassignedAt: { type: string, format: date-time, nullable: true }
+        reassignmentReason: { type: string, nullable: true }
         history:
           type: array
           description: Same employee/date booking lifecycle rows, grouped before pagination.
@@ -3743,6 +3825,22 @@ components:
       properties:
         reason: { type: string, nullable: true }
 
+    ReassignBookingRequest:
+      type: object
+      required: [toUserId]
+      properties:
+        toUserId:
+          type: string
+          description: Employee taking the slot. Must be an ACTIVE user of the same company as the booking.
+        vehicleNumber:
+          type: string
+          nullable: true
+          description: >
+            The car that will actually arrive. Omit to fall back to the taker's registered car; the gate
+            matches an arriving plate to today's booking, so a stale plate points the guard at the wrong
+            person. A plate given here is also added to the vehicle registry.
+        reason: { type: string, nullable: true, description: Why the slot changed hands (e.g. the Slack thread). }
+
     BookingCreatedData:
       type: object
       required: [id, status, bookingType, bookingDate, carpoolPeople]
@@ -3782,6 +3880,11 @@ components:
             scoreBreakdown:
               allOf: [ { $ref: '#/components/schemas/ScoreBreakdown' } ]
               description: Per-factor scores; present only after an allocation run has scored this booking (absent/null before).
+            # See AdminBooking for why these are snapshots rather than a join.
+            reassignedFromName: { type: string, nullable: true, description: Employee this booking was taken over from. }
+            reassignedFromEmail: { type: string, format: email, nullable: true }
+            reassignedAt: { type: string, format: date-time, nullable: true }
+            reassignmentReason: { type: string, nullable: true }
 
     # --- Allocation (P3-07) ---
     PrimaryRunRequest:

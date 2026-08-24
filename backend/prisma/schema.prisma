@@ -365,6 +365,17 @@ model BookingRequest {
   cancellationTime   DateTime?
   cancellationReason String?
 
+  // Last-minute handover (2026-08-23): a company admin moved this booking to a colleague after the
+  // original booker said they were not coming. The row *becomes* the taker's — so the previous owner is
+  // snapshotted here rather than joined, because after the swap nothing else in the system remembers
+  // that they were the one who won the slot.
+  reassignedFromUserId String?
+  reassignedFromName   String?
+  reassignedFromEmail  String?
+  reassignedById       String? // acting company admin (soft ref)
+  reassignedAt         DateTime?
+  reassignmentReason   String?
+
   user           User                      @relation(fields: [userId], references: [id])
   company        Company                   @relation(fields: [companyId], references: [id])
   carpoolMembers BookingCarpoolMember[]

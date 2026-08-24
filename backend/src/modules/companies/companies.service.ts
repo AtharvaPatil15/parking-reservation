@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors'
 import { isUniqueViolation } from '../../lib/prismaErrors';
 import { buildAuditData } from '../../lib/audit';
 import { getEffectiveQuota } from '../slots/slots.service';
+import { LIVE_BOOKING_STATUSES } from '../bookings/bookings.availability';
 import type { PageArgs } from '../../lib/pagination';
 
 const userInclude = { roles: { include: { role: true } }, company: true } as const;
@@ -79,6 +80,61 @@ export async function setCompanyStatus(id: string, status: CompanyStatus) {
         entityId: id,
         oldValue: { status: before.status },
         newValue: { status },
+      }),
+    });
+    return after;
+  });
+}
+
+/**
+ * Soft-delete a tenant (SA). Sets `deletedAt`, which every other query in the codebase already filters
+ * on — so the company disappears from the lists, the registration dropdown and the gate capacity panel
+ * without touching a single historical row.
+ *
+ * **Guarded, not cascading.** Deleting a company that still has members would leave those users able to
+ * log in against a tenant that no longer exists, and would orphan their bookings mid-flight. So both are
+ * refused with a 409 that names the count: the Super Admin deactivates and clears the company first,
+ * which is a deliberate sequence rather than one irreversible click.
+ *
+ * The `code` is released on the way out. It is UNIQUE across all rows including soft-deleted ones, so a
+ * deleted company would otherwise squat on its code forever and re-creating the same tenant would fail
+ * with a confusing "code already exists". The original is preserved in the audit log's `oldValue`.
+ */
+export async function deleteCompany(id: string) {
+  const company = await getCompany(id);
+
+  const [userCount, liveBookings] = await Promise.all([
+    prisma.user.count({ where: { companyId: id, deletedAt: null } }),
+    prisma.bookingRequest.count({ where: { companyId: id, status: { in: LIVE_BOOKING_STATUSES } } }),
+  ]);
+  if (userCount > 0) {
+    throw new ConflictError(
+      `${company.name} still has ${userCount} user${userCount === 1 ? '' : 's'} — remove them before deleting the company`,
+    );
+  }
+  if (liveBookings > 0) {
+    throw new ConflictError(
+      `${company.name} has ${liveBookings} booking${liveBookings === 1 ? '' : 's'} still in play — wait for them to finish or cancel them first`,
+    );
+  }
+
+  const deletedAt = new Date();
+  // Suffix rather than blank: `code` is NOT NULL, and two companies deleted on the same day must not
+  // collide with each other either. The timestamp makes the released name unique per deletion.
+  const releasedCode = `${company.code}__deleted_${deletedAt.getTime()}`;
+
+  return prisma.$transaction(async (tx) => {
+    const after = await tx.company.update({
+      where: { id },
+      data: { deletedAt, status: 'INACTIVE', code: releasedCode },
+    });
+    await tx.auditLog.create({
+      data: buildAuditData({
+        actionType: 'COMPANY_DELETED',
+        entityType: 'Company',
+        entityId: id,
+        oldValue: { name: company.name, code: company.code, status: company.status },
+        newValue: { deletedAt: deletedAt.toISOString(), code: releasedCode, status: 'INACTIVE' },
       }),
     });
     return after;

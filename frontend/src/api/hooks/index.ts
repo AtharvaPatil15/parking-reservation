@@ -5,6 +5,7 @@ export {
   useUpdateBooking,
   useBooking,
   useReleaseBooking,
+  useReassignBooking,
   useAdminBookings,
 } from './bookings';
 export type { AdminBookingsFilter } from './bookings';
@@ -54,6 +55,8 @@ export {
   useRemovePrivilegedUser,
   useCompanies,
   useCreateCompany,
+  useSetCompanyStatus,
+  useDeleteCompany,
   useCompanyQuotaSummary,
   useSlots,
   useCreateSlot,
