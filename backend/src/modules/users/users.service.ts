@@ -223,6 +223,16 @@ export async function setStatus(actor: Actor, userId: string, status: UserStatus
     throw new ValidationError('status must be ACTIVE or INACTIVE');
   }
   const user = await loadTargetUser(actor, userId);
+
+  // Same privileged-target rule as `setApproval` and `removeUser`, which this endpoint was missing:
+  // a COMPANY_ADMIN must not be able to deactivate a peer admin or a gate operator. Tenant scoping
+  // alone is not enough here, because SECURITY accounts are filed under the building company
+  // (see auth.service BUILDING_COMPANY_CODE) — so without this check that company's admin could
+  // switch off every guard in the building, and any admin could disable a rival admin.
+  if (actor.role !== 'SUPER_ADMIN' && (hasRole(user, 'COMPANY_ADMIN') || hasRole(user, 'SECURITY'))) {
+    throw new ForbiddenError('Only the super admin can change the status of company-admin or security users');
+  }
+
   if (user.status === 'PENDING' || user.status === 'REJECTED') {
     throw new ValidationError(`Cannot set status from ${user.status}; approve or reject first`);
   }
