@@ -28,7 +28,7 @@ import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
-const KEEP_USER_EMAIL = 'superadmin@redbricks.example';
+const KEEP_USER_USERNAME = 'superadmin';
 const KEEP_COMPANY_CODE = 'REDBRICKS';
 /** Same placeholder the main seed uses. Reset so you are guaranteed a way back in after the wipe. */
 const DEV_PASSWORD = 'ChangeMe#12345';
@@ -47,9 +47,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const keeper = await prisma.user.findFirst({ where: { email: KEEP_USER_EMAIL } });
+  const keeper = await prisma.user.findFirst({ where: { email: KEEP_USER_USERNAME } });
   if (!keeper) {
-    console.error(`Refusing to wipe: ${KEEP_USER_EMAIL} does not exist, so there would be no way back in.`);
+    console.error(`Refusing to wipe: ${KEEP_USER_USERNAME} does not exist, so there would be no way back in.`);
     console.error('Run `npm run seed` first.');
     process.exitCode = 1;
     return;
@@ -124,7 +124,7 @@ async function main(): Promise<void> {
     console.log(`  ${String(n).padStart(4)}  ${label}`);
   }
 
-  console.log(`\nLog in as  ${KEEP_USER_EMAIL}  /  ${DEV_PASSWORD}`);
+  console.log(`\nLog in as  ${KEEP_USER_USERNAME}  /  ${DEV_PASSWORD}`);
   console.log('\nThe building has NO parking areas or slots. Nothing can be booked or allocated until you');
   console.log('add them: Super Admin → Slots → create a parking area, then add slots to it.');
 }

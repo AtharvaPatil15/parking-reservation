@@ -17,8 +17,8 @@ const bookingStatus = z.enum([
 
 const carpoolMemberInput = z.object({
   name: z.string().min(1),
-  // Same-company employee email; only validated same-company employees are scored (F4).
-  employeeEmail: z.string().email().nullable().optional(),
+  // Same-company employee username; only validated same-company employees are scored (F4).
+  employeeEmail: z.string().regex(/^[a-zA-Z0-9._-]+$/, 'Enter a valid username.').nullable().optional(),
   contactNumber: z.string().min(1).nullable().optional(),
   pickupLocation: z.string().min(1).nullable().optional(),
 });

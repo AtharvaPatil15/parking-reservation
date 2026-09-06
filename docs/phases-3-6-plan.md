@@ -80,7 +80,7 @@ Legend: **R** = required role. `SA`=SUPER_ADMIN, `CA`=COMPANY_ADMIN, `U`=USER, `
 **`POST /auth/login`** — hero endpoint
 ```jsonc
 // request
-{ "email": "aditi@assent.example", "password": "ChangeMe#12345" }
+{ "email": "aditi", "password": "ChangeMe#12345" }
 // 200
 { "success": true, "data": {
     "accessToken": "eyJ…", "tokenType": "Bearer", "expiresIn": 900,
@@ -142,7 +142,7 @@ allocation + common pool. **[MVP]**
   "carpoolPeople": 3,                     // includes the driver (1–4)
   "specialRequirement": null,
   "carpoolMembers": [                     // only same-company employees are scored (F4)
-    { "name": "Rahul Mehta", "employeeEmail": "rahul@assent.example" },
+    { "name": "Rahul Mehta", "employeeEmail": "rahul" },
     { "name": "Neighbour",   "employeeEmail": null } ] }
 // 201
 { "success": true, "data": {

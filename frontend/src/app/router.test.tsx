@@ -12,7 +12,7 @@ import { ToastProvider } from '../components';
 describe('routing + guards (integration)', () => {
   it('logs in as Super Admin and lands on the admin area with a sign-out control', async () => {
     render(<App />);
-    await userEvent.type(await screen.findByLabelText(/email/i), 'admin@acme.test');
+    await userEvent.type(await screen.findByLabelText(/username/i), 'admin');
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByRole('heading', { name: /^super admin$/i })).toBeInTheDocument();
@@ -21,7 +21,7 @@ describe('routing + guards (integration)', () => {
 
   it('signing out returns to the login page', async () => {
     render(<App />);
-    await userEvent.type(await screen.findByLabelText(/email/i), 'user@acme.test');
+    await userEvent.type(await screen.findByLabelText(/username/i), 'user');
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByRole('button', { name: /sign out/i })).toBeInTheDocument();

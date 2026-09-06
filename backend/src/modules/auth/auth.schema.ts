@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
+const USERNAME_RE = /^[a-zA-Z0-9._-]+$/;
+
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1).regex(USERNAME_RE, 'Enter a valid username.'),
   password: z.string().min(1),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -27,7 +29,7 @@ export const registerSchema = z
   .object({
     fullName: z.string().min(1),
     companyId: z.string().min(1).optional(),
-    email: z.string().email(),
+    email: z.string().min(1).regex(USERNAME_RE, 'Enter a valid username.'),
     contactNumber: z.string().regex(/^\d{10}$/, 'Contact number must be 10 digits'),
     address: z.string().min(1).optional(),
     pinCode: z

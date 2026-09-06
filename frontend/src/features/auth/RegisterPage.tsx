@@ -67,7 +67,7 @@ export function RegisterPage() {
       onSuccess: () => setSubmittedAs(values.registrationType),
       onError: (err) => {
         if (err instanceof ApiError && err.status === 409) {
-          setError('email', { message: 'An account with this email already exists.' });
+          setError('email', { message: 'An account with this username already exists.' });
         } else if (err instanceof ApiError && err.details?.length) {
           for (const d of err.details) {
             setError(d.field as keyof RegisterFormValues, { message: d.message });
@@ -139,7 +139,7 @@ export function RegisterPage() {
                     {...register('companyId')}
                   />
                 )}
-                <Input label="Email" type="email" error={errors.email?.message} {...register('email')} />
+                <Input label="Username" type="text" error={errors.email?.message} {...register('email')} />
                 <Input label="Contact number" type="tel" inputMode="numeric" placeholder="10-digit mobile" error={errors.contactNumber?.message} {...register('contactNumber')} />
                 {!isSecurity && (
                   <>

@@ -72,7 +72,7 @@ export function AdminApprovals() {
 
   const columns: Column<UserProfile>[] = [
     nameColumn,
-    { key: 'email', header: 'Email', render: (u) => u.email },
+    { key: 'email', header: 'Username', render: (u) => u.email },
     { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',
@@ -118,7 +118,7 @@ export function AdminApprovals() {
   // Approval history: a processed request is APPROVED when its user is ACTIVE, else REJECTED.
   const historyColumns: Column<UserProfile>[] = [
     nameColumn,
-    { key: 'email', header: 'Email', render: (u) => u.email },
+    { key: 'email', header: 'Username', render: (u) => u.email },
     { key: 'company', header: 'Company', render: (u) => <Badge tone="neutral">{u.companyName}</Badge> },
     {
       key: 'role',

@@ -25,18 +25,18 @@
 BEGIN;
 
 -- --- 0. Pin the survivor -----------------------------------------------------
--- Change this email if your Super Admin differs.
+-- Change this username if your Super Admin differs.
 CREATE TEMP TABLE _keep ON COMMIT DROP AS
 SELECT u.id AS user_id, u."companyId" AS company_id
 FROM "User" u
-WHERE u.email = 'superadmin@redbricks.example';
+WHERE u.email = 'superadmin';
 
 -- Abort rather than empty the database when the SA doesn't exist (typo, wrong DB).
 DO $$
 BEGIN
   IF (SELECT count(*) FROM _keep) <> 1 THEN
     RAISE EXCEPTION
-      'Refusing to wipe: expected exactly 1 Super Admin, found %. Check the email in step 0.',
+      'Refusing to wipe: expected exactly 1 Super Admin, found %. Check the username in step 0.',
       (SELECT count(*) FROM _keep);
   END IF;
 END $$;

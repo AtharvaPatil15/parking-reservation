@@ -28,7 +28,7 @@ function renderModal(userId: string | null = 'u1') {
 const detail = (over: Record<string, unknown> = {}) => ({
   id: 'u1',
   fullName: 'Nadia Khan',
-  email: 'nadia@assent.example',
+  email: 'nadia',
   contactNumber: '9822001199',
   address: '14 Baner Road, Pune',
   pinCode: '411045',

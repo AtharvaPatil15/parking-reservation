@@ -5,9 +5,9 @@ import { prisma } from '../src/lib/prisma';
 import { API, bearer, futureBookableDate, login, resetTransactional } from './integration/helpers';
 
 const TEST_EMAILS = [
-  'remove-user@assent.example',
-  'remove-admin@assent.example',
-  'remove-security@redbricks.example',
+  'remove-user',
+  'remove-companyadmin',
+  'remove-security1',
 ];
 
 beforeEach(async () => {
@@ -47,8 +47,8 @@ async function createUser(email: string, roleName: 'USER' | 'COMPANY_ADMIN' | 'S
 
 describe('DELETE /users/:id', () => {
   it('lets company admins remove ordinary users from their own company', async () => {
-    const target = await createUser('remove-user@assent.example', 'USER');
-    const ca = await login('admin@assent.example');
+    const target = await createUser('remove-user', 'USER');
+    const ca = await login('companyadmin');
 
     await request(app).delete(`${API}/users/${target.id}`).set(bearer(ca)).expect(200);
 
@@ -58,8 +58,8 @@ describe('DELETE /users/:id', () => {
   });
 
   it('cancels live bookings and releases common-pool allocations for removed users', async () => {
-    const target = await createUser('remove-user@assent.example', 'USER');
-    const ca = await login('admin@assent.example');
+    const target = await createUser('remove-user', 'USER');
+    const ca = await login('companyadmin');
     const date = new Date(`${futureBookableDate()}T00:00:00.000Z`);
     const slot = await prisma.parkingSlot.findFirstOrThrow({
       where: { deletedAt: null },
@@ -111,16 +111,16 @@ describe('DELETE /users/:id', () => {
   });
 
   it('keeps company admins from removing privileged users', async () => {
-    const target = await createUser('remove-admin@assent.example', 'COMPANY_ADMIN');
-    const ca = await login('admin@assent.example');
+    const target = await createUser('remove-companyadmin', 'COMPANY_ADMIN');
+    const ca = await login('companyadmin');
 
     await request(app).delete(`${API}/users/${target.id}`).set(bearer(ca)).expect(403);
   });
 
   it('lets the super admin remove company-admin and security users', async () => {
-    const admin = await createUser('remove-admin@assent.example', 'COMPANY_ADMIN');
-    const guard = await createUser('remove-security@redbricks.example', 'SECURITY', 'REDBRICKS');
-    const sa = await login('superadmin@redbricks.example');
+    const admin = await createUser('remove-companyadmin', 'COMPANY_ADMIN');
+    const guard = await createUser('remove-security1', 'SECURITY', 'REDBRICKS');
+    const sa = await login('superadmin');
 
     await request(app).delete(`${API}/users/${admin.id}`).set(bearer(sa)).expect(200);
     await request(app).delete(`${API}/users/${guard.id}`).set(bearer(sa)).expect(200);
@@ -130,8 +130,8 @@ describe('DELETE /users/:id', () => {
   });
 
   it('does not let the super admin remove ordinary users from the privileged screen action', async () => {
-    const target = await createUser('remove-user@assent.example', 'USER');
-    const sa = await login('superadmin@redbricks.example');
+    const target = await createUser('remove-user', 'USER');
+    const sa = await login('superadmin');
 
     await request(app).delete(`${API}/users/${target.id}`).set(bearer(sa)).expect(403);
   });

@@ -18,8 +18,8 @@ exercises the real rules (capacity, transactions, approval).
 ```bash
 cd frontend && npm install && npm run dev      # http://localhost:5173
 ```
-Mocks are the default. Sign in with any password and an email whose prefix picks the role:
-`admin@…` → super admin · `company@…` → company admin · `security@…` → gate operator · anything else → user.
+Mocks are the default. Sign in with any password and a username whose prefix picks the role:
+`admin…` → super admin · `company…` → company admin · `security…` → gate operator · anything else → user.
 
 ### Live mode (real backend + Postgres)
 ```bash
@@ -42,12 +42,12 @@ npm run dev                      # http://localhost:5173
 
 **Seeded logins** — password `ChangeMe#12345` for all:
 
-| Role | Email |
+| Role | Username |
 | --- | --- |
-| Super admin | `superadmin@redbricks.example` |
-| Company admin (Assent) | `admin@assent.example` |
-| Users (Assent) | `aditi@` · `rahul@` · `sara@assent.example` |
-| Security (gate) | `security@redbricks.example` |
+| Super admin | `superadmin` |
+| Company admin (Assent) | `companyadmin` |
+| Users (Assent) | `aditi` · `rahul` · `sara` |
+| Security (gate) | `security1` |
 
 **Seeded cars** (the gate looks up the *normalized* plate, so `mh12 ab 1234` also matches):
 
@@ -74,9 +74,9 @@ validation), so run it first.
 1. Sign out. Go to **`/register`**.
 2. In **Registering as**, choose **Security — operate the gate**.
 3. **Expect the form to collapse.** *Company*, *Address*, *PIN code* and *Home → office distance*
-   disappear, leaving exactly six fields: full name, registering as, email, contact number, password,
+   disappear, leaving exactly six fields: full name, registering as, username, contact number, password,
    confirm password.
-4. Fill them in (e.g. `guard2@redbricks.example`, `9000000200`) and submit.
+4. Fill them in (e.g. `guard2`, `9000000200`) and submit.
 5. **Expect:** "Registration submitted" with *"Your security request is pending approval by the super
    admin."* — not the company-admin wording, and not the employee wording.
 
@@ -88,18 +88,18 @@ validation), so run it first.
 6. Try to sign in as the new guard. **Expect a rejection** — the account is `PENDING`.
 
 ### 1.3 Super admin approves
-7. Sign in as `superadmin@redbricks.example`, go to **`/admin/admin-requests`**.
+7. Sign in as `superadmin`, go to **`/admin/admin-requests`**.
 8. **Expect the guard in the queue** alongside any company-admin requests — both are super-admin
    approved. Approve it.
 9. Approval here only *activates* the account. Unlike a company-admin request it grants no
    `CompanyAdmin` assignment.
 
-> Negative check (live mode): a company admin must not be able to approve a guard. `admin@assent.example`
+> Negative check (live mode): a company admin must not be able to approve a guard. `companyadmin`
 > gets a **404**, not a 403 — the guard sits under the building company, so a tenant admin cannot even see
 > the record. Two independent guards deny it: tenant scoping *and* the privileged-role check.
 
 ### 1.4 The gate console
-10. Sign in as the guard (new account, or the seeded `security@redbricks.example`).
+10. Sign in as the guard (new account, or the seeded `security1`).
 11. **Expect to land on `/security` with exactly two actions: Check in and Check out.** No booking, no
     dashboard, no admin nav — a guard's screens are their whole job.
 
@@ -119,7 +119,7 @@ validation), so run it first.
 19. **Check in** `MH12XY7788` (the contractor, no account) — or any known car with no booking today.
 20. **Expect a warning that the driver has no booking, and expect the submit button to stay enabled.**
     The barrier is never blocked. Recording the entry is the point; refusing it is not.
-21. Submit, then sign in as `admin@assent.example` and open the **company dashboard** (`/company`).
+21. Submit, then sign in as `companyadmin` and open the **company dashboard** (`/company`).
 22. **Expect the entry in the unbooked-entries list** — that is the follow-up trail the company admin
     acts on.
 23. Type a plate that is in no registry at all. **Expect it still to be accepted** and recorded against
@@ -130,7 +130,7 @@ validation), so run it first.
 ## 2 · No-rejection booking window
 
 ### 2.1 The window and the next run
-1. Sign in as `aditi@assent.example` → **`/book`**.
+1. Sign in as `aditi` → **`/book`**.
 2. **Expect** a rolling window of the configured length (default **2 weeks**), weekends excluded, and a
    banner naming when results are published plus a live countdown.
 3. **Expect the earliest selectable date to be at least `approvalLeadDays` (3) days after the next run** —
@@ -145,7 +145,7 @@ validation), so run it first.
 ### 2.3 Booking until full — the no-rejection guarantee
 7. Submit a request. **Expect** it to be accepted and a slot to be *held* immediately.
 8. Keep booking that date as different users until the grid is full. Quickest route: sign in as
-   `admin@assent.example` and use **`/company/blocks`** to block the date down to a single free slot, then
+   `companyadmin` and use **`/company/blocks`** to block the date down to a single free slot, then
    take it as a user. (Blocking is a company-admin screen — the super admin has no block UI.)
 9. **Expect the submit button to become "Pick an available date"** once the chosen date is full, and the
    date to be unselectable in the overview.

@@ -29,7 +29,7 @@ let rahulId: string;
 let saraId: string;
 
 const OTHER_COMPANY_CODE = 'SWAPCO';
-const OTHER_USER_EMAIL = 'swapper@swapco.example';
+const OTHER_USER_EMAIL = 'swapper';
 let otherCompanyId: string;
 let otherUserId: string;
 
@@ -88,7 +88,7 @@ async function capAssentQuotaTo(n: number) {
       endDate: bookingDate,
       blockedCount: Math.max(0, quota.slotCount - n),
       reason: 'MAINTENANCE',
-      createdById: (await prisma.user.findFirstOrThrow({ where: { email: 'superadmin@redbricks.example' } })).id,
+      createdById: (await prisma.user.findFirstOrThrow({ where: { email: 'superadmin' } })).id,
     },
   });
 }
@@ -99,9 +99,9 @@ const slotIdOf = async (bookingRequestId: string) =>
 
 beforeAll(async () => {
   assentId = (await prisma.company.findFirstOrThrow({ where: { code: 'ASSENT' } })).id;
-  aditiId = (await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } })).id;
-  rahulId = (await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } })).id;
-  saraId = (await prisma.user.findFirstOrThrow({ where: { email: 'sara@assent.example' } })).id;
+  aditiId = (await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } })).id;
+  rahulId = (await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } })).id;
+  saraId = (await prisma.user.findFirstOrThrow({ where: { email: 'sara' } })).id;
 
   // A second tenant, so "the taker must be a colleague" has something to refuse.
   otherCompanyId = (
@@ -145,7 +145,7 @@ afterAll(async () => {
 describe('POST /bookings/:id/reassign — the slot changes hands', () => {
   it('moves the booking to the taker, keeping the same slot', async () => {
     const { booking, slotId } = await seedAllocated(aditiId, bookingDate);
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
 
     const res = await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
@@ -155,7 +155,7 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
 
     expect(res.body.data.status).toBe('ALLOCATED');
     expect(res.body.data.reassignedFromName).toBe('Aditi Rao');
-    expect(res.body.data.reassignedFromEmail).toBe('aditi@assent.example');
+    expect(res.body.data.reassignedFromEmail).toBe('aditi');
     expect(res.body.data.reassignmentReason).toBe('Aditi WFH, Rahul asked on Slack');
 
     const after = await bookingRow(booking.id);
@@ -168,8 +168,8 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
 
   it('flags the allocation as a manual override so the roster says where the slot came from', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate);
-    const admin = await login('admin@assent.example');
-    const adminId = (await prisma.user.findFirstOrThrow({ where: { email: 'admin@assent.example' } })).id;
+    const admin = await login('companyadmin');
+    const adminId = (await prisma.user.findFirstOrThrow({ where: { email: 'companyadmin' } })).id;
 
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
@@ -184,7 +184,7 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
     const list = await request(app).get(`${API}/bookings`).query({ date: DATE }).set(bearer(admin)).expect(200);
     const row = list.body.data.find((b: { id: string }) => b.id === booking.id);
     expect(row.allocationSource).toBe('MANUAL_OVERRIDE');
-    expect(row.employeeEmail).toBe('rahul@assent.example');
+    expect(row.employeeEmail).toBe('rahul');
     expect(row.reassignedFromName).toBe('Aditi Rao');
   });
 
@@ -196,7 +196,7 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
     expect((await bookingRow(winner.id)).status).toBe('ALLOCATED');
     expect((await bookingRow(waiting.id)).status).toBe('WAITLISTED');
 
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${winner.id}/reassign`)
       .set(bearer(admin))
@@ -233,7 +233,7 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
       },
     });
 
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -253,14 +253,14 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
         bookingRequestId: booking.id,
         bookingDate,
         name: 'Sara Khan',
-        employeeEmail: 'sara@assent.example',
+        employeeEmail: 'sara',
         employeeUserId: saraId,
         sameCompany: true,
         isScored: true,
       },
     });
 
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     const res = await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -275,7 +275,7 @@ describe('POST /bookings/:id/reassign — the slot changes hands', () => {
 describe('POST /bookings/:id/reassign — the car at the barrier', () => {
   it('falls back to the taker’s registered car when no plate is given', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate, 'MH 12 AB 1234');
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
 
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
@@ -289,7 +289,7 @@ describe('POST /bookings/:id/reassign — the car at the barrier', () => {
 
   it('records an explicitly given plate and adds it to the registry', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate, 'MH 12 AB 1234');
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
 
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
@@ -306,14 +306,14 @@ describe('POST /bookings/:id/reassign — the car at the barrier', () => {
 
   it('lets the gate place the taker on the day of the swap', async () => {
     const { booking, slotNumber } = await seedAllocated(aditiId, today, 'MH 12 AB 1234');
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
       .send({ toUserId: rahulId })
       .expect(200);
 
-    const guard = await login('security@redbricks.example');
+    const guard = await login('security1');
     const lookup = await request(app)
       .get(`${API}/vehicles/lookup`)
       .query({ number: 'MH12CD5678' })
@@ -329,7 +329,7 @@ describe('POST /bookings/:id/reassign — the car at the barrier', () => {
 describe('POST /bookings/:id/reassign — refusals', () => {
   it('refuses a booking that holds no slot (409)', async () => {
     const booking = await seedBooking(aditiId, 12); // SUBMITTED, never allocated
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -341,7 +341,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
     const yesterday = new Date(today);
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const { booking } = await seedAllocated(aditiId, yesterday);
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -352,7 +352,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
   it('refuses when the taker already holds a slot for that date (409)', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate);
     await seedAllocated(rahulId, bookingDate);
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     const res = await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -363,14 +363,14 @@ describe('POST /bookings/:id/reassign — refusals', () => {
 
   it('refuses when the original booker is already checked in (409)', async () => {
     const { booking } = await seedAllocated(aditiId, today, 'MH 12 AB 1234');
-    const guard = await login('security@redbricks.example');
+    const guard = await login('security1');
     await request(app)
       .post(`${API}/gate/check-in`)
       .set(bearer(guard))
       .send({ vehicleNumber: 'MH12AB1234' })
       .expect(201);
 
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     const res = await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -381,7 +381,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
 
   it('refuses a taker from another company (400)', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate);
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     const res = await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -392,7 +392,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
 
   it('refuses handing a booking to the person who already owns it (400)', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate);
-    const admin = await login('admin@assent.example');
+    const admin = await login('companyadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(admin))
@@ -402,7 +402,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
 
   it('is closed to a plain USER (403) and to the Super Admin (403)', async () => {
     const { booking } = await seedAllocated(aditiId, bookingDate);
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(aditi))
@@ -410,7 +410,7 @@ describe('POST /bookings/:id/reassign — refusals', () => {
       .expect(403);
 
     // COMPANY_ADMIN only, by decision (2026-08-23): the handover is the tenant's own people-shuffle.
-    const superAdmin = await login('superadmin@redbricks.example');
+    const superAdmin = await login('superadmin');
     await request(app)
       .post(`${API}/bookings/${booking.id}/reassign`)
       .set(bearer(superAdmin))

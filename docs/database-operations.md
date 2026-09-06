@@ -48,7 +48,7 @@ every company, user, slot, quota, booking, allocation, vehicle, gate event, audi
 
 It is **transactional and idempotent** — safe to re-run, and if anything fails nothing is deleted. It
 refuses to run at all unless it finds exactly one Super Admin matching the email pinned in step 0 of the
-file (`superadmin@redbricks.example`, which is what the deployed database currently has).
+file (`superadmin`, which is what the deployed database currently has).
 
 *Verified 2026-08-23 against a throwaway copy of the full dev seed:* the reset leaves 1 user, 1 company,
 4 roles and 19 config rows with everything else zeroed; a second run is a no-op; on a mismatched Super
@@ -251,10 +251,10 @@ Seeded logins, all password `ChangeMe#12345`:
 
 | Role | Email |
 |---|---|
-| Super Admin | `superadmin@redbricks.example` |
-| Company Admin (Assent) | `admin@assent.example` |
-| Users | `aditi@`, `rahul@`, `sara@assent.example` |
-| Security / gate | `security@redbricks.example` |
+| Super Admin | `superadmin` |
+| Company Admin (Assent) | `companyadmin` |
+| Users | `aditi@`, `rahul@`, `sara` |
+| Security / gate | `security1` |
 
 ### Wipe a local one back to one Super Admin
 

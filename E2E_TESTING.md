@@ -26,7 +26,7 @@ Working days              7  Mon–Fri working
 Notification templates   13
 ```
 
-Sign in with the super admin email and the `SUPERADMIN_PASSWORD` you seeded with.
+Sign in with the super admin username and the `SUPERADMIN_PASSWORD` you seeded with.
 
 If you need to start over: `npm run db:wipe` then `npm run seed:essentials`.
 
@@ -105,7 +105,7 @@ Approve them as the **company admin** at **`/company/approvals`**.
 
 Register with **Registering as → Security**.
 
-**Expect the form to collapse** to six fields: full name, registering as, email, contact number, password,
+**Expect the form to collapse** to six fields: full name, registering as, username, contact number, password,
 confirm password. No company, address, PIN or distance — a gate operator has no tenant to pick and no
 commute to record, so the server files them under the building company itself.
 
@@ -151,7 +151,7 @@ point of the batch endpoint: one bad date never discards the others.
 Book the same date as a second employee (separate browser profile). Both succeed — **no "date is full"
 refusal exists**. The row's count rises: *"12 slots · 2 requests so far"*.
 
-Add a **carpool member** (another registered employee's email) on one request — only registered users are
+Add a **carpool member** (another registered employee's username) on one request — only registered users are
 accepted, and same-company members are scored.
 
 ---
@@ -218,8 +218,8 @@ npm run import:vehicles -- ./fixtures/vehicles.sample.csv --dry   # preview
 npm run import:vehicles -- ./fixtures/vehicles.sample.csv
 ```
 
-The importer links each car to its owner **by email**, so the CSV's email column must match a user you
-actually registered. Accepted headers are flexible (`Car Number`, `Vehicle No`, `Plate`, …) — see
+The importer links each car to its owner **by username**, so the CSV's username/email column must match a
+user you actually registered. Accepted headers are flexible (`Car Number`, `Vehicle No`, `Plate`, …) — see
 `backend/scripts/vehicleCsv.ts`.
 
 Then: **Check in** → type part of the plate → pick from the typeahead → the driver's details fill in
@@ -256,7 +256,7 @@ trail; refusing entry is never the behaviour.
 
 | Persona | Sign in | Lands on |
 |---|---|---|
-| Super admin | your seeded email | `/admin` |
+| Super admin | your seeded username | `/admin` |
 | Company admin | self-registered, SA-approved | `/company` |
 | Employee | self-registered, CA-approved | `/app` |
 | Security | self-registered, SA-approved | `/security` |

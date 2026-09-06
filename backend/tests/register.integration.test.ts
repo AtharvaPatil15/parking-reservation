@@ -20,7 +20,7 @@ async function assentId(): Promise<string> {
 
 describe('registration → approval → login', () => {
   it('creates a PENDING user who can log in only after Company-Admin approval', async () => {
-    const email = 'newbie@assent.example';
+    const email = 'newbie';
     const body = {
       fullName: 'New Bie',
       companyId: await assentId(),
@@ -47,7 +47,7 @@ describe('registration → approval → login', () => {
     expect(blocked.status).toBe(403);
 
     // 3. Company Admin (same company) approves.
-    const caToken = await login('admin@assent.example');
+    const caToken = await login('companyadmin');
     const approve = await request(app)
       .patch(`${API}/users/${newUserId}/approval`)
       .set(bearer(caToken))
@@ -65,7 +65,7 @@ describe('registration → approval → login', () => {
     const res = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Dupe',
       companyId: await assentId(),
-      email: 'aditi@assent.example', // seeded, active
+      email: 'aditi', // seeded, active
       contactNumber: '9000000124',
       address: 'x, Pune',
       pinCode: '411100',
@@ -79,7 +79,7 @@ describe('registration → approval → login', () => {
     const res = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Ghost',
       companyId: 'does-not-exist',
-      email: 'ghost@nowhere.example',
+      email: 'ghost',
       contactNumber: '9000000125',
       address: 'x, Pune',
       pinCode: '411101',
@@ -93,7 +93,7 @@ describe('registration → approval → login', () => {
     const res = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Mismatch',
       companyId: await assentId(),
-      email: 'mismatch@assent.example',
+      email: 'mismatch',
       contactNumber: '9000000126',
       address: 'x, Pune',
       pinCode: '411102',
@@ -111,7 +111,7 @@ describe('registration → approval → login', () => {
  */
 describe('company-admin registration → super-admin approval', () => {
   it('is PENDING, CA cannot approve (403), SA approves + grants CompanyAdmin, then login works', async () => {
-    const email = 'newadmin@assent.example';
+    const email = 'newcompanyadmin';
     const companyId = await assentId();
     const reg = await request(app).post(`${API}/auth/register`).send({
       fullName: 'New Admin',
@@ -130,7 +130,7 @@ describe('company-admin registration → super-admin approval', () => {
     const newUserId = reg.body.data.id as string;
 
     // A Company Admin of the same company must NOT be able to approve an admin request → 403.
-    const caToken = await login('admin@assent.example');
+    const caToken = await login('companyadmin');
     const caApprove = await request(app)
       .patch(`${API}/users/${newUserId}/approval`)
       .set(bearer(caToken))
@@ -143,7 +143,7 @@ describe('company-admin registration → super-admin approval', () => {
     })).toBeNull();
 
     // Super Admin approves → 200, and the CompanyAdmin assignment is created.
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     const saApprove = await request(app)
       .patch(`${API}/users/${newUserId}/approval`)
       .set(bearer(saToken))
@@ -162,7 +162,7 @@ describe('company-admin registration → super-admin approval', () => {
   });
 
   it('exposes pending company-admin requests to the SA queue only (CA → 403)', async () => {
-    const email = 'queue-admin@assent.example';
+    const email = 'queue-companyadmin';
     const reg = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Queue Admin',
       registrationType: 'COMPANY_ADMIN',
@@ -177,7 +177,7 @@ describe('company-admin registration → super-admin approval', () => {
     expect(reg.status).toBe(201);
 
     // Super Admin sees the request in the queue.
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     const queue = await request(app).get(`${API}/users/pending-admins`).set(bearer(saToken));
     expect(queue.status).toBe(200);
     const emails = (queue.body.data as Array<{ email: string; role: string }>).map((u) => u.email);
@@ -190,7 +190,7 @@ describe('company-admin registration → super-admin approval', () => {
     ).toBe(true);
 
     // A Company Admin cannot read the queue → 403.
-    const caToken = await login('admin@assent.example');
+    const caToken = await login('companyadmin');
     const forbidden = await request(app).get(`${API}/users/pending-admins`).set(bearer(caToken));
     expect(forbidden.status).toBe(403);
   });
@@ -205,7 +205,7 @@ describe('security registration → super-admin approval', () => {
   const buildingCompany = () => prisma.company.findFirstOrThrow({ where: { code: 'REDBRICKS' } });
 
   it('accepts name/number/email/password alone, files the guard under the building company, then SA approves', async () => {
-    const email = 'guard2@redbricks.example';
+    const email = 'guard2';
     const reg = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Gate Guard Two',
       registrationType: 'SECURITY',
@@ -229,7 +229,7 @@ describe('security registration → super-admin approval', () => {
     // A Company Admin must not be able to approve a guard. This is a 404 rather than the 403 an admin
     // request gets: the guard sits under the building company, so a tenant admin cannot even see the
     // record (cross-tenant existence is deliberately hidden). Two independent guards both deny it.
-    const caToken = await login('admin@assent.example');
+    const caToken = await login('companyadmin');
     const caApprove = await request(app)
       .patch(`${API}/users/${userId}/approval`)
       .set(bearer(caToken))
@@ -237,7 +237,7 @@ describe('security registration → super-admin approval', () => {
     expect(caApprove.status).toBe(404);
 
     // The guard shows up in the Super Admin's privileged-registration queue.
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     const queue = await request(app).get(`${API}/users/pending-admins`).set(bearer(saToken));
     expect(queue.status).toBe(200);
     expect((queue.body.data as Array<{ email: string }>).map((u) => u.email)).toContain(email);
@@ -267,7 +267,7 @@ describe('security registration → super-admin approval', () => {
     const reg = await request(app).post(`${API}/auth/register`).send({
       fullName: 'Gate Guard Three',
       registrationType: 'SECURITY',
-      email: 'guard3@redbricks.example',
+      email: 'guard3',
       contactNumber: '9000000201',
       companyId: assent.id, // a tenant — must NOT win
       address: 'Should be ignored',
@@ -290,7 +290,7 @@ describe('security registration → super-admin approval', () => {
     const res = await request(app).post(`${API}/auth/register`).send({
       fullName: 'No Company',
       registrationType: 'EMPLOYEE',
-      email: 'nocompany@assent.example',
+      email: 'nocompany',
       contactNumber: '9000000202',
       password: DEV_PASSWORD,
       confirmPassword: DEV_PASSWORD,

@@ -14,8 +14,8 @@ beforeEach(async () => {
 
 describe('profile vehicles', () => {
   it('lets a user manage cars and exposes active cars to security lookup', async () => {
-    const user = await login('aditi@assent.example');
-    const guard = await login('security@redbricks.example');
+    const user = await login('aditi');
+    const guard = await login('security1');
 
     const created = await request(app)
       .post(`${API}/me/vehicles`)
@@ -24,7 +24,7 @@ describe('profile vehicles', () => {
       .expect(201);
 
     expect(created.body.data.vehicleNumber).toBe('KA051234');
-    expect(created.body.data.ownerEmail).toBe('aditi@assent.example');
+    expect(created.body.data.ownerEmail).toBe('aditi');
 
     const mine = await request(app).get(`${API}/me/vehicles`).set(bearer(user)).expect(200);
     expect(mine.body.data.map((v: { vehicleNumber: string }) => v.vehicleNumber)).toContain('KA051234');
@@ -35,7 +35,7 @@ describe('profile vehicles', () => {
       .set(bearer(guard))
       .expect(200);
     expect(lookup.body.data.known).toBe(true);
-    expect(lookup.body.data.vehicle.ownerEmail).toBe('aditi@assent.example');
+    expect(lookup.body.data.vehicle.ownerEmail).toBe('aditi');
 
     await request(app).delete(`${API}/me/vehicles/${created.body.data.id}`).set(bearer(user)).expect(200);
 
@@ -48,8 +48,8 @@ describe('profile vehicles', () => {
   });
 
   it('does not let a user take another active user car number', async () => {
-    const aditi = await login('aditi@assent.example');
-    const rahul = await login('rahul@assent.example');
+    const aditi = await login('aditi');
+    const rahul = await login('rahul');
 
     await request(app).post(`${API}/me/vehicles`).set(bearer(aditi)).send({ vehicleNumber: 'KA 05 9999' }).expect(201);
 
@@ -63,8 +63,8 @@ describe('profile vehicles', () => {
   });
 
   it('edits a saved car, and security sees the new details', async () => {
-    const user = await login('aditi@assent.example');
-    const guard = await login('security@redbricks.example');
+    const user = await login('aditi');
+    const guard = await login('security1');
 
     const created = await request(app)
       .post(`${API}/me/vehicles`)
@@ -95,8 +95,8 @@ describe('profile vehicles', () => {
   });
 
   it('changes the car number itself, moving what security can find', async () => {
-    const user = await login('aditi@assent.example');
-    const guard = await login('security@redbricks.example');
+    const user = await login('aditi');
+    const guard = await login('security1');
 
     const created = await request(app)
       .post(`${API}/me/vehicles`)
@@ -121,8 +121,8 @@ describe('profile vehicles', () => {
   });
 
   it('refuses an edit that would take another user\'s car number, and 404s someone else\'s car', async () => {
-    const aditi = await login('aditi@assent.example');
-    const rahul = await login('rahul@assent.example');
+    const aditi = await login('aditi');
+    const rahul = await login('rahul');
 
     const mine = await request(app).post(`${API}/me/vehicles`).set(bearer(aditi)).send({ vehicleNumber: 'KA 05 1234' }).expect(201);
     await request(app).post(`${API}/me/vehicles`).set(bearer(rahul)).send({ vehicleNumber: 'KA 05 9999' }).expect(201);
@@ -151,8 +151,8 @@ describe('profile vehicles', () => {
     const DATE = futureBookableDate();
 
     it('adds a freely-typed car number to the profile and the registry', async () => {
-      const user = await login('aditi@assent.example');
-      const guard = await login('security@redbricks.example');
+      const user = await login('aditi');
+      const guard = await login('security1');
 
       const before = await request(app).get(`${API}/me/vehicles`).set(bearer(user)).expect(200);
       expect(before.body.data.map((v: { vehicleNumber: string }) => v.vehicleNumber)).not.toContain('KA057777');
@@ -179,7 +179,7 @@ describe('profile vehicles', () => {
         .set(bearer(guard))
         .expect(200);
       expect(lookup.body.data.known).toBe(true);
-      expect(lookup.body.data.vehicle.ownerEmail).toBe('aditi@assent.example');
+      expect(lookup.body.data.vehicle.ownerEmail).toBe('aditi');
       expect(lookup.body.data.vehicle.ownerName).toBe('Aditi Rao');
 
       // And the typeahead can now find it, which is how the guard gets to it without the exact plate.
@@ -188,8 +188,8 @@ describe('profile vehicles', () => {
     });
 
     it('still books when the car belongs to someone else, without registering it', async () => {
-      const aditi = await login('aditi@assent.example');
-      const rahul = await login('rahul@assent.example');
+      const aditi = await login('aditi');
+      const rahul = await login('rahul');
       await request(app).post(`${API}/me/vehicles`).set(bearer(rahul)).send({ vehicleNumber: 'KA 05 7777' }).expect(201);
 
       // A shared car must never cost Aditi her booking — the mirror is best-effort by design.
@@ -201,14 +201,14 @@ describe('profile vehicles', () => {
 
       // The registry row still belongs to Rahul; it was not silently reassigned.
       await expect(prisma.vehicle.findUniqueOrThrow({ where: { vehicleNumber: 'KA057777' } })).resolves.toMatchObject({
-        ownerEmail: 'rahul@assent.example',
+        ownerEmail: 'rahul',
       });
       const aditiCars = await request(app).get(`${API}/me/vehicles`).set(bearer(aditi)).expect(200);
       expect(aditiCars.body.data.map((v: { vehicleNumber: string }) => v.vehicleNumber)).not.toContain('KA057777');
     });
 
     it('registers the shared car once for a multi-date batch', async () => {
-      const user = await login('aditi@assent.example');
+      const user = await login('aditi');
       const dates = [DATE];
 
       await request(app)
@@ -219,12 +219,12 @@ describe('profile vehicles', () => {
 
       const rows = await prisma.vehicle.findMany({ where: { vehicleNumber: 'KA057777' } });
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ ownerEmail: 'aditi@assent.example', isActive: true });
+      expect(rows[0]).toMatchObject({ ownerEmail: 'aditi', isActive: true });
     });
   });
 
   it('does not let a user claim an active registry car with no linked account', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
 
     const duplicate = await request(app)
       .post(`${API}/me/vehicles`)

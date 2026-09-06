@@ -83,7 +83,7 @@ describe('BookingStatus', () => {
     await userEvent.type(people, '2');
     await userEvent.click(screen.getByRole('button', { name: /add member/i }));
     await userEvent.type(screen.getByLabelText(/member 1 name/i), 'Sam');
-    await userEvent.type(screen.getByLabelText(/member 1 email/i), 'sam@mock.test');
+    await userEvent.type(screen.getByLabelText(/member 1 username/i), 'sam');
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
     expect(await screen.findByText(/booking updated/i)).toBeInTheDocument();
   });

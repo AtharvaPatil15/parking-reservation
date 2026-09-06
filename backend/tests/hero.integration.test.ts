@@ -24,7 +24,7 @@ afterAll(async () => {
 describe('hero path: login → book → run → status → breakdown', () => {
   it('allocates a submitted booking and explains the outcome', async () => {
     // 1. USER books (Aditi, 12.4 km, solo → people 1).
-    const userToken = await login('aditi@assent.example');
+    const userToken = await login('aditi');
     const create = await request(app)
       .post(`${API}/bookings`)
       .set(bearer(userToken))
@@ -35,7 +35,7 @@ describe('hero path: login → book → run → status → breakdown', () => {
     const bookingId = create.body.data.id as string;
 
     // 2. SUPER_ADMIN runs primary allocation.
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     const run = await request(app)
       .post(`${API}/allocation/primary/run`)
       .set(bearer(saToken))
@@ -73,12 +73,12 @@ describe('hero path: login → book → run → status → breakdown', () => {
   });
 
   it('waitlists beyond available quota (blocks reduce it to 1)', async () => {
-    const saToken = await login('superadmin@redbricks.example');
-    const assentId = await companyIdOf('aditi@assent.example');
+    const saToken = await login('superadmin');
+    const assentId = await companyIdOf('aditi');
 
     // Two bookings, quota blocked down to 1 → top-scorer allocated, the other waitlisted.
-    await book('aditi@assent.example'); // 12.4 → final 18.6
-    await book('sara@assent.example'); //  38.1 → final 57.15 (wins)
+    await book('aditi'); // 12.4 → final 18.6
+    await book('sara'); //  38.1 → final 57.15 (wins)
     await blockQuotaDownTo(saToken, assentId, DATE, 1);
 
     const run = await request(app).post(`${API}/allocation/primary/run`).set(bearer(saToken)).send({ bookingDate: DATE });
@@ -96,9 +96,9 @@ describe('hero path: login → book → run → status → breakdown', () => {
 
 describe('concurrency: the unique (slotId, bookingDate) constraint prevents double-assignment', () => {
   it('two concurrent runs yield exactly one allocation per booking and per slot', async () => {
-    await book('aditi@assent.example');
-    await book('rahul@assent.example');
-    const saToken = await login('superadmin@redbricks.example');
+    await book('aditi');
+    await book('rahul');
+    const saToken = await login('superadmin');
 
     // Fire two runs at once. One may lose the race (its txn rolls back); DB integrity must hold.
     await Promise.allSettled([
@@ -114,10 +114,10 @@ describe('concurrency: the unique (slotId, bookingDate) constraint prevents doub
 
   it('rejects a second allocation for the same slot+date (slot-uniqueness backstop)', async () => {
     // Two bookings, quota blocked to 1 → one ALLOCATED, one WAITLISTED (its bookingRequestId is free).
-    await book('aditi@assent.example'); // 12.4
-    await book('rahul@assent.example'); // 24.8 → wins the single slot
-    const saToken = await login('superadmin@redbricks.example');
-    const assentId = await companyIdOf('aditi@assent.example');
+    await book('aditi'); // 12.4
+    await book('rahul'); // 24.8 → wins the single slot
+    const saToken = await login('superadmin');
+    const assentId = await companyIdOf('aditi');
     await blockQuotaDownTo(saToken, assentId, DATE, 1);
     await request(app).post(`${API}/allocation/primary/run`).set(bearer(saToken)).send({ bookingDate: DATE }).expect(200);
 
@@ -142,7 +142,7 @@ describe('concurrency: the unique (slotId, bookingDate) constraint prevents doub
 describe('tenant isolation on GET /bookings/:id', () => {
   it('hides a booking from other tenants (404) but not from SUPER_ADMIN (200)', async () => {
     // Aditi's own booking.
-    const aditiToken = await login('aditi@assent.example');
+    const aditiToken = await login('aditi');
     const aditiBooking = (
       await request(app).post(`${API}/bookings`).set(bearer(aditiToken)).send({ bookingDate: DATE, carpoolPeople: 1 })
     ).body.data.id as string;
@@ -154,11 +154,11 @@ describe('tenant isolation on GET /bookings/:id', () => {
       create: { code: 'OTHERCO', name: 'Other Co', status: 'ACTIVE' },
     });
     const otherUser = await prisma.user.upsert({
-      where: { email: 'other@otherco.example' },
+      where: { email: 'other' },
       update: {},
       create: {
         fullName: 'Other User',
-        email: 'other@otherco.example',
+        email: 'other',
         contactNumber: '+91-9000000009',
         address: 'Elsewhere',
         pinCode: '400001',
@@ -184,15 +184,15 @@ describe('tenant isolation on GET /bookings/:id', () => {
     await request(app).get(`${API}/bookings/${otherBooking.id}`).set(bearer(aditiToken)).expect(404);
 
     // COMPANY_ADMIN cannot read another company's booking.
-    const caToken = await login('admin@assent.example');
+    const caToken = await login('companyadmin');
     await request(app).get(`${API}/bookings/${otherBooking.id}`).set(bearer(caToken)).expect(404);
 
     // A same-company USER cannot read Aditi's booking either (user-level isolation).
-    const rahulToken = await login('rahul@assent.example');
+    const rahulToken = await login('rahul');
     await request(app).get(`${API}/bookings/${aditiBooking}`).set(bearer(rahulToken)).expect(404);
 
     // SUPER_ADMIN can read any booking.
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     await request(app).get(`${API}/bookings/${otherBooking.id}`).set(bearer(saToken)).expect(200);
   });
 });

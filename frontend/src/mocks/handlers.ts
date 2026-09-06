@@ -67,10 +67,10 @@ const fail = (status: number, code: string, message: string) =>
   HttpResponse.json({ success: false, error: { code, message } }, { status });
 
 function roleForEmail(email: string): RoleName {
-  if (email.startsWith('admin@')) return 'SUPER_ADMIN';
-  if (email.startsWith('company@')) return 'COMPANY_ADMIN';
-  // Phase 7: `security@…` signs in as a gate operator so the mock demo can reach /security.
-  if (email.startsWith('security@')) return 'SECURITY';
+  if (email.startsWith('admin')) return 'SUPER_ADMIN';
+  if (email.startsWith('company')) return 'COMPANY_ADMIN';
+  // Phase 7: a `security…` username signs in as a gate operator so the mock demo can reach /security.
+  if (email.startsWith('security')) return 'SECURITY';
   return 'USER';
 }
 
@@ -125,7 +125,7 @@ function seedBookings(): Record<string, BookingDetail> {
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
-      carpoolMembers: [{ id: 'm1', name: 'Sam Lee', employeeEmail: 'sam@acme.test', sameCompany: true, isScored: true }],
+      carpoolMembers: [{ id: 'm1', name: 'Sam Lee', employeeEmail: 'sam', sameCompany: true, isScored: true }],
       scoreBreakdown: breakdownFor(8.5, 2, 38.8),
     },
     'bk-1': {
@@ -133,7 +133,7 @@ function seedBookings(): Record<string, BookingDetail> {
       travelDistanceKm: 8.5, vehicleType: 'CAR', vehicleNumber: 'KA-01-1234', carpoolMemberCount: 2,
       specialRequirement: null, allocationScore: 47.2, allocatedSlotNumber: 'A-12',
       submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
-      carpoolMembers: [{ id: 'm1', name: 'Sam Lee', employeeEmail: 'sam@acme.test', sameCompany: true, isScored: true }],
+      carpoolMembers: [{ id: 'm1', name: 'Sam Lee', employeeEmail: 'sam', sameCompany: true, isScored: true }],
       scoreBreakdown: breakdownFor(8.5, 2, 38.8),
     },
     // Past date, waitlisted request that lapsed at cutoff → REJECTED (never left as
@@ -160,7 +160,7 @@ function seedBookings(): Record<string, BookingDetail> {
       travelDistanceKm: 6.0, vehicleType: 'CAR', vehicleNumber: 'KA-04-3456', carpoolMemberCount: 1,
       specialRequirement: null, allocationScore: null, allocatedSlotNumber: null,
       submittedAt: '2026-07-30T09:00:00.000Z', createdAt: '2026-07-30T08:00:00.000Z',
-      carpoolMembers: [{ id: 'm4', name: 'Existing Member', employeeEmail: 'exist@mock.test', sameCompany: true, isScored: false }],
+      carpoolMembers: [{ id: 'm4', name: 'Existing Member', employeeEmail: 'exist', sameCompany: true, isScored: false }],
     },
   };
 }
@@ -180,7 +180,7 @@ function seedAdminBookings(): AdminBooking[] {
     carpoolMembers: Array.from({ length: Math.max(0, people - 1) }, (_v, i) => ({
       id: `${id}-member-${i + 1}`,
       name: `Passenger ${i + 1}`,
-      employeeEmail: `passenger${i + 1}@mock.test`,
+      employeeEmail: `passenger${i + 1}`,
       contactNumber: `999000000${i + 1}`,
       pickupLocation: `Pickup ${i + 1}`,
       sameCompany: true,
@@ -189,22 +189,22 @@ function seedAdminBookings(): AdminBooking[] {
     submittedAt: '2026-07-29T09:00:00.000Z', createdAt: '2026-07-29T08:00:00.000Z',
   });
   const dPrimary = {
-    ...row('ab-5-primary', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-14', 1.5, 1, 1.5),
+    ...row('ab-5-primary', 'D User', 'd', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-14', 1.5, 1, 1.5),
     allocationSource: 'RELEASED_SLOT' as const,
   };
   const dCommonPool = {
-    ...row('ab-5-cp', 'D User', 'd@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 1.5, 1, 1.5),
+    ...row('ab-5-cp', 'D User', 'd', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 1.5, 1, 1.5),
     bookingType: 'COMMON_POOL' as const,
   };
   return [
-    row('ab-1', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
-    row('ab-2', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
-    row('ab-3', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
+    row('ab-1', 'Priya Rao', 'priya', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-12', 2.4, 3, 47.2),
+    row('ab-2', 'Sam Lee', 'sam', 'mock-co', 'Mock Co', '2026-08-03', 'ALLOCATED', 'A-13', 5.1, 2, 35.3),
+    row('ab-3', 'Lee Chen', 'lee', 'mock-co', 'Mock Co', '2026-08-03', 'WAITLISTED', null, 8.7, 1, 26.1),
     {
       ...dPrimary,
       history: [dPrimary, dCommonPool],
     },
-    row('ab-4', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
+    row('ab-4', 'Dana Ford', 'dana', 'co-acme', 'Acme Corp', '2026-08-04', 'SUBMITTED', null, 3.3, 1, null),
   ];
 }
 
@@ -219,10 +219,10 @@ function seedAllocations(): AllocationRosterItem[] {
     allocationScore: score,
   });
   return [
-    row('al-1', 'A-12', 'PRIMARY', 'Priya Rao', 'priya@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 47.2),
-    row('al-2', 'A-13', 'PRIMARY', 'Sam Lee', 'sam@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 35.3),
-    row('al-3', 'B-04', 'COMMON_POOL', 'Lee Chen', 'lee@mock.test', 'mock-co', 'Mock Co', '2026-08-03', 26.1),
-    row('al-4', 'C-01', 'COMMON_POOL', 'Dana Ford', 'dana@acme.test', 'co-acme', 'Acme Corp', '2026-08-03', 22.0),
+    row('al-1', 'A-12', 'PRIMARY', 'Priya Rao', 'priya', 'mock-co', 'Mock Co', '2026-08-03', 47.2),
+    row('al-2', 'A-13', 'PRIMARY', 'Sam Lee', 'sam', 'mock-co', 'Mock Co', '2026-08-03', 35.3),
+    row('al-3', 'B-04', 'COMMON_POOL', 'Lee Chen', 'lee', 'mock-co', 'Mock Co', '2026-08-03', 26.1),
+    row('al-4', 'C-01', 'COMMON_POOL', 'Dana Ford', 'dana', 'co-acme', 'Acme Corp', '2026-08-03', 22.0),
   ];
 }
 
@@ -262,21 +262,21 @@ function seedCompanyUsers(): Record<string, UserProfile[]> {
   const acme = { id: 'co-acme', name: 'Acme Corp' };
   return {
     'mock-co': [
-      userProfile('u-priya', 'Priya Rao', 'priya@mock.test', 'ACTIVE'),
-      userProfile('u-sam', 'Sam Lee', 'sam@mock.test', 'ACTIVE'),
-      userProfile('u-nadia', 'Nadia Khan', 'nadia@mock.test', 'PENDING'),
-      userProfile('u-omar', 'Omar Diaz', 'omar@mock.test', 'PENDING'),
-      userProfile('u-tess', 'Tess Vaughn', 'tess@mock.test', 'REJECTED'),
+      userProfile('u-priya', 'Priya Rao', 'priya', 'ACTIVE'),
+      userProfile('u-sam', 'Sam Lee', 'sam', 'ACTIVE'),
+      userProfile('u-nadia', 'Nadia Khan', 'nadia', 'PENDING'),
+      userProfile('u-omar', 'Omar Diaz', 'omar', 'PENDING'),
+      userProfile('u-tess', 'Tess Vaughn', 'tess', 'REJECTED'),
     ],
     // Acme users. Two ACTIVE members let cross-company carpooling be exercised: a
     // mock-co user may bring an Acme employee, since carpool members can be any
     // registered user. Blair is a pending company-admin registration (F11) that
     // surfaces in the Super Admin's admin-request queue.
     'co-acme': [
-      userProfile('u-ivy', 'Ivy Chen', 'ivy@acme.test', 'ACTIVE', 'USER', acme),
-      userProfile('u-raj', 'Raj Patel', 'raj@acme.test', 'ACTIVE', 'USER', acme),
-      userProfile('u-blair', 'Blair Ng', 'blair@acme.test', 'PENDING', 'COMPANY_ADMIN', acme),
-      userProfile('u-guard', 'Gate Guard', 'guard@acme.test', 'ACTIVE', 'SECURITY', acme),
+      userProfile('u-ivy', 'Ivy Chen', 'ivy', 'ACTIVE', 'USER', acme),
+      userProfile('u-raj', 'Raj Patel', 'raj', 'ACTIVE', 'USER', acme),
+      userProfile('u-blair', 'Blair Ng', 'blair', 'PENDING', 'COMPANY_ADMIN', acme),
+      userProfile('u-guard', 'Gate Guard', 'guard', 'ACTIVE', 'SECURITY', acme),
     ],
   };
 }
@@ -524,10 +524,10 @@ export function setMockDatePhase(
 
 function seedVehicles(): VehicleSummary[] {
   return [
-    { id: 'veh-1', vehicleNumber: 'MH12AB1234', displayNumber: 'MH 12 AB 1234', ownerName: 'Aditi Rao', ownerEmail: 'aditi@assent.example', contactNumber: '9822001101', vehicleType: 'CAR', makeModel: 'Hyundai i20', colour: 'White', companyId: 'mock-co', companyName: 'Mock Co' },
-    { id: 'veh-2', vehicleNumber: 'MH12CD5678', displayNumber: 'MH 12 CD 5678', ownerName: 'Rahul Mehta', ownerEmail: 'rahul@assent.example', contactNumber: '9822001102', vehicleType: 'CAR', makeModel: 'Tata Nexon', colour: 'Blue', companyId: 'mock-co', companyName: 'Mock Co' },
-    { id: 'veh-3', vehicleNumber: 'MH14EF9012', displayNumber: 'MH 14 EF 9012', ownerName: 'Sara Khan', ownerEmail: 'sara@assent.example', contactNumber: '9822001103', vehicleType: 'EV_CAR', makeModel: 'Tata Nexon EV', colour: 'Grey', companyId: 'mock-co', companyName: 'Mock Co' },
-    { id: 'veh-mine-1', vehicleNumber: 'KA011234', displayNumber: 'KA 01 1234', ownerName: 'Mock User', ownerEmail: 'user@acme.test', contactNumber: '9000000000', vehicleType: 'CAR', makeModel: 'Honda City', colour: 'Silver', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-1', vehicleNumber: 'MH12AB1234', displayNumber: 'MH 12 AB 1234', ownerName: 'Aditi Rao', ownerEmail: 'aditi', contactNumber: '9822001101', vehicleType: 'CAR', makeModel: 'Hyundai i20', colour: 'White', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-2', vehicleNumber: 'MH12CD5678', displayNumber: 'MH 12 CD 5678', ownerName: 'Rahul Mehta', ownerEmail: 'rahul', contactNumber: '9822001102', vehicleType: 'CAR', makeModel: 'Tata Nexon', colour: 'Blue', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-3', vehicleNumber: 'MH14EF9012', displayNumber: 'MH 14 EF 9012', ownerName: 'Sara Khan', ownerEmail: 'sara', contactNumber: '9822001103', vehicleType: 'EV_CAR', makeModel: 'Tata Nexon EV', colour: 'Grey', companyId: 'mock-co', companyName: 'Mock Co' },
+    { id: 'veh-mine-1', vehicleNumber: 'KA011234', displayNumber: 'KA 01 1234', ownerName: 'Mock User', ownerEmail: 'user', contactNumber: '9000000000', vehicleType: 'CAR', makeModel: 'Honda City', colour: 'Silver', companyId: 'mock-co', companyName: 'Mock Co' },
   ];
 }
 
@@ -673,7 +673,7 @@ function currentMockProfile(): UserProfile {
     const base = userProfile(s.id, s.fullName, s.email, 'ACTIVE', s.role, { id: s.companyId, name: s.companyName });
     return { ...base, ...profileState[s.id] };
   }
-  const base = userProfile('mock-user', 'Mock User', 'user@acme.test', 'ACTIVE');
+  const base = userProfile('mock-user', 'Mock User', 'user', 'ACTIVE');
   return { ...base, ...profileState[base.id] };
 }
 
@@ -702,7 +702,7 @@ const pageParams = (request: Request) => {
 };
 
 /**
- * Every registered user's email, across all companies (case-insensitive). Carpool
+ * Every registered user's username, across all companies (case-insensitive). Carpool
  * members must be existing users — but not necessarily same-company — so this spans
  * the whole directory. Stands in for a backend user-lookup the frozen contract does
  * not expose to the USER role.
@@ -711,7 +711,7 @@ const directoryEmails = (): Set<string> =>
   new Set(Object.values(companyUserState).flatMap((list) => list.map((u) => u.email.toLowerCase())));
 
 /**
- * Carpool members must be existing users (any company). Every member needs an email, and it must
+ * Carpool members must be existing users (any company). Every member needs a username, and it must
  * resolve to a registered user — both cases come back as per-member field details so the form can flag
  * the exact row. Shared by the single-date and batch booking handlers so they cannot disagree.
  */
@@ -721,9 +721,9 @@ const carpoolMemberDetails = (
   const dir = directoryEmails();
   return (members ?? []).flatMap((m, i) => {
     const email = m.employeeEmail?.trim();
-    if (!email) return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Email is required.' }];
+    if (!email) return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'Username is required.' }];
     if (!dir.has(email.toLowerCase())) {
-      return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this email.' }];
+      return [{ field: `carpoolMembers.${i}.employeeEmail`, message: 'No registered user has this username.' }];
     }
     return [];
   });
@@ -781,7 +781,7 @@ const hero = [
     }
     if (b.password !== b.confirmPassword) return fail(400, 'VALIDATION_ERROR', 'Passwords do not match');
     const exists = Object.values(companyUserState).some((list) => list.some((u) => u.email === b.email));
-    if (exists) return fail(409, 'CONFLICT', 'An account with this email already exists');
+    if (exists) return fail(409, 'CONFLICT', 'An account with this username already exists');
     // Mirrors auth.service: match the building company by code. The mock fixture has no REDBRICKS row,
     // so the first ACTIVE company stands in for it.
     const company = isSecurity

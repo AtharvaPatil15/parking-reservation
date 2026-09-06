@@ -26,7 +26,7 @@ afterAll(async () => {
 
 describe('slot delete then re-create', () => {
   it('allows re-creating a slot number after it was deleted (revives, no 409)', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
 
     const area = await request(app).post(`${API}/parking-areas`).set(bearer(sa)).send({ name: AREA_NAME });
     expect(area.status).toBe(201);
@@ -61,7 +61,7 @@ describe('slot delete then re-create', () => {
   });
 
   it('still 409s when the number is currently active (a real duplicate)', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const area = await request(app).post(`${API}/parking-areas`).set(bearer(sa)).send({ name: AREA_NAME });
     const parkingAreaId = area.body.data.id as string;
 

@@ -469,7 +469,7 @@ describe('BookingForm', () => {
       await userEvent.clear(carpoolPeopleInput);
       await userEvent.type(carpoolPeopleInput, '3');
       await userEvent.click(screen.getByRole('button', { name: /add member/i }));
-      await userEvent.type(screen.getByLabelText(/member 1 email/i), 'aditi@assent.example');
+      await userEvent.type(screen.getByLabelText(/member 1 username/i), 'aditi');
 
       await waitFor(() => expect(screen.getByTestId('score-panel').textContent).not.toBe(before));
       expect(screen.getByTestId('score-panel')).toHaveTextContent(/2 people/);
@@ -541,7 +541,7 @@ describe('BookingForm', () => {
     expect(addMember).toBeDisabled(); // 1 >= 2-1 is true
   });
 
-  it('validates member email format and blocks submission', async () => {
+  it('validates member username format and blocks submission', async () => {
     useAvailability(availability());
     renderForm();
     await waitFor(() => expect(screen.getByRole('button', { name: /submit request/i })).toBeEnabled());
@@ -552,36 +552,36 @@ describe('BookingForm', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /add member/i }));
     await userEvent.type(screen.getByLabelText(/member 1 name/i), 'Sam');
-    await userEvent.type(screen.getByLabelText(/member 1 email/i), 'not-an-email');
+    await userEvent.type(screen.getByLabelText(/member 1 username/i), 'not a username');
     await userEvent.click(screen.getByRole('button', { name: /submit request/i }));
 
-    expect(await screen.findByText(/valid email/i)).toBeInTheDocument();
+    expect(await screen.findByText(/valid username/i)).toBeInTheDocument();
     expect(screen.queryByText(/request queued/i)).not.toBeInTheDocument();
   });
 
-  async function addMemberBooking(name: string, email: string) {
+  async function addMemberBooking(name: string, username: string) {
     await waitFor(() => expect(screen.getByRole('button', { name: /submit request/i })).toBeEnabled());
     const people = screen.getByLabelText(/carpool people/i);
     await userEvent.clear(people);
     await userEvent.type(people, '2');
     await userEvent.click(screen.getByRole('button', { name: /add member/i }));
     await userEvent.type(screen.getByLabelText(/member 1 name/i), name);
-    await userEvent.type(screen.getByLabelText(/member 1 email/i), email);
+    await userEvent.type(screen.getByLabelText(/member 1 username/i), username);
     await userEvent.click(screen.getByRole('button', { name: /submit request/i }));
   }
 
   it('rejects a carpool member who is not a registered user', async () => {
     useAvailability(availability());
     renderForm();
-    await addMemberBooking('Ghost', 'ghost@nobody.test');
-    expect(await screen.findByText(/no registered user has this email/i)).toBeInTheDocument();
+    await addMemberBooking('Ghost', 'ghost');
+    expect(await screen.findByText(/no registered user has this username/i)).toBeInTheDocument();
     expect(screen.queryByText(/request queued/i)).not.toBeInTheDocument();
   });
 
   it('accepts a registered member from another company (cross-company carpool)', async () => {
     useAvailability(availability());
     renderForm();
-    await addMemberBooking('Ivy', 'ivy@acme.test'); // seeded under co-acme, not the booker's mock-co
+    await addMemberBooking('Ivy', 'ivy'); // seeded under co-acme, not the booker's mock-co
     expect((await screen.findAllByText(/request queued/i)).length).toBeGreaterThan(0);
   });
 });

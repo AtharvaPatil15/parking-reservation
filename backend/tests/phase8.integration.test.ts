@@ -30,10 +30,10 @@ const dateUtc = new Date(`${DATE}T00:00:00.000Z`);
 //   Sara  38.1 km → distanceScore 95.25 → finalScore 57.15   (best)
 //   Rahul 24.8 km → distanceScore 62.00 → finalScore 37.20
 //   Aditi 12.4 km → distanceScore 31.00 → finalScore 18.60   (worst)
-const ADITI = 'aditi@assent.example';
-const RAHUL = 'rahul@assent.example';
-const SARA = 'sara@assent.example';
-const SA = 'superadmin@redbricks.example';
+const ADITI = 'aditi';
+const RAHUL = 'rahul';
+const SARA = 'sara';
+const SA = 'superadmin';
 
 const SOLO_SCORE = { [SARA]: 57.15, [RAHUL]: 37.2, [ADITI]: 18.6 } as const;
 
@@ -179,7 +179,7 @@ describe('the request queue replaces first-come-first-serve (D18)', () => {
       carpoolMembers: [
         { name: 'Rahul Mehta', employeeEmail: RAHUL },
         { name: 'Sara Khan', employeeEmail: SARA },
-        { name: 'Assent Company Admin', employeeEmail: 'admin@assent.example' },
+        { name: 'Assent Company Admin', employeeEmail: 'companyadmin' },
       ],
     });
 
@@ -232,7 +232,7 @@ describe('the availability grid tells the truth in both phases (D22)', () => {
     }
 
     // Assent's own view: three requests against one slot, still requestable for a fourth person.
-    const ca = await request(app).get(`${API}/availability`).set(bearer(await login('admin@assent.example')));
+    const ca = await request(app).get(`${API}/availability`).set(bearer(await login('companyadmin')));
     const day = ca.body.data.days.find((d: { date: string }) => d.date === DATE);
     expect(day.requestCount).toBe(3);
     expect(day.reason).toBeNull();

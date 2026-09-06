@@ -26,7 +26,7 @@ const CAR = {
   vehicleNumber: 'KA011234',
   displayNumber: 'KA 01 1234',
   ownerName: 'Aditi Rao',
-  ownerEmail: 'aditi@assent.example',
+  ownerEmail: 'aditi',
   contactNumber: '9000000003',
   vehicleType: 'CAR',
   makeModel: 'Honda City',

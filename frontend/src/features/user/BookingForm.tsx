@@ -293,7 +293,7 @@ export function BookingForm() {
         vehicleType: 'CAR',
         vehicleNumber: values.vehicleNumber || undefined,
         carpoolPeople: Number(values.carpoolPeople),
-        // Email is required by the schema, so pass it through unchanged (no `|| undefined`).
+        // Username is required by the schema, so pass it through unchanged (no `|| undefined`).
         carpoolMembers: values.carpoolMembers?.map((m) => ({ name: m.name, employeeEmail: m.employeeEmail })),
       },
       {
@@ -594,8 +594,8 @@ export function BookingForm() {
                 </div>
                 <div className="flex-1">
                   <Input
-                    aria-label={`Member ${i + 1} email`}
-                    placeholder="Employee email"
+                    aria-label={`Member ${i + 1} username`}
+                    placeholder="Employee username"
                     {...register(`carpoolMembers.${i}.employeeEmail`)}
                     error={errors.carpoolMembers?.[i]?.employeeEmail?.message}
                   />

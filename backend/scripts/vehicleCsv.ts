@@ -9,7 +9,7 @@ import { normalizePlate } from '../src/lib/plate';
 export const HEADERS: Record<string, string[]> = {
   vehicleNumber: ['vehiclenumber', 'carnumber', 'vehicleno', 'carno', 'regno', 'registrationnumber', 'number', 'plate'],
   ownerName: ['ownername', 'name', 'employeename', 'owner', 'fullname'],
-  ownerEmail: ['email', 'workemail', 'employeeemail', 'owneremail', 'emailid'],
+  ownerEmail: ['email', 'workemail', 'employeeemail', 'owneremail', 'emailid', 'username', 'ownerusername'],
   contactNumber: ['contact', 'contactnumber', 'mobile', 'phone', 'mobileno', 'phonenumber'],
   companyCode: ['company', 'companycode', 'companyname', 'organisation', 'organization'],
   vehicleType: ['vehicletype', 'type'],

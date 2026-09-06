@@ -130,7 +130,7 @@ curl https://<your-api>.onrender.com/health
 
 curl -X POST https://<your-api>.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"superadmin@redbricks.example\",\"password\":\"$SUPERADMIN_PASSWORD\"}"
+  -d "{\"email\":\"superadmin\",\"password\":\"$SUPERADMIN_PASSWORD\"}"
 ```
 
 - [ ] `{"status":"ok"}`
@@ -210,7 +210,7 @@ UptimeRobot, cron-job.org, or a GitHub Actions workflow.
 
 ## 9 · Verify
 
-- [ ] Log in through the **Vercel** URL — `SUPERADMIN_EMAIL` / the `SUPERADMIN_PASSWORD` you set in §3
+- [ ] Log in through the **Vercel** URL — `SUPERADMIN_USERNAME` / the `SUPERADMIN_PASSWORD` you set in §3
 - [ ] **Wait 16 minutes with the tab open, then click something.** Still signed in = the cookie survived
       and the rewrite is correct. Waiting is the only way to catch this
 - [ ] Build the building, in this order: **parking area → slots → company → quota**. Nothing allocates

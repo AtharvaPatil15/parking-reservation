@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9._-]+$/;
 
 /**
  * Client-side registration validation. Mirrors the contract's `RegisterRequest`
@@ -23,7 +23,7 @@ export const registerSchema = z
     fullName: z.string().min(1, 'Full name is required.'),
     registrationType: z.enum(['EMPLOYEE', 'COMPANY_ADMIN', 'SECURITY']),
     companyId: z.string().optional(),
-    email: z.string().min(1, 'Email is required.').regex(EMAIL_RE, 'Enter a valid email.'),
+    email: z.string().min(1, 'Username is required.').regex(USERNAME_RE, 'Enter a valid username.'),
     contactNumber: z
       .string()
       .min(1, 'Contact number is required.')

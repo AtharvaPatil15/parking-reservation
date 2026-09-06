@@ -19,7 +19,7 @@ import { API, bearer, login, resetTransactional, futureBookableDate } from './in
  */
 
 const OTHER_COMPANY_CODE = 'OTHERCO';
-const OTHER_USER_EMAIL = 'other@otherco.example';
+const OTHER_USER_EMAIL = 'other';
 
 // Resolved in beforeAll — keyed on the unique code/email rather than a fixed id so a leftover row
 // from an interrupted run is reused instead of colliding.
@@ -76,7 +76,7 @@ async function capAssentQuotaTo(n: number) {
       endDate: bookingDate,
       blockedCount: Math.max(0, quota.slotCount - n),
       reason: 'MAINTENANCE',
-      createdById: (await prisma.user.findFirstOrThrow({ where: { email: 'superadmin@redbricks.example' } })).id,
+      createdById: (await prisma.user.findFirstOrThrow({ where: { email: 'superadmin' } })).id,
     },
   });
 }
@@ -131,8 +131,8 @@ afterAll(async () => {
 
 describe('POST /bookings/:id/release — frees the slot', () => {
   it('releases an allocated booking and marks it RELEASED', async () => {
-    const aditi = await login('aditi@assent.example');
-    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await login('aditi');
+    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
     const b = await seedBooking(me.id, assentId, 12);
     await runPrimaryAllocation(DATE);
     expect(await statusOf(b.id)).toBe('ALLOCATED');
@@ -145,18 +145,18 @@ describe('POST /bookings/:id/release — frees the slot', () => {
   });
 
   it('rejects releasing a booking that is not allocated (409)', async () => {
-    const aditi = await login('aditi@assent.example');
-    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await login('aditi');
+    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
     const b = await seedBooking(me.id, assentId, 12); // still SUBMITTED — no allocation run
     await request(app).post(`${API}/bookings/${b.id}/release`).set(bearer(aditi)).send({}).expect(409);
   });
 
   it('hides another user’s booking — release returns 404', async () => {
-    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const me = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
     const b = await seedBooking(me.id, assentId, 12);
     await runPrimaryAllocation(DATE);
 
-    const rahul = await login('rahul@assent.example');
+    const rahul = await login('rahul');
     await request(app).post(`${API}/bookings/${b.id}/release`).set(bearer(rahul)).send({}).expect(404);
   });
 });
@@ -164,8 +164,8 @@ describe('POST /bookings/:id/release — frees the slot', () => {
 describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
   it('hands the slot to the own-company waitlist', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
-    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } });
 
     const winner = await seedBooking(aditi.id, assentId, 30); // higher distance → allocated
     const waiting = await seedBooking(rahul.id, assentId, 10); // waitlisted
@@ -174,13 +174,13 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(await statusOf(waiting.id)).toBe('WAITLISTED');
     const freedSlot = await slotIdOf(winner.id);
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${winner.id}/release`).set(bearer(token)).send({}).expect(200);
 
     expect(await statusOf(waiting.id)).toBe('ALLOCATED');
     expect(await slotIdOf(waiting.id)).toBe(freedSlot); // the same physical bay changed hands
 
-    const admin = await login('superadmin@redbricks.example');
+    const admin = await login('superadmin');
     const list = await request(app).get(`${API}/bookings`).query({ date: DATE }).set(bearer(admin)).expect(200);
     const row = list.body.data.find((b: { id: string }) => b.id === waiting.id);
     expect(row.bookingType).toBe('PRIMARY');
@@ -189,8 +189,8 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('updates the promoted booking score breakdown to the release-time score', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
-    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } });
 
     const holder = await seedBooking(aditi.id, assentId, 30);
     const waiting = await seedBooking(rahul.id, assentId, 10);
@@ -207,10 +207,10 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
       });
       invalidateConfig();
 
-      const token = await login('aditi@assent.example');
+      const token = await login('aditi');
       await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
-      const admin = await login('superadmin@redbricks.example');
+      const admin = await login('superadmin');
       const detail = await request(app).get(`${API}/bookings/${waiting.id}`).set(bearer(admin)).expect(200);
       expect(detail.body.data.allocationScore).toBe(30);
       expect(detail.body.data.scoreBreakdown.finalScore).toBe(30);
@@ -226,8 +226,8 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('prefers a lower-scoring OWN-company waitlister over a higher-scoring other company', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
-    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } });
 
     const holder = await seedBooking(aditi.id, assentId, 30);
     const ownCompanyLowScore = await seedBooking(rahul.id, assentId, 5); // weak score, right company
@@ -236,7 +236,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(await statusOf(ownCompanyLowScore.id)).toBe('WAITLISTED');
     expect(await statusOf(otherCompanyHighScore.id)).toBe('WAITLISTED'); // OtherCo has no quota
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     // Own-company first refusal wins despite the worse score.
@@ -246,9 +246,9 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('does not let unscored declared carpool members inflate own-company release priority', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
-    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
-    const sara = await prisma.user.findFirstOrThrow({ where: { email: 'sara@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } });
+    const sara = await prisma.user.findFirstOrThrow({ where: { email: 'sara' } });
 
     const holder = await seedBooking(aditi.id, assentId, 40);
     const unscoredDeclaredCarpool = await seedBooking(rahul.id, assentId, 5, 4);
@@ -258,7 +258,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(await statusOf(unscoredDeclaredCarpool.id)).toBe('WAITLISTED');
     expect(await statusOf(soloHigherScore.id)).toBe('WAITLISTED');
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     expect(await statusOf(soloHigherScore.id)).toBe('ALLOCATED');
@@ -267,8 +267,8 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('expires waitlisted rows for users who already hold an allocation on that date', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
-    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
+    const rahul = await prisma.user.findFirstOrThrow({ where: { email: 'rahul' } });
 
     const holder = await seedBooking(aditi.id, assentId, 30);
     const rahulPrimaryWaitlist = await seedBooking(rahul.id, assentId, 10);
@@ -309,7 +309,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
       },
     });
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     expect(await statusOf(rahulPrimaryWaitlist.id)).toBe('EXPIRED');
@@ -320,14 +320,14 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('falls through to the best-scoring other company when no own-company waitlist exists', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
 
     const holder = await seedBooking(aditi.id, assentId, 30);
     const other = await seedBooking(otherUserId, otherCompanyId, 40);
     await runPrimaryAllocation(DATE);
     expect(await statusOf(other.id)).toBe('WAITLISTED');
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     expect(await statusOf(other.id)).toBe('ALLOCATED');
@@ -339,7 +339,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
 
   it('allocates the common-pool waitlist row and expires the duplicate primary waitlist row', async () => {
     await capAssentQuotaTo(1);
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
 
     const holder = await seedBooking(aditi.id, assentId, 30);
     const otherPrimary = await seedBooking(otherUserId, otherCompanyId, 40);
@@ -347,7 +347,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     expect(await statusOf(otherPrimary.id)).toBe('WAITLISTED');
     const otherCommonPool = await seedCommonPoolWaitlist(otherUserId, otherCompanyId, 40);
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     expect(await statusOf(otherCommonPool.id)).toBe('ALLOCATED');
@@ -356,7 +356,7 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
     const alloc = await prisma.parkingAllocation.findUniqueOrThrow({ where: { bookingRequestId: otherCommonPool.id } });
     expect(alloc.allocationType).toBe('COMMON_POOL');
 
-    const admin = await login('superadmin@redbricks.example');
+    const admin = await login('superadmin');
     const list = await request(app).get(`${API}/bookings`).query({ date: DATE, pageSize: 100 }).set(bearer(admin)).expect(200);
     const rows = list.body.data.filter((b: { employeeEmail: string }) => b.employeeEmail === OTHER_USER_EMAIL);
     expect(rows).toHaveLength(1);
@@ -364,12 +364,12 @@ describe('POST /bookings/:id/release — reallocation priority (F3)', () => {
   });
 
   it('leaves the slot free when nobody is waitlisted', async () => {
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
     const holder = await seedBooking(aditi.id, assentId, 30);
     await runPrimaryAllocation(DATE);
     const freedSlot = await slotIdOf(holder.id);
 
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     await request(app).post(`${API}/bookings/${holder.id}/release`).set(bearer(token)).send({}).expect(200);
 
     const stillTaken = await prisma.parkingAllocation.findFirst({ where: { slotId: freedSlot!, bookingDate } });
