@@ -139,7 +139,13 @@ export function RegisterPage() {
                     {...register('companyId')}
                   />
                 )}
-                <Input label="Username" type="text" error={errors.email?.message} {...register('email')} />
+                <Input
+                  label="Username"
+                  type="text"
+                  hint="Pick a unique username — this is not your email address."
+                  error={errors.email?.message}
+                  {...register('email')}
+                />
                 <Input label="Contact number" type="tel" inputMode="numeric" placeholder="10-digit mobile" error={errors.contactNumber?.message} {...register('contactNumber')} />
                 {!isSecurity && (
                   <>

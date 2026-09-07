@@ -75,6 +75,7 @@ export function LoginPage() {
               label="Username"
               type="text"
               autoComplete="username"
+              hint="Not your email — the username you registered with."
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={errors.email}
