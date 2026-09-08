@@ -160,8 +160,8 @@ export function RegisterVehicleDrawer({ open, onClose, initialNumber }: Register
           onChange={(e) => setContactNumber(e.target.value)}
         />
         <Input
-          label="Work email"
-          type="email"
+          label="Owner username"
+          type="text"
           autoComplete="off"
           placeholder="Optional"
           value={ownerEmail}

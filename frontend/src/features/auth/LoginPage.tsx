@@ -7,7 +7,7 @@ import { roleHome } from '../../lib/roles';
 import { useLogin } from '../../api/hooks';
 import { ApiError } from '../../api/http';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9._-]+$/;
 
 export function LoginPage() {
   const { isAuthenticated, login, user } = useAuth();
@@ -24,8 +24,8 @@ export function LoginPage() {
 
   function validate(): boolean {
     const next: { email?: string; password?: string } = {};
-    if (!email.trim()) next.email = 'Email is required.';
-    else if (!EMAIL_RE.test(email)) next.email = 'Enter a valid email.';
+    if (!email.trim()) next.email = 'Username is required.';
+    else if (!USERNAME_RE.test(email)) next.email = 'Enter a valid username.';
     if (!password) next.password = 'Password is required.';
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -47,7 +47,7 @@ export function LoginPage() {
 
   const formError = loginMutation.isError
     ? loginMutation.error instanceof ApiError && loginMutation.error.status === 401
-      ? 'Invalid email or password.'
+      ? 'Invalid username or password.'
       : loginMutation.error instanceof ApiError
         ? loginMutation.error.message
         : 'Something went wrong. Please try again.'
@@ -59,7 +59,7 @@ export function LoginPage() {
       <main className="mx-auto flex max-w-md flex-col gap-6 px-6 py-16">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-text-muted">Use your work email to access parking reservations.</p>
+          <p className="text-text-muted">Use your username to access parking reservations.</p>
         </div>
         <Card>
           <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
@@ -72,9 +72,10 @@ export function LoginPage() {
               </p>
             )}
             <Input
-              label="Email"
-              type="email"
+              label="Username"
+              type="text"
               autoComplete="username"
+              hint="Not your email — the username you registered with."
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={errors.email}

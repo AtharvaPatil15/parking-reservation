@@ -221,7 +221,7 @@ curl https://<your-api>.onrender.com/health          # process is up
 
 curl -X POST https://<your-api>.onrender.com/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"superadmin@redbricks.example\",\"password\":\"$SUPERADMIN_PASSWORD\"}"
+  -d "{\"email\":\"superadmin\",\"password\":\"$SUPERADMIN_PASSWORD\"}"
 ```
 
 A token back proves the database is reachable *and* the seed landed. A 401 means §2 step 3 didn't run.

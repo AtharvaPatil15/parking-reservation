@@ -36,7 +36,7 @@
  *
  * Configure via environment variables (all optional except the password):
  *
- *   SUPERADMIN_EMAIL         default superadmin@redbricks.example
+ *   SUPERADMIN_USERNAME      default superadmin
  *   SUPERADMIN_PASSWORD      REQUIRED. Min 10 chars. Refuses the seed's public dev password.
  *   SUPERADMIN_NAME          default "Super Admin"
  *   SUPERADMIN_CONTACT       default +91-9000000001
@@ -111,7 +111,7 @@ const TEMPLATES: Array<{ code: string; subject: string; body: string }> = [
 ];
 
 async function main(): Promise<void> {
-  const email = env('SUPERADMIN_EMAIL', 'superadmin@redbricks.example').toLowerCase();
+  const username = env('SUPERADMIN_USERNAME', 'superadmin');
   const password = process.env.SUPERADMIN_PASSWORD?.trim() ?? '';
   const resetPassword = process.argv.includes('--reset-password');
 
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
    * Scoped to `deletedAt: null` deliberately: a soft-deleted row with the same address does not block a
    * new one, which is the whole reason the index is partial.
    */
-  const existing = await prisma.user.findFirst({ where: { email, deletedAt: null } });
+  const existing = await prisma.user.findFirst({ where: { email: username, deletedAt: null } });
   const passwordAction = !existing
     ? 'created'
     : resetPassword
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     : await prisma.user.create({
         data: {
           fullName: env('SUPERADMIN_NAME', 'Super Admin'),
-          email,
+          email: username,
           contactNumber: env('SUPERADMIN_CONTACT', '+91-9000000001'),
           address: env('BUILDING_ADDRESS', 'Baner Road, Pune, Maharashtra'),
           pinCode: env('BUILDING_PIN', '411045'),
@@ -211,7 +211,7 @@ async function main(): Promise<void> {
       });
   const linked = await prisma.userRole.findFirst({ where: { userId: superAdmin.id, roleId: superAdminRole.id } });
   if (!linked) await prisma.userRole.create({ data: { userId: superAdmin.id, roleId: superAdminRole.id } });
-  console.log(`  super admin            ${email} — ${passwordAction}`);
+  console.log(`  super admin            ${username} — ${passwordAction}`);
 
   // --- 4. Office location ---------------------------------------------------
   // Same id as seed.ts: no endpoint creates these, so converging on one row matters more than a tidy id.
@@ -302,7 +302,7 @@ async function main(): Promise<void> {
   console.log('                              and cannot exceed the slots created in step 1');
   console.log('  4. Company admins / users   they register, you approve');
   console.log('\nSign in:');
-  console.log(`  ${email}`);
+  console.log(`  ${username}`);
 }
 
 main()

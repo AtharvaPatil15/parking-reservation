@@ -63,11 +63,11 @@ async function main() {
 
   // 3. Super Admin (Redbricks) ---------------------------------------------
   const superAdmin = await prisma.user.upsert({
-    where: { email: 'superadmin@redbricks.example' },
+    where: { email: 'superadmin' },
     update: {},
     create: {
       fullName: 'Redbricks Super Admin',
-      email: 'superadmin@redbricks.example',
+      email: 'superadmin',
       contactNumber: '+91-9000000001',
       address: 'Redbricks HQ, Pune',
       pinCode: '411001',
@@ -81,11 +81,11 @@ async function main() {
 
   // 4. Assent Company Admin -------------------------------------------------
   const assentAdmin = await prisma.user.upsert({
-    where: { email: 'admin@assent.example' },
+    where: { email: 'companyadmin' },
     update: {},
     create: {
       fullName: 'Assent Company Admin',
-      email: 'admin@assent.example',
+      email: 'companyadmin',
       contactNumber: '+91-9000000002',
       address: 'Assent Office, Baner, Pune',
       pinCode: '411045',
@@ -105,9 +105,9 @@ async function main() {
 
   // 5. Sample Assent users (varied manually-entered distances — D6) ---------
   const sampleUsers = [
-    { name: 'Aditi Rao', email: 'aditi@assent.example', pin: '411057', km: 12.4 },
-    { name: 'Rahul Mehta', email: 'rahul@assent.example', pin: '411014', km: 24.8 },
-    { name: 'Sara Khan', email: 'sara@assent.example', pin: '412115', km: 38.1 },
+    { name: 'Aditi Rao', email: 'aditi', pin: '411057', km: 12.4 },
+    { name: 'Rahul Mehta', email: 'rahul', pin: '411014', km: 24.8 },
+    { name: 'Sara Khan', email: 'sara', pin: '412115', km: 38.1 },
   ];
   for (const u of sampleUsers) {
     const created = await prisma.user.upsert({
@@ -132,11 +132,11 @@ async function main() {
   // 5b. Building security / gate operator (Phase 7 D15) --------------------
   // Registered against Redbricks (the building), not a tenant — the gate serves every company.
   const guard = await prisma.user.upsert({
-    where: { email: 'security@redbricks.example' },
+    where: { email: 'security1' },
     update: {},
     create: {
       fullName: 'Redbricks Gate Security',
-      email: 'security@redbricks.example',
+      email: 'security1',
       contactNumber: '+91-9000000009',
       address: 'Redbricks Tower, Gate 1, Baner, Pune',
       pinCode: '411045',
@@ -202,10 +202,10 @@ async function main() {
   // `vehicleNumber` must be stored NORMALIZED (uppercase, no separators) — that is what the gate
   // lookup keys on; `displayNumber` keeps the readable form.
   const seedVehicles = [
-    { plate: 'MH12AB1234', display: 'MH 12 AB 1234', email: 'aditi@assent.example', name: 'Aditi Rao', type: 'CAR' as const, model: 'Hyundai i20', colour: 'White' },
-    { plate: 'MH12CD5678', display: 'MH 12 CD 5678', email: 'rahul@assent.example', name: 'Rahul Mehta', type: 'CAR' as const, model: 'Tata Nexon', colour: 'Blue' },
-    { plate: 'MH14EF9012', display: 'MH 14 EF 9012', email: 'sara@assent.example', name: 'Sara Khan', type: 'EV_CAR' as const, model: 'Tata Nexon EV', colour: 'Grey' },
-    { plate: 'MH12GH3456', display: 'MH 12 GH 3456', email: 'admin@assent.example', name: 'Assent Company Admin', type: 'CAR' as const, model: 'Honda City', colour: 'Silver' },
+    { plate: 'MH12AB1234', display: 'MH 12 AB 1234', email: 'aditi', name: 'Aditi Rao', type: 'CAR' as const, model: 'Hyundai i20', colour: 'White' },
+    { plate: 'MH12CD5678', display: 'MH 12 CD 5678', email: 'rahul', name: 'Rahul Mehta', type: 'CAR' as const, model: 'Tata Nexon', colour: 'Blue' },
+    { plate: 'MH14EF9012', display: 'MH 14 EF 9012', email: 'sara', name: 'Sara Khan', type: 'EV_CAR' as const, model: 'Tata Nexon EV', colour: 'Grey' },
+    { plate: 'MH12GH3456', display: 'MH 12 GH 3456', email: 'companyadmin', name: 'Assent Company Admin', type: 'CAR' as const, model: 'Honda City', colour: 'Silver' },
     // Deliberately NOT linked to any account — exercises the "unknown driver, no booking" gate path.
     { plate: 'MH12XY7788', display: 'MH 12 XY 7788', email: null, name: 'Vikram Joshi (contractor)', type: 'CAR' as const, model: 'Maruti Swift', colour: 'Red' },
   ];

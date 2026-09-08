@@ -52,7 +52,7 @@ const byDate = (data: BatchData, date: string) =>
 
 describe('POST /bookings/batch', () => {
   it('books every requested date and persists one PRIMARY request each', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     const dates = [futureBookableDate(0), futureBookableDate(1), futureBookableDate(2)];
 
     const res = await batch(token, { bookingDates: dates, carpoolPeople: 1 });
@@ -73,7 +73,7 @@ describe('POST /bookings/batch', () => {
   });
 
   it('applies the shared trip details to every date', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     const dates = [futureBookableDate(0), futureBookableDate(1)];
 
     const res = await batch(token, {
@@ -81,7 +81,7 @@ describe('POST /bookings/batch', () => {
       carpoolPeople: 2,
       vehicleNumber: 'MH12AB1234',
       specialRequirement: 'Near the lift',
-      carpoolMembers: [{ name: 'Rahul Mehta', employeeEmail: 'rahul@assent.example' }],
+      carpoolMembers: [{ name: 'Rahul Mehta', employeeEmail: 'rahul' }],
     });
     expect(res.status).toBe(200);
 
@@ -102,20 +102,20 @@ describe('POST /bookings/batch', () => {
   // path this test used to exercise is now covered by the CONFLICT test below, which is a refusal that
   // still exists.
   it('queues a contested date alongside quiet ones, with no per-date failure (D18)', async () => {
-    const saToken = await login('superadmin@redbricks.example');
+    const saToken = await login('superadmin');
     const companyId = await assentId();
     const [contested, open1, open2] = [futureBookableDate(0), futureBookableDate(1), futureBookableDate(2)];
 
     // One slot on `contested`, and someone has already asked for it.
     await blockQuotaDownTo(saToken, companyId, contested, 1);
-    const rahul = await login('rahul@assent.example');
+    const rahul = await login('rahul');
     const taken = await request(app)
       .post(`${API}/bookings`)
       .set(bearer(rahul))
       .send({ bookingDate: contested, carpoolPeople: 1 });
     expect(taken.status).toBe(201);
 
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const res = await batch(aditi, { bookingDates: [contested, open1, open2], carpoolPeople: 1 });
 
     expect(res.status).toBe(200);
@@ -127,7 +127,7 @@ describe('POST /bookings/batch', () => {
 
     // All three persisted, including the one with more demand than supply.
     const mine = await prisma.bookingRequest.findMany({
-      where: { user: { email: 'aditi@assent.example' } },
+      where: { user: { email: 'aditi' } },
       orderBy: { bookingDate: 'asc' },
     });
     expect(mine.map((r) => r.bookingDate.toISOString().slice(0, 10))).toEqual([contested, open1, open2]);
@@ -142,7 +142,7 @@ describe('POST /bookings/batch', () => {
   });
 
   it('reports an already-requested date as CONFLICT without touching the rest', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     const [already, fresh] = [futureBookableDate(0), futureBookableDate(1)];
     const first = await request(app)
       .post(`${API}/bookings`)
@@ -165,7 +165,7 @@ describe('POST /bookings/batch', () => {
   });
 
   it('flags a date outside the window per-date, not as a request-level failure', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     const open = futureBookableDate(0);
 
     const res = await batch(token, {
@@ -180,7 +180,7 @@ describe('POST /bookings/batch', () => {
   });
 
   it('returns 200 with every result FAILED rather than an error status', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     // Two dates that are both beyond the window: nothing can be booked, but the request was valid.
     const res = await batch(token, { bookingDates: ['2099-01-05', '2099-01-06'], carpoolPeople: 1 });
     expect(res.status).toBe(200);
@@ -191,7 +191,7 @@ describe('POST /bookings/batch', () => {
   });
 
   it('collapses duplicate dates and sorts ascending', async () => {
-    const token = await login('aditi@assent.example');
+    const token = await login('aditi');
     const [a, b] = [futureBookableDate(0), futureBookableDate(1)];
 
     // Sent out of order, with a repeat — a UI slip, not an error.
@@ -204,14 +204,14 @@ describe('POST /bookings/batch', () => {
 
   describe('request-level validation (400 — nothing is booked)', () => {
     it('rejects an empty date list', async () => {
-      const token = await login('aditi@assent.example');
+      const token = await login('aditi');
       const res = await batch(token, { bookingDates: [], carpoolPeople: 1 });
       expect(res.status).toBe(400);
       expect(await prisma.bookingRequest.count()).toBe(0);
     });
 
     it(`rejects more than ${MAX_BATCH_DATES} distinct dates`, async () => {
-      const token = await login('aditi@assent.example');
+      const token = await login('aditi');
       // Distinct, well-formed, and one over the cap.
       const dates = Array.from({ length: MAX_BATCH_DATES + 1 }, (_, i) => {
         const d = new Date(Date.UTC(2099, 0, 5 + i));
@@ -223,7 +223,7 @@ describe('POST /bookings/batch', () => {
     });
 
     it('rejects a malformed date before booking anything', async () => {
-      const token = await login('aditi@assent.example');
+      const token = await login('aditi');
       const res = await batch(token, {
         bookingDates: [futureBookableDate(0), 'not-a-date'],
         carpoolPeople: 1,
@@ -234,7 +234,7 @@ describe('POST /bookings/batch', () => {
     });
 
     it('rejects a carpool over the cap before booking anything', async () => {
-      const token = await login('aditi@assent.example');
+      const token = await login('aditi');
       const res = await batch(token, {
         bookingDates: [futureBookableDate(0), futureBookableDate(1)],
         carpoolPeople: 99,

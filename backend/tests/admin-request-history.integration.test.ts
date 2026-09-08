@@ -18,7 +18,7 @@ async function assentId(): Promise<string> {
 
 describe('admin-request approval history', () => {
   it('lists a company-admin request once the Super Admin has approved it', async () => {
-    const email = 'history-admin@assent.example';
+    const email = 'history-companyadmin';
     const reg = await request(app).post(`${API}/auth/register`).send({
       fullName: 'History Admin',
       registrationType: 'COMPANY_ADMIN',
@@ -33,7 +33,7 @@ describe('admin-request approval history', () => {
     expect(reg.status).toBe(201);
     const userId = reg.body.data.id as string;
 
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
 
     // Still PENDING → not in the processed history yet.
     const before = await request(app).get(`${API}/users/admin-requests/history`).set(bearer(sa));
@@ -58,7 +58,7 @@ describe('admin-request approval history', () => {
   });
 
   it('forbids a Company Admin from reading the approval history (403)', async () => {
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     const res = await request(app).get(`${API}/users/admin-requests/history`).set(bearer(ca));
     expect(res.status).toBe(403);
   });

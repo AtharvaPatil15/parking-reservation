@@ -26,7 +26,7 @@ afterAll(async () => {
 
 describe('GET /slots ordering', () => {
   it('returns slots newest-first (createdAt desc), with slotNumber asc breaking ties', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
 
     const area = await request(app).post(`${API}/parking-areas`).set(bearer(sa)).send({ name: AREA_NAME });
     expect(area.status).toBe(201);

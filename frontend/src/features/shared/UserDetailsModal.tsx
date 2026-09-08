@@ -57,7 +57,7 @@ export function UserDetailsModal({ userId, onClose, actions }: UserDetailsModalP
         <div className="space-y-5">
           <dl className="grid grid-cols-[9rem_1fr] gap-x-4 gap-y-2 text-sm">
             <Row label="Name" value={<span className="font-medium">{u.fullName}</span>} />
-            <Row label="Email" value={u.email} />
+            <Row label="Username" value={u.email} />
             <Row label="Contact" value={u.contactNumber || '—'} />
             <Row label="Company" value={<Badge tone="neutral">{u.companyName}</Badge>} />
             <Row label="Requested as" value={u.role === 'SECURITY' ? 'Security' : u.role === 'COMPANY_ADMIN' ? 'Company admin' : 'Employee'} />

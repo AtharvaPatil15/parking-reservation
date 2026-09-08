@@ -13,9 +13,9 @@ import { API, bearer, login, resetTransactional } from './integration/helpers';
  * asserted here, together, because the distinction is the whole design.
  */
 
-const SECURITY = 'security@redbricks.example';
-const CA = 'admin@assent.example';
-const SA = 'superadmin@redbricks.example';
+const SECURITY = 'security1';
+const CA = 'companyadmin';
+const SA = 'superadmin';
 const PLATE = 'MH14ZZ7788';
 
 async function assentId(): Promise<string> {
@@ -131,11 +131,11 @@ describe('a walk-in car waits for approval', () => {
     expect(res.status).toBe(201);
   });
 
-  it('links the car to an existing account when the email matches', async () => {
-    const created = await registerWalkIn({ ownerEmail: 'aditi@assent.example' });
+  it('links the car to an existing account when the username matches', async () => {
+    const created = await registerWalkIn({ ownerEmail: 'aditi' });
     await decide(created.body.data!.id, 'APPROVE');
 
-    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi@assent.example' } });
+    const aditi = await prisma.user.findFirstOrThrow({ where: { email: 'aditi' } });
     const vehicle = await prisma.vehicle.findUniqueOrThrow({ where: { vehicleNumber: PLATE } });
     // Without this link the gate cannot find the driver's booking from their plate.
     expect(vehicle.userId).toBe(aditi.id);

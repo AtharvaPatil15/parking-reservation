@@ -33,7 +33,7 @@ describe('LoginPage', () => {
   it('renders the form', () => {
     renderLogin();
     expect(screen.getByRole('heading', { name: /^sign in$/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
   });
@@ -41,14 +41,14 @@ describe('LoginPage', () => {
   it('shows validation errors on empty submit and does not navigate', async () => {
     renderLogin();
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    expect(await screen.findByText('Email is required.')).toBeInTheDocument();
+    expect(await screen.findByText('Username is required.')).toBeInTheDocument();
     expect(screen.getByText('Password is required.')).toBeInTheDocument();
     expect(screen.queryByText('Admin area')).not.toBeInTheDocument();
   });
 
   it('logs in a super admin and routes to /admin', async () => {
     renderLogin();
-    await userEvent.type(screen.getByLabelText(/email/i), 'admin@acme.test');
+    await userEvent.type(screen.getByLabelText(/username/i), 'admin');
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByText('Admin area')).toBeInTheDocument();
@@ -61,16 +61,16 @@ describe('LoginPage', () => {
       ),
     );
     renderLogin();
-    await userEvent.type(screen.getByLabelText(/email/i), 'admin@acme.test');
+    await userEvent.type(screen.getByLabelText(/username/i), 'admin');
     await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid email or password/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/invalid username or password/i);
     expect(screen.queryByText('Admin area')).not.toBeInTheDocument();
   });
 
   it('ignores the guarded "from" path and routes to the user home after login', async () => {
     renderLogin({ pathname: '/login', state: { from: { pathname: '/app/deep' } } });
-    await userEvent.type(screen.getByLabelText(/email/i), 'user@acme.test');
+    await userEvent.type(screen.getByLabelText(/username/i), 'user');
     await userEvent.type(screen.getByLabelText(/password/i), 'pw');
     await userEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
     expect(await screen.findByText('User area')).toBeInTheDocument();

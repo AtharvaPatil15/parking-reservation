@@ -227,8 +227,8 @@ export function BookingStatus() {
                     onChange={(e) => setMember(i, 'name', e.target.value)}
                   />
                   <Input
-                    aria-label={`Member ${i + 1} email`}
-                    placeholder="Employee email"
+                    aria-label={`Member ${i + 1} username`}
+                    placeholder="Employee username"
                     value={m.employeeEmail}
                     onChange={(e) => setMember(i, 'employeeEmail', e.target.value)}
                   />

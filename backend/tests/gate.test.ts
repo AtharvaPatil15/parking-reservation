@@ -190,12 +190,12 @@ describe('toRow', () => {
   const index = mapHeaders(['Car Number', 'Owner Name', 'Email', 'Vehicle Type']);
 
   it('normalizes the plate but keeps the readable form', () => {
-    const { row } = toRow(['MH 12 AB 1234', 'Aditi Rao', 'ADITI@assent.example', 'CAR'], index);
+    const { row } = toRow(['MH 12 AB 1234', 'Aditi Rao', 'ADITI', 'CAR'], index);
     expect(row).toMatchObject({
       vehicleNumber: 'MH12AB1234',
       displayNumber: 'MH 12 AB 1234',
       ownerName: 'Aditi Rao',
-      ownerEmail: 'aditi@assent.example', // lower-cased so the user match works
+      ownerEmail: 'aditi', // lower-cased so the user match works
       vehicleType: 'CAR',
     });
   });

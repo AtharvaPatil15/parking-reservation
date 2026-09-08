@@ -48,10 +48,10 @@ const FIRE_AT = new Date(`${RUN_DATE}T14:35:00.000Z`);
 /** First date of the band the *buggy* anchor produced. */
 const NEXT_WEEK = shiftDays(DATE, 7);
 
-const USER = 'sara@assent.example';
+const USER = 'sara';
 /** Scores lower than USER, so primary waitlists them and the pool has somebody to place. */
-const RUNNER_UP = 'rahul@assent.example';
-const SA = 'superadmin@redbricks.example';
+const RUNNER_UP = 'rahul';
+const SA = 'superadmin';
 
 async function primaryRunStatus(date: string): Promise<string | null> {
   const row = await prisma.allocationRun.findUnique({

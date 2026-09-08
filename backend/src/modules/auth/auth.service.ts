@@ -54,7 +54,7 @@ export async function login(
     where: { email, deletedAt: null },
     include: { roles: { include: { role: true } }, company: true },
   });
-  // Generic message — don't reveal which of email/password was wrong.
+  // Generic message — don't reveal which of username/password was wrong.
   if (!user) throw new UnauthenticatedError('Invalid credentials');
 
   const ok = await argon2.verify(user.passwordHash, password).catch(() => false);
@@ -125,7 +125,7 @@ export async function register(input: RegisterInput) {
 
   // Reject a duplicate (active) email up front for a clean 409; the DB unique is the backstop.
   const existing = await prisma.user.findFirst({ where: { email: input.email, deletedAt: null } });
-  if (existing) throw new ConflictError('An account with this email already exists');
+  if (existing) throw new ConflictError('An account with this username already exists');
 
   const roleName =
     input.registrationType === 'COMPANY_ADMIN'

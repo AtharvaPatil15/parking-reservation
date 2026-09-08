@@ -73,7 +73,7 @@ export function Approvals() {
         </button>
       ),
     },
-    { key: 'email', header: 'Email', render: (u) => u.email },
+    { key: 'email', header: 'Username', render: (u) => u.email },
     { key: 'status', header: 'Status', render: (u) => <Badge tone={statusTone(u.status)}>{u.status}</Badge> },
     {
       key: 'actions', header: '', align: 'right',

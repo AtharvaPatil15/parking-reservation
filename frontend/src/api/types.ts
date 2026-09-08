@@ -1392,7 +1392,7 @@ export interface components {
         /** @enum {string} */
         NotificationStatus: "PENDING" | "SENT" | "FAILED" | "READ";
         LoginRequest: {
-            /** Format: email */
+            /** @description Username. */
             email: string;
             /** Format: password */
             password: string;
@@ -1419,7 +1419,7 @@ export interface components {
             fullName: string;
             /** @description Must reference an ACTIVE company. Required unless `registrationType` is SECURITY. */
             companyId?: string;
-            /** Format: email */
+            /** @description Username. */
             email: string;
             contactNumber: string;
             /** @description Required unless `registrationType` is SECURITY. */
@@ -1442,7 +1442,7 @@ export interface components {
         UserProfile: {
             id: string;
             fullName: string;
-            /** Format: email */
+            /** @description Username. */
             email: string;
             contactNumber: string;
             address: string;
@@ -1530,7 +1530,7 @@ export interface components {
             allocationSource: "PRIMARY" | "COMMON_POOL" | "RELEASED_SLOT" | "MANUAL_OVERRIDE" | null;
             status: components["schemas"]["BookingStatus"];
             employeeName: string;
-            /** Format: email */
+            /** @description Username. */
             employeeEmail: string;
             companyId: string;
             companyName: string;
@@ -1541,7 +1541,7 @@ export interface components {
             carpoolMembers?: {
                 id: string;
                 name: string;
-                /** Format: email */
+                /** @description Username. */
                 employeeEmail?: string | null;
                 contactNumber?: string | null;
                 pickupLocation?: string | null;
@@ -1557,7 +1557,7 @@ export interface components {
             createdAt: string;
             /** @description Employee this booking was taken over from. */
             reassignedFromName?: string | null;
-            /** Format: email */
+            /** @description Username. */
             reassignedFromEmail?: string | null;
             /** Format: date-time */
             reassignedAt?: string | null;
@@ -1573,7 +1573,7 @@ export interface components {
             /** Format: date */
             bookingDate: string;
             employeeName: string;
-            /** Format: email */
+            /** @description Username. */
             employeeEmail: string;
             companyId: string;
             companyName: string;
@@ -2110,10 +2110,7 @@ export interface components {
         AllocationOutcome: "ALLOCATED" | "WAITLISTED";
         CarpoolMemberInput: {
             name: string;
-            /**
-             * Format: email
-             * @description Same-company employee email; only validated same-company employees are scored (F4).
-             */
+            /** @description Same-company employee username; only validated same-company employees are scored (F4). */
             employeeEmail?: string | null;
             contactNumber?: string | null;
             pickupLocation?: string | null;
@@ -2121,7 +2118,7 @@ export interface components {
         CarpoolMember: {
             id?: string;
             name: string;
-            /** Format: email */
+            /** @description Username. */
             employeeEmail?: string | null;
             sameCompany: boolean;
             /** @description True only for validated same-company employees (F4). */
@@ -2229,7 +2226,7 @@ export interface components {
             scoreBreakdown?: components["schemas"]["ScoreBreakdown"];
             /** @description Employee this booking was taken over from. */
             reassignedFromName?: string | null;
-            /** Format: email */
+            /** @description Username. */
             reassignedFromEmail?: string | null;
             /** Format: date-time */
             reassignedAt?: string | null;
@@ -2489,7 +2486,7 @@ export interface operations {
             content: {
                 /**
                  * @example {
-                 *       "email": "aditi@assent.example",
+                 *       "email": "aditi",
                  *       "password": "ChangeMe#12345"
                  *     }
                  */
@@ -2631,7 +2628,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: email */
+                    /** @description Username. */
                     email: string;
                 };
             };
@@ -3003,7 +3000,7 @@ export interface operations {
                  *       "carpoolMembers": [
                  *         {
                  *           "name": "Rahul Mehta",
-                 *           "employeeEmail": "rahul@assent.example"
+                 *           "employeeEmail": "rahul"
                  *         },
                  *         {
                  *           "name": "Neighbour",
@@ -3071,7 +3068,7 @@ export interface operations {
                  *       "carpoolMembers": [
                  *         {
                  *           "name": "Rahul Mehta",
-                 *           "employeeEmail": "rahul@assent.example"
+                 *           "employeeEmail": "rahul"
                  *         }
                  *       ]
                  *     }
@@ -4890,10 +4887,7 @@ export interface operations {
                     /** @description Defaults to the plate as typed */
                     displayNumber?: string;
                     ownerName: string;
-                    /**
-                     * Format: email
-                     * @description Optional, but it is how approval links the car to an existing account — matched against an ACTIVE user of the same company.
-                     */
+                    /** @description Optional username, but it is how approval links the car to an existing account — matched against an ACTIVE user of the same company. */
                     ownerEmail?: string;
                     contactNumber?: string;
                     /** @description Required — with no company there is nobody to approve it. */

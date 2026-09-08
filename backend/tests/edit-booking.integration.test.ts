@@ -30,7 +30,7 @@ async function createBooking(token: string) {
 
 describe('PATCH /bookings/:id — edit before cutoff', () => {
   it('edits an own, pending booking (vehicle + headcount + special requirement)', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const id = await createBooking(aditi);
 
     const edit = await request(app)
@@ -50,7 +50,7 @@ describe('PATCH /bookings/:id — edit before cutoff', () => {
   });
 
   it('rejects non-car vehicle types on edit', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const id = await createBooking(aditi);
 
     const edit = await request(app)
@@ -70,10 +70,10 @@ describe('PATCH /bookings/:id — edit before cutoff', () => {
   });
 
   it('hides another user’s booking — edit returns 404', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const id = await createBooking(aditi);
 
-    const rahul = await login('rahul@assent.example');
+    const rahul = await login('rahul');
     await request(app)
       .patch(`${API}/bookings/${id}`)
       .set(bearer(rahul))
@@ -82,7 +82,7 @@ describe('PATCH /bookings/:id — edit before cutoff', () => {
   });
 
   it('rejects an empty edit (400) — at least one field required', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const id = await createBooking(aditi);
     await request(app).patch(`${API}/bookings/${id}`).set(bearer(aditi)).send({}).expect(400);
   });
@@ -90,7 +90,7 @@ describe('PATCH /bookings/:id — edit before cutoff', () => {
 
 describe('GET /companies/quota-summary — assigned per company (SA)', () => {
   it('returns the effective assigned quota for the date', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const res = await request(app).get(`${API}/companies/quota-summary`).query({ date: DATE }).set(bearer(sa));
     expect(res.status).toBe(200);
 
@@ -104,13 +104,13 @@ describe('GET /companies/quota-summary — assigned per company (SA)', () => {
   });
 
   it('is Super-Admin only — a Company Admin gets 403', async () => {
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     await request(app).get(`${API}/companies/quota-summary`).query({ date: DATE }).set(bearer(ca)).expect(403);
   });
 });
 describe('GET /me/bookings — own history', () => {
   it('returns the current user’s bookings', async () => {
-    const aditi = await login('aditi@assent.example');
+    const aditi = await login('aditi');
     const id = await createBooking(aditi);
     const res = await request(app).get(`${API}/me/bookings`).set(bearer(aditi));
     expect(res.status).toBe(200);
@@ -120,7 +120,7 @@ describe('GET /me/bookings — own history', () => {
 
 describe('POST /bookings — admins can also book', () => {
   it('lets a COMPANY_ADMIN create a booking that shows in their own history', async () => {
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     const res = await request(app)
       .post(`${API}/bookings`)
       .set(bearer(ca))

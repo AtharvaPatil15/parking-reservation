@@ -19,12 +19,12 @@ function renderRegister() {
   return render(<Wrap><RegisterPage /></Wrap>);
 }
 
-async function fillValid(email = 'new@user.test') {
+async function fillValid(email = 'newuser') {
   await userEvent.type(screen.getByLabelText(/full name/i), 'New User');
   // company options load from GET /companies/active
   await screen.findByRole('option', { name: 'Mock Co' });
   await userEvent.selectOptions(screen.getByLabelText(/company/i), 'mock-co');
-  await userEvent.type(screen.getByLabelText(/^email$/i), email);
+  await userEvent.type(screen.getByLabelText(/^username$/i), email);
   await userEvent.type(screen.getByLabelText(/contact number/i), '9000000123');
   await userEvent.type(screen.getByLabelText(/^address$/i), '1 Main St');
   await userEvent.type(screen.getByLabelText(/pin code/i), '560001');
@@ -43,7 +43,7 @@ describe('RegisterPage', () => {
     renderRegister();
     await userEvent.click(screen.getByRole('button', { name: /create account/i }));
     expect(await screen.findByText(/full name is required/i)).toBeInTheDocument();
-    expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/username is required/i)).toBeInTheDocument();
   });
 
   it('flags mismatched passwords', async () => {
@@ -65,23 +65,23 @@ describe('RegisterPage', () => {
 
   it('shows the super-admin approval message for a company-admin registration', async () => {
     renderRegister();
-    await fillValid('newadmin@user.test');
+    await fillValid('newadmin');
     await userEvent.selectOptions(screen.getByLabelText(/registering as/i), 'COMPANY_ADMIN');
     await userEvent.click(screen.getByRole('button', { name: /create account/i }));
     expect(await screen.findByText(/registration submitted/i)).toBeInTheDocument();
     expect(screen.getByText(/pending approval by the super admin/i)).toBeInTheDocument();
   });
 
-  it('surfaces a duplicate-email conflict inline', async () => {
+  it('surfaces a duplicate-username conflict inline', async () => {
     renderRegister();
-    await fillValid('priya@mock.test'); // already seeded in mock-co
+    await fillValid('priya'); // already seeded in mock-co
     await userEvent.click(screen.getByRole('button', { name: /create account/i }));
     expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
   });
 
   /**
    * Phase 7 (D15) — the SECURITY persona. A gate operator has no tenant to pick and no commute to
-   * record, so the form collapses to name / number / registering-as / email / password / confirm.
+   * record, so the form collapses to name / number / registering-as / username / password / confirm.
    * Regression guard: `SECURITY` was in the dropdown and the success copy but missing from the client
    * zod enum, so choosing it failed with "Invalid enum value. Expected 'EMPLOYEE' | 'COMPANY_ADMIN'".
    */
@@ -104,7 +104,7 @@ describe('RegisterPage', () => {
     it('keeps exactly the six fields a guard does supply', async () => {
       renderRegister();
       await chooseSecurity();
-      for (const label of [/full name/i, /registering as/i, /^email$/i, /contact number/i, /^password$/i, /confirm password/i]) {
+      for (const label of [/full name/i, /registering as/i, /^username$/i, /contact number/i, /^password$/i, /confirm password/i]) {
         expect(screen.getByLabelText(label)).toBeInTheDocument();
       }
     });
@@ -113,7 +113,7 @@ describe('RegisterPage', () => {
       renderRegister();
       await chooseSecurity();
       await userEvent.type(screen.getByLabelText(/full name/i), 'Gate Guard');
-      await userEvent.type(screen.getByLabelText(/^email$/i), 'guard@building.test');
+      await userEvent.type(screen.getByLabelText(/^username$/i), 'guardsecurity');
       await userEvent.type(screen.getByLabelText(/contact number/i), '9000000999');
       await userEvent.type(screen.getByLabelText(/^password$/i), 'password1');
       await userEvent.type(screen.getByLabelText(/confirm password/i), 'password1');
@@ -128,7 +128,7 @@ describe('RegisterPage', () => {
       await chooseSecurity();
       await userEvent.click(screen.getByRole('button', { name: /create account/i }));
       expect(await screen.findByText(/full name is required/i)).toBeInTheDocument();
-      expect(screen.getByText(/email is required/i)).toBeInTheDocument();
+      expect(screen.getByText(/username is required/i)).toBeInTheDocument();
       // ...but must not demand what it no longer asks for.
       expect(screen.queryByText(/select your company/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/pin code is required/i)).not.toBeInTheDocument();

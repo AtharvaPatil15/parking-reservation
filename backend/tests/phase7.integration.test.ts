@@ -28,7 +28,7 @@ import { currentIstCalendarDate } from '../src/modules/bookings/bookings.time';
 const DATE = futureBookableDate();
 const dateUtc = new Date(`${DATE}T00:00:00.000Z`);
 
-const ASSENT_USERS = ['aditi@assent.example', 'rahul@assent.example', 'sara@assent.example'];
+const ASSENT_USERS = ['aditi', 'rahul', 'sara'];
 
 async function companyIdOf(email: string): Promise<string> {
   const user = await prisma.user.findFirstOrThrow({ where: { email } });
@@ -106,7 +106,7 @@ describe('GET /availability — the slot grid (Phase 7 §4)', () => {
   });
 
   it('shows blocked slots as grey and excludes them from availability', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const assentId = await companyIdOf(ASSENT_USERS[0]);
     await blockQuotaDownTo(sa, assentId, DATE, 10); // block 2 of 12
 
@@ -121,7 +121,7 @@ describe('GET /availability — the slot grid (Phase 7 §4)', () => {
   it('never exposes another company occupancy', async () => {
     // PTC does not exist in the seed, so use Redbricks: its own grid must not reflect Assent bookings.
     await bookOk(ASSENT_USERS[0]);
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const res = await request(app).get(`${API}/availability`).set(bearer(sa));
     const day = res.body.data.days.find((d: { date: string }) => d.date === DATE);
     expect(day.requestCount).toBe(0); // Assent's request is invisible here
@@ -163,7 +163,7 @@ describe('POST /bookings — window gates (Phase 7 D9/D11, Phase 8 D18)', () => 
   // time, and the overflow is WAITLISTED. Kept here — inverted — because this is the exact scenario
   // the old behaviour was pinned on. Ranking correctness itself is covered in phase8.
   it('queues past capacity and lets the run decide, never refusing up front (D18/D19)', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const assentId = await companyIdOf(ASSENT_USERS[0]);
     // Squeeze capacity to 2 so three eligible users cannot all fit.
     await blockQuotaDownTo(sa, assentId, DATE, 2);
@@ -202,7 +202,7 @@ describe('POST /bookings — window gates (Phase 7 D9/D11, Phase 8 D18)', () => 
   });
 
   it('closes a date for requests once its allocation has run', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     await bookOk(ASSENT_USERS[0]);
     await request(app).post(`${API}/allocation/primary/run`).set(bearer(sa)).send({ bookingDate: DATE }).expect(200);
 
@@ -219,7 +219,7 @@ describe('POST /bookings — window gates (Phase 7 D9/D11, Phase 8 D18)', () => 
 
 describe('weekly allocation batch (Phase 7 D10/D11)', () => {
   it('owns a band starting at the first requestable date and decides every date at least the lead time ahead', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const res = await request(app).get(`${API}/allocation/weekly`).set(bearer(sa)).expect(200);
     const { window: win, band, dates } = res.body.data;
 
@@ -237,7 +237,7 @@ describe('weekly allocation batch (Phase 7 D10/D11)', () => {
   });
 
   it('allocates the whole band in one call and is idempotent on re-run', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     await bookOk(ASSENT_USERS[0]);
     await bookOk(ASSENT_USERS[1]);
 
@@ -264,7 +264,7 @@ describe('weekly allocation batch (Phase 7 D10/D11)', () => {
 });
 
 describe('security gate (Phase 7 §5)', () => {
-  const GUARD = 'security@redbricks.example';
+  const GUARD = 'security1';
   const KNOWN_PLATE = 'MH 12 AB 1234'; // seeded to Aditi Rao
   const UNKNOWN_PLATE = 'KA 05 ZZ 9999';
 
@@ -293,7 +293,7 @@ describe('security gate (Phase 7 §5)', () => {
     expect(res.body.data.status).toBe('CHECKED_IN');
 
     // The company admin sees it as an entry to follow up.
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     const feed = await request(app).get(`${API}/gate/unbooked`).set(bearer(ca)).expect(200);
     expect(feed.body.data).toHaveLength(1);
     expect(feed.body.data[0].vehicleNumber).toBe('MH12AB1234');
@@ -311,11 +311,11 @@ describe('security gate (Phase 7 §5)', () => {
     expect(res.body.data.companyId).toBeNull();
 
     // No company owns it, so a company admin must not see it; the super admin does.
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     const caFeed = await request(app).get(`${API}/gate/unbooked`).set(bearer(ca)).expect(200);
     expect(caFeed.body.data).toHaveLength(0);
 
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const saFeed = await request(app).get(`${API}/gate/unbooked`).set(bearer(sa)).expect(200);
     expect(saFeed.body.data.map((e: { vehicleNumber: string }) => e.vehicleNumber)).toContain('KA05ZZ9999');
   });

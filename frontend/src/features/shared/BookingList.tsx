@@ -65,7 +65,7 @@ function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; sh
       {/* One column on a phone, widening with the viewport — 3 across is unreadable at 360px. */}
       <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
         <DetailLine label="Employee" value={b.employeeName} />
-        <DetailLine label="Email" value={b.employeeEmail} />
+        <DetailLine label="Username" value={b.employeeEmail} />
         {showCompany && <DetailLine label="Company" value={b.companyName} />}
         <DetailLine label="Booking date" value={b.bookingDate} />
         <DetailLine label="Status" value={b.status} />
@@ -109,7 +109,7 @@ function BookingDetails({ booking: b, showCompany }: { booking: AdminBooking; sh
             {members.map((m) => (
               <div key={m.id} className="rounded-control bg-surface-2 px-3 py-2 text-sm">
                 <div className="font-medium">{m.name}</div>
-                <div className="text-xs text-text-muted">{m.employeeEmail || 'No email provided'}</div>
+                <div className="text-xs text-text-muted">{m.employeeEmail || 'No username provided'}</div>
                 {/* Always shown: an absent contact/pickup is itself information for the admin. */}
                 <div className="mt-1 space-y-0.5 text-xs text-text-muted">
                   <div>Contact: {m.contactNumber || '-'}</div>

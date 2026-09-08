@@ -7,7 +7,7 @@ describe('POST /auth/refresh', () => {
   it('rotates the access token and returns the current user identity', async () => {
     const login = await request(app)
       .post(`${API}/auth/login`)
-      .send({ email: 'admin@assent.example', password: DEV_PASSWORD })
+      .send({ email: 'companyadmin', password: DEV_PASSWORD })
       .expect(200);
     const cookie = login.headers['set-cookie'];
 

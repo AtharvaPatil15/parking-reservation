@@ -14,7 +14,7 @@ afterAll(async () => {
 
 describe('parking areas', () => {
   it('lets the Super Admin create an area that then appears in the list', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
 
     const created = await request(app)
       .post(`${API}/parking-areas`)
@@ -30,13 +30,13 @@ describe('parking areas', () => {
   });
 
   it('rejects a missing name with 400', async () => {
-    const sa = await login('superadmin@redbricks.example');
+    const sa = await login('superadmin');
     const res = await request(app).post(`${API}/parking-areas`).set(bearer(sa)).send({ floor: 'B1' });
     expect(res.status).toBe(400);
   });
 
   it('forbids a Company Admin from creating an area (403)', async () => {
-    const ca = await login('admin@assent.example');
+    const ca = await login('companyadmin');
     const res = await request(app).post(`${API}/parking-areas`).set(bearer(ca)).send({ name: 'Basement CA' });
     expect(res.status).toBe(403);
   });

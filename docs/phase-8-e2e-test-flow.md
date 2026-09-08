@@ -44,18 +44,18 @@ npm run dev                       # http://localhost:5173
 cd frontend && npm install && npm run dev     # mocks are the default
 ```
 
-Sign in with any password; the email prefix picks the role: `admin@…` → super admin ·
-`company@…` → company admin · `security@…` → gate · anything else → user.
+Sign in with any password; the username prefix picks the role: `admin…` → super admin ·
+`company…` → company admin · `security…` → gate · anything else → user.
 
 ### Seeded logins (live mode) — password `ChangeMe#12345`
 
-| Role | Email | Home → office |
+| Role | Username | Home → office |
 | --- | --- | --- |
-| Super admin | `superadmin@redbricks.example` | — |
-| Company admin (Assent) | `admin@assent.example` | 5.2 km |
-| User | `aditi@assent.example` | **12.4 km** |
-| User | `rahul@assent.example` | **24.8 km** |
-| User | `sara@assent.example` | **38.1 km** |
+| Super admin | `superadmin` | — |
+| Company admin (Assent) | `companyadmin` | 5.2 km |
+| User | `aditi` | **12.4 km** |
+| User | `rahul` | **24.8 km** |
+| User | `sara` | **38.1 km** |
 
 ### Tokens for curl
 
@@ -64,11 +64,11 @@ login() { curl -s localhost:4000/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d "{\"email\":\"$1\",\"password\":\"ChangeMe#12345\"}" | jq -r .data.accessToken; }
 
-SA=$(login superadmin@redbricks.example)
-CA=$(login admin@assent.example)
-ADITI=$(login aditi@assent.example)
-RAHUL=$(login rahul@assent.example)
-SARA=$(login sara@assent.example)
+SA=$(login superadmin)
+CA=$(login companyadmin)
+ADITI=$(login aditi)
+RAHUL=$(login rahul)
+SARA=$(login sara)
 ```
 
 ---
@@ -137,7 +137,7 @@ which is also the clearest thing to demo.
    > server on the old value** — which looks exactly like a broken feature. Always change config through
    > the UI/API, or restart the server.
 2. **Confirm quota is 12.** `/admin/companies` → Assent → *Set quota* → 12, effective today.
-3. **Block 10 slots on `D`.** Sign in as `admin@assent.example` → **`/company/blocks`** → block
+3. **Block 10 slots on `D`.** Sign in as `companyadmin` → **`/company/blocks`** → block
    **10** slots for 2026-08-10 → 2026-08-10.
 
 ```bash
@@ -478,7 +478,7 @@ model even when the boxes are right), or `index` is being rendered where `slotNu
 
 **Steps**
 1. `/book` as Aditi. Read the date rows.
-2. Set carpool people to 2, add `admin@assent.example` as a member. Watch the score panel.
+2. Set carpool people to 2, add `companyadmin` as a member. Watch the score panel.
 3. Add two more Assent members (people = 4).
 4. Select Mon 10 – Fri 14 and submit.
 

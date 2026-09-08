@@ -60,7 +60,7 @@ export const createRegistrationSchema = z.object({
   vehicleNumber,
   displayNumber: z.string().trim().min(1).max(20).optional(),
   ownerName: z.string().trim().min(2, 'Enter the person’s name').max(120),
-  ownerEmail: z.string().trim().email('Not a valid email').max(200).optional(),
+  ownerEmail: z.string().trim().regex(/^[a-zA-Z0-9._-]+$/, 'Enter a valid username.').max(200).optional(),
   contactNumber: z.string().trim().min(6, 'Contact number is too short').max(20).optional(),
   companyId: z.string().min(1, 'Pick the company they work for'),
   vehicleType: z.enum(['CAR', 'BIKE', 'EV_CAR', 'EV_BIKE']).optional(),

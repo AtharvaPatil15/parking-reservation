@@ -62,7 +62,7 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/LoginRequest' }
-            example: { email: aditi@assent.example, password: "ChangeMe#12345" }
+            example: { email: aditi, password: "ChangeMe#12345" }
       responses:
         '200':
           description: Authenticated. Refresh token set via Set-Cookie.
@@ -193,7 +193,7 @@ paths:
               type: object
               required: [email]
               properties:
-                email: { type: string, format: email }
+                email: { type: string, description: Username. }
       responses:
         '200': { $ref: '#/components/responses/MessageOk' }
         '400': { $ref: '#/components/responses/ValidationError' }
@@ -570,7 +570,7 @@ paths:
               carpoolPeople: 3
               specialRequirement: null
               carpoolMembers:
-                - { name: Rahul Mehta, employeeEmail: rahul@assent.example }
+                - { name: Rahul Mehta, employeeEmail: rahul }
                 - { name: Neighbour, employeeEmail: null }
       responses:
         '201':
@@ -639,7 +639,7 @@ paths:
               vehicleNumber: MH12AB1234
               carpoolPeople: 2
               carpoolMembers:
-                - { name: Rahul Mehta, employeeEmail: rahul@assent.example }
+                - { name: Rahul Mehta, employeeEmail: rahul }
       responses:
         '200':
           description: Per-date outcomes. Check `results[]` — some dates may have failed.
@@ -2449,10 +2449,9 @@ paths:
                 ownerName: { type: string, minLength: 2, maxLength: 120 }
                 ownerEmail:
                   type: string
-                  format: email
                   description: >
-                    Optional, but it is how approval links the car to an existing account — matched
-                    against an ACTIVE user of the same company.
+                    Optional username, but it is how approval links the car to an existing account —
+                    matched against an ACTIVE user of the same company.
                 contactNumber: { type: string, minLength: 6, maxLength: 20 }
                 companyId: { type: string, description: Required — with no company there is nobody to approve it. }
                 vehicleType: { $ref: '#/components/schemas/VehicleType' }
@@ -2773,7 +2772,7 @@ components:
       type: object
       required: [email, password]
       properties:
-        email: { type: string, format: email }
+        email: { type: string, description: Username. }
         password: { type: string, format: password, minLength: 1 }
 
     AuthUser:
@@ -2815,7 +2814,7 @@ components:
         companyId:
           type: string
           description: Must reference an ACTIVE company. Required unless `registrationType` is SECURITY.
-        email: { type: string, format: email }
+        email: { type: string, description: Username. }
         contactNumber: { type: string }
         address: { type: string, description: Required unless `registrationType` is SECURITY. }
         pinCode: { type: string, description: Required unless `registrationType` is SECURITY. }
@@ -2847,7 +2846,7 @@ components:
       properties:
         id: { type: string }
         fullName: { type: string }
-        email: { type: string, format: email }
+        email: { type: string, description: Username. }
         contactNumber: { type: string }
         address: { type: string }
         pinCode: { type: string }
@@ -2965,7 +2964,7 @@ components:
           description: Actual source of the allocated seat; null when no seat is assigned.
         status: { $ref: '#/components/schemas/BookingStatus' }
         employeeName: { type: string }
-        employeeEmail: { type: string, format: email }
+        employeeEmail: { type: string, description: Username. }
         companyId: { type: string }
         companyName: { type: string }
         travelDistanceKm: { type: number, nullable: true }
@@ -2979,7 +2978,7 @@ components:
             properties:
               id: { type: string }
               name: { type: string }
-              employeeEmail: { type: string, format: email, nullable: true }
+              employeeEmail: { type: string, description: Username., nullable: true }
               contactNumber: { type: string, nullable: true }
               pickupLocation: { type: string, nullable: true }
               sameCompany: { type: boolean }
@@ -2992,7 +2991,7 @@ components:
         # The row belongs to the taker afterwards, so these are the only record of who won the slot —
         # and they explain why `allocationScore` describes a different person's trip.
         reassignedFromName: { type: string, nullable: true, description: Employee this booking was taken over from. }
-        reassignedFromEmail: { type: string, format: email, nullable: true }
+        reassignedFromEmail: { type: string, description: Username., nullable: true }
         reassignedAt: { type: string, format: date-time, nullable: true }
         reassignmentReason: { type: string, nullable: true }
         history:
@@ -3010,7 +3009,7 @@ components:
         allocationType: { $ref: '#/components/schemas/BookingType' }
         bookingDate: { type: string, format: date }
         employeeName: { type: string }
-        employeeEmail: { type: string, format: email }
+        employeeEmail: { type: string, description: Username. }
         companyId: { type: string }
         companyName: { type: string }
         allocationScore: { type: number, nullable: true }
@@ -3703,9 +3702,8 @@ components:
         name: { type: string }
         employeeEmail:
           type: string
-          format: email
           nullable: true
-          description: Same-company employee email; only validated same-company employees are scored (F4).
+          description: Same-company employee username; only validated same-company employees are scored (F4).
         contactNumber: { type: string, nullable: true }
         pickupLocation: { type: string, nullable: true }
 
@@ -3715,7 +3713,7 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-        employeeEmail: { type: string, format: email, nullable: true }
+        employeeEmail: { type: string, description: Username., nullable: true }
         sameCompany: { type: boolean }
         isScored: { type: boolean, description: True only for validated same-company employees (F4). }
 
@@ -3882,7 +3880,7 @@ components:
               description: Per-factor scores; present only after an allocation run has scored this booking (absent/null before).
             # See AdminBooking for why these are snapshots rather than a join.
             reassignedFromName: { type: string, nullable: true, description: Employee this booking was taken over from. }
-            reassignedFromEmail: { type: string, format: email, nullable: true }
+            reassignedFromEmail: { type: string, description: Username., nullable: true }
             reassignedAt: { type: string, format: date-time, nullable: true }
             reassignmentReason: { type: string, nullable: true }
 
